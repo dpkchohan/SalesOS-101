@@ -42,6 +42,8 @@ export default function Chat() {
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const lastObjectUrlRef = useRef<string | null>(null);
   const send = useSendChat();
   const transcribe = useTranscribeAudio();
   const speak = useSpeakText();
@@ -50,6 +52,44 @@ export default function Chat() {
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    return () => {
+      if (lastObjectUrlRef.current) URL.revokeObjectURL(lastObjectUrlRef.current);
+      audioRef.current?.pause();
+    };
+  }, []);
+
+  const playTts = (text: string) => {
+    if (!text.trim()) return;
+    speak.mutate(
+      { data: { text, languageCode: "en-IN", speaker: "anushka" } },
+      {
+        onSuccess: (resp) => {
+          if (!resp.audioBase64) return;
+          try {
+            const blob = b64ToBlob(resp.audioBase64, resp.mimeType ?? "audio/wav");
+            const url = URL.createObjectURL(blob);
+            if (audioRef.current) {
+              audioRef.current.pause();
+            }
+            if (lastObjectUrlRef.current) URL.revokeObjectURL(lastObjectUrlRef.current);
+            lastObjectUrlRef.current = url;
+            const audio = new Audio(url);
+            audioRef.current = audio;
+            audio.play().catch((err) => {
+              console.warn("TTS autoplay blocked:", err);
+            });
+          } catch (err) {
+            console.warn("TTS playback failed:", err);
+          }
+        },
+        onError: (err) => {
+          console.warn("TTS request failed:", err);
+        },
+      },
+    );
+  };
 
   const sendText = (text: string) => {
     if (!text.trim()) return;
@@ -64,6 +104,8 @@ export default function Chat() {
             ...m,
             { id: crypto.randomUUID(), role: "assistant", text: resp.message, intent: resp.intent },
           ]);
+          // Speak the assistant's reply via Sarvam TTS (silent fallback on failure).
+          playTts(resp.message);
           // Invalidate everything that may have changed
           qc.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() });
           qc.invalidateQueries({ queryKey: getListTasksQueryKey() });
@@ -116,19 +158,7 @@ export default function Chat() {
     setRecording(false);
   };
 
-  const speakReply = (msg: Msg) => {
-    speak.mutate(
-      { data: { text: msg.text, languageCode: "en-IN", speaker: "anushka" } },
-      {
-        onSuccess: (resp) => {
-          if (!resp.audioBase64) return;
-          const blob = b64ToBlob(resp.audioBase64, resp.mimeType ?? "audio/wav");
-          const url = URL.createObjectURL(blob);
-          new Audio(url).play().catch(() => {});
-        },
-      },
-    );
-  };
+  const speakReply = (msg: Msg) => playTts(msg.text);
 
   return (
     <div className="flex flex-col h-[calc(100dvh-57px)] md:h-[100dvh]">
