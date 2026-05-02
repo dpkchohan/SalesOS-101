@@ -10,15 +10,25 @@ import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, Circle, AlertCircle } from "lucide-react";
 import { PageHeader } from "@/components/AppLayout";
 import { TasksTabs } from "./Tasks";
-import { isoToday, shortDate } from "@/lib/format";
+import { shortDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+
+function localIsoDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+function localToday(): string {
+  return localIsoDate(new Date());
+}
 
 type Task = {
   id: string;
   leadId: string | null;
   leadContactName: string | null;
   title: string;
-  dueDate: string | null;
+  dueDate: Date | string | null;
   completedAt: Date | string | null;
   priority: "low" | "medium" | "high";
 };
@@ -32,17 +42,17 @@ const PRIORITY_PILL: Record<Task["priority"], string> = {
 function tomorrowIso(): string {
   const d = new Date();
   d.setDate(d.getDate() + 1);
-  return d.toISOString().slice(0, 10);
+  return localIsoDate(d);
 }
 
 function dueIso(d: Date | string | null | undefined): string | null {
   if (!d) return null;
   if (typeof d === "string") return d.slice(0, 10);
-  return d.toISOString().slice(0, 10);
+  return localIsoDate(d);
 }
 
 function bucket(tasks: Task[]) {
-  const today = isoToday();
+  const today = localToday();
   const tomorrow = tomorrowIso();
   const buckets: Record<"today" | "tomorrow" | "pending" | "finished", Task[]> = {
     today: [],
@@ -81,7 +91,7 @@ export default function TasksKanban() {
   };
 
   const tasks = (data ?? []) as Task[];
-  const today = isoToday();
+  const today = localToday();
   const cols = bucket(tasks);
   const total = tasks.length;
 

@@ -19,7 +19,8 @@ A mobile-first sales CRM built on the pnpm workspace monorepo. SalesOS gives sal
 
 - `lib/claude.ts` wraps the Anthropic SDK using `claude-haiku-4-5` for lead analysis and the chat assistant.
 - `lib/aiAnalyze.ts` produces structured red-flag signals stored in `aiSignalsTable`.
-- Voice: `routes/voice.ts` calls Sarvam `speech-to-text-translate` and `text-to-speech` for push-to-talk chat.
+- Voice: `routes/voice.ts` uses OpenAI Whisper (`gpt-4o-mini-transcribe` via Replit AI Integrations proxy) for push-to-talk speech-to-text and Sarvam `text-to-speech` for spoken replies. The Chat header has a TTS mute toggle persisted in `localStorage` (`salesos.ttsEnabled`).
+- Tasks page has three views as tabs: List (`/tasks`), Kanban (`/tasks-kanban` — Today/Tomorrow/Pending/Finished columns), and Calendar (`/tasks-calendar` — month grid with click-day modal). All three live under a shared `TasksTabs` strip exported from `pages/Tasks.tsx`.
 
 ## Import / Export
 

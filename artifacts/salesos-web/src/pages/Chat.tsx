@@ -82,6 +82,7 @@ export default function Chat() {
       {
         onSuccess: (resp) => {
           if (!resp.audioBase64) return;
+          if (!ttsEnabledRef.current) return;
           try {
             const blob = b64ToBlob(resp.audioBase64, resp.mimeType ?? "audio/wav");
             const url = URL.createObjectURL(blob);

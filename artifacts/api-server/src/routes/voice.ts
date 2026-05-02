@@ -24,8 +24,8 @@ router.post("/voice/transcribe", requireAuth, async (req, res): Promise<void> =>
       res.status(400).json({ error: "Empty audio payload" });
       return;
     }
-    if (audioBuffer.length > 25 * 1024 * 1024) {
-      res.status(413).json({ error: "Audio exceeds 25MB limit" });
+    if (audioBuffer.length > 7 * 1024 * 1024) {
+      res.status(413).json({ error: "Audio exceeds 7MB limit" });
       return;
     }
     const mimeType = body.data.mimeType ?? "audio/webm";

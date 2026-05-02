@@ -11,15 +11,24 @@ import { motion } from "framer-motion";
 import { ChevronLeft, ChevronRight, X, CheckCircle2, Circle } from "lucide-react";
 import { PageHeader } from "@/components/AppLayout";
 import { TasksTabs } from "./Tasks";
-import { isoToday } from "@/lib/format";
 import { cn } from "@/lib/utils";
+
+function localIsoDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+function localToday(): string {
+  return localIsoDate(new Date());
+}
 
 type Task = {
   id: string;
   leadId: string | null;
   leadContactName: string | null;
   title: string;
-  dueDate: string | null;
+  dueDate: Date | string | null;
   completedAt: Date | string | null;
   priority: "low" | "medium" | "high";
 };
@@ -30,13 +39,6 @@ const PRIORITY_DOT: Record<Task["priority"], string> = {
   medium: "bg-amber-500",
   low: "bg-blue-500",
 };
-
-function isoOf(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
 
 function startOfMonth(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), 1);
@@ -60,7 +62,7 @@ export default function TasksCalendar() {
   };
 
   const tasks = (data ?? []) as Task[];
-  const today = isoToday();
+  const today = localToday();
 
   const tasksByDate = useMemo(() => {
     const map = new Map<string, Task[]>();
@@ -69,7 +71,7 @@ export default function TasksCalendar() {
       const key =
         typeof t.dueDate === "string"
           ? t.dueDate.slice(0, 10)
-          : t.dueDate.toISOString().slice(0, 10);
+          : localIsoDate(t.dueDate);
       const arr = map.get(key) ?? [];
       arr.push(t);
       map.set(key, arr);
@@ -85,17 +87,17 @@ export default function TasksCalendar() {
     for (let i = startWeekday - 1; i >= 0; i--) {
       const d = new Date(start);
       d.setDate(d.getDate() - i - 1);
-      cells.push({ date: d, iso: isoOf(d), inMonth: false });
+      cells.push({ date: d, iso: localIsoDate(d), inMonth: false });
     }
     for (let day = 1; day <= end.getDate(); day++) {
       const d = new Date(cursor.getFullYear(), cursor.getMonth(), day);
-      cells.push({ date: d, iso: isoOf(d), inMonth: true });
+      cells.push({ date: d, iso: localIsoDate(d), inMonth: true });
     }
     while (cells.length % 7 !== 0) {
       const last = cells[cells.length - 1].date;
       const d = new Date(last);
       d.setDate(d.getDate() + 1);
-      cells.push({ date: d, iso: isoOf(d), inMonth: false });
+      cells.push({ date: d, iso: localIsoDate(d), inMonth: false });
     }
     return cells;
   }, [cursor]);
@@ -249,7 +251,8 @@ function DayDetail({
   onClose: () => void;
   onToggle: (id: string, completed: boolean) => void;
 }) {
-  const dateLabel = new Date(iso).toLocaleDateString(undefined, {
+  const [y, m, d] = iso.split("-").map((s) => parseInt(s, 10));
+  const dateLabel = new Date(y, m - 1, d).toLocaleDateString(undefined, {
     weekday: "long",
     month: "long",
     day: "numeric",
