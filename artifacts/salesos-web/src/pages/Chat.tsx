@@ -10,7 +10,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Mic, Volume2, Loader2, Sparkles } from "lucide-react";
+import { Send, Mic, Volume2, VolumeX, Loader2, Sparkles } from "lucide-react";
 import { PageHeader } from "@/components/AppLayout";
 import { cn } from "@/lib/utils";
 
@@ -39,6 +39,20 @@ export default function Chat() {
   ]);
   const [input, setInput] = useState("");
   const [recording, setRecording] = useState(false);
+  const [ttsEnabled, setTtsEnabled] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    return localStorage.getItem("salesos.ttsEnabled") !== "false";
+  });
+  useEffect(() => {
+    localStorage.setItem("salesos.ttsEnabled", ttsEnabled ? "true" : "false");
+    if (!ttsEnabled) {
+      audioRef.current?.pause();
+    }
+  }, [ttsEnabled]);
+  const ttsEnabledRef = useRef(ttsEnabled);
+  useEffect(() => {
+    ttsEnabledRef.current = ttsEnabled;
+  }, [ttsEnabled]);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -62,6 +76,7 @@ export default function Chat() {
 
   const playTts = (text: string) => {
     if (!text.trim()) return;
+    if (!ttsEnabledRef.current) return;
     speak.mutate(
       { data: { text, languageCode: "en-IN", speaker: "anushka" } },
       {
@@ -162,7 +177,28 @@ export default function Chat() {
 
   return (
     <div className="flex flex-col h-[calc(100dvh-57px)] md:h-[100dvh]">
-      <PageHeader title="Chat" subtitle="Type or speak — Claude handles intent" />
+      <PageHeader
+        title="Chat"
+        subtitle="Type or speak — Claude handles intent"
+        right={
+          <button
+            type="button"
+            onClick={() => setTtsEnabled((v) => !v)}
+            className={cn(
+              "flex items-center gap-1.5 text-[12px] font-semibold px-3 py-1.5 rounded-lg border border-card-border transition-colors",
+              ttsEnabled
+                ? "hover:bg-muted text-foreground"
+                : "bg-muted/60 text-muted-foreground hover:bg-muted",
+            )}
+            data-testid="button-tts-toggle"
+            title={ttsEnabled ? "Mute agent voice" : "Unmute agent voice"}
+            aria-pressed={!ttsEnabled}
+          >
+            {ttsEnabled ? <Volume2 size={13} /> : <VolumeX size={13} />}
+            {ttsEnabled ? "Mute" : "Muted"}
+          </button>
+        }
+      />
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 md:px-8 py-2 space-y-3">
         <AnimatePresence initial={false}>
           {messages.map((m) => (

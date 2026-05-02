@@ -5,6 +5,8 @@ import { requireAuth } from "../lib/auth";
 const router: IRouter = Router();
 
 const SARVAM_KEY = process.env.SARVAM_AI_API;
+const OPENAI_KEY = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+const OPENAI_BASE = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
 
 router.post("/voice/transcribe", requireAuth, async (req, res): Promise<void> => {
   const body = TranscribeAudioBody.safeParse(req.body);
@@ -12,40 +14,51 @@ router.post("/voice/transcribe", requireAuth, async (req, res): Promise<void> =>
     res.status(400).json({ error: body.error.message });
     return;
   }
-  if (!SARVAM_KEY) {
-    res.status(500).json({ error: "SARVAM_AI_API is not configured" });
+  if (!OPENAI_KEY || !OPENAI_BASE) {
+    res.status(500).json({ error: "OpenAI integration is not configured" });
     return;
   }
   try {
     const audioBuffer = Buffer.from(body.data.audioBase64, "base64");
+    if (audioBuffer.length === 0) {
+      res.status(400).json({ error: "Empty audio payload" });
+      return;
+    }
+    if (audioBuffer.length > 25 * 1024 * 1024) {
+      res.status(413).json({ error: "Audio exceeds 25MB limit" });
+      return;
+    }
     const mimeType = body.data.mimeType ?? "audio/webm";
-    const blob = new Blob([new Uint8Array(audioBuffer)], { type: mimeType });
-    const form = new FormData();
     const ext = mimeType.includes("wav")
       ? "wav"
       : mimeType.includes("mp3") || mimeType.includes("mpeg")
         ? "mp3"
         : mimeType.includes("ogg")
           ? "ogg"
-          : "webm";
+          : mimeType.includes("mp4") || mimeType.includes("m4a")
+            ? "m4a"
+            : "webm";
+    const blob = new Blob([new Uint8Array(audioBuffer)], { type: mimeType });
+    const form = new FormData();
     form.append("file", blob, `audio.${ext}`);
-    form.append("model", "saaras:v2");
+    form.append("model", "gpt-4o-mini-transcribe");
     if (body.data.languageCode && body.data.languageCode !== "unknown") {
-      form.append("language_code", body.data.languageCode);
+      const lang = body.data.languageCode.split("-")[0];
+      if (lang) form.append("language", lang);
     }
-    const resp = await fetch("https://api.sarvam.ai/speech-to-text-translate", {
+    const resp = await fetch(`${OPENAI_BASE}/audio/transcriptions`, {
       method: "POST",
-      headers: { "api-subscription-key": SARVAM_KEY },
+      headers: { Authorization: `Bearer ${OPENAI_KEY}` },
       body: form,
     });
     if (!resp.ok) {
       const errText = await resp.text();
-      req.log.error({ status: resp.status, errText }, "Sarvam STT failed");
+      req.log.error({ status: resp.status, errText }, "OpenAI STT failed");
       res.status(502).json({ error: "Transcription failed" });
       return;
     }
-    const json = (await resp.json()) as { transcript?: string; language_code?: string };
-    res.json({ text: json.transcript ?? "", languageCode: json.language_code ?? null });
+    const json = (await resp.json()) as { text?: string; language?: string };
+    res.json({ text: json.text ?? "", languageCode: json.language ?? null });
   } catch (err) {
     req.log.error({ err }, "Transcribe error");
     res.status(500).json({ error: "Transcribe failed" });

@@ -25,6 +25,8 @@ import LeadDetail from "./pages/LeadDetail";
 import Contacts from "./pages/Contacts";
 import ContactDetail from "./pages/ContactDetail";
 import Tasks from "./pages/Tasks";
+import TasksKanban from "./pages/TasksKanban";
+import TasksCalendar from "./pages/TasksCalendar";
 import Chat from "./pages/Chat";
 import Documents from "./pages/Documents";
 import Import from "./pages/Import";
@@ -170,6 +172,8 @@ function SignedInApp() {
         <Route path="/contacts" component={Contacts} />
         <Route path="/contacts/:id" component={ContactDetail} />
         <Route path="/tasks" component={Tasks} />
+        <Route path="/tasks-kanban" component={TasksKanban} />
+        <Route path="/tasks-calendar" component={TasksCalendar} />
         <Route path="/chat" component={Chat} />
         <Route path="/documents" component={Documents} />
         <Route path="/import" component={Import} />
@@ -240,6 +244,8 @@ function ClerkProviderWithRoutes() {
           <Route path="/contacts" component={ProtectedRoutes} />
           <Route path="/contacts/:id" component={ProtectedRoutes} />
           <Route path="/tasks" component={ProtectedRoutes} />
+          <Route path="/tasks-kanban" component={ProtectedRoutes} />
+          <Route path="/tasks-calendar" component={ProtectedRoutes} />
           <Route path="/chat" component={ProtectedRoutes} />
           <Route path="/documents" component={ProtectedRoutes} />
           <Route path="/import" component={ProtectedRoutes} />

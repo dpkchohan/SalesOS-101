@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import {
   useListTasks,
   useUpdateTask,
@@ -10,11 +10,43 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { CheckCircle2, Circle, Plus, Trash2, X } from "lucide-react";
+import { CheckCircle2, Circle, Plus, Trash2, X, List, LayoutGrid, Calendar } from "lucide-react";
 import { PageHeader } from "@/components/AppLayout";
 import { Field } from "./Contacts";
 import { isoToday, shortDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+
+const TAB_ROUTES = [
+  { key: "list", label: "List", path: "/tasks", icon: List },
+  { key: "kanban", label: "Kanban", path: "/tasks-kanban", icon: LayoutGrid },
+  { key: "calendar", label: "Calendar", path: "/tasks-calendar", icon: Calendar },
+] as const;
+
+export function TasksTabs({ active }: { active: "list" | "kanban" | "calendar" }) {
+  const [, setLocation] = useLocation();
+  return (
+    <div className="px-4 md:px-8 mb-3 flex gap-1.5">
+      {TAB_ROUTES.map((t) => {
+        const Icon = t.icon;
+        return (
+          <button
+            key={t.key}
+            onClick={() => setLocation(t.path)}
+            className={cn(
+              "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11.5px] font-bold uppercase tracking-wider transition-colors",
+              active === t.key
+                ? "bg-secondary text-secondary-foreground"
+                : "bg-muted/40 text-muted-foreground hover:bg-muted",
+            )}
+            data-testid={`tasks-tab-${t.key}`}
+          >
+            <Icon size={12} /> {t.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 const FILTERS = [
   { key: "today", label: "Today" },
@@ -58,6 +90,7 @@ export default function Tasks() {
           </button>
         }
       />
+      <TasksTabs active="list" />
       <div className="px-4 md:px-8 mb-3 flex gap-1.5">
         {FILTERS.map((f) => (
           <button

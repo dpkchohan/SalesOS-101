@@ -1,0 +1,365 @@
+SALESOS - CRITICAL FIXES + TASKS DASHBOARD
+==========================================
+
+5 things to fix/build. Do in order.
+
+---
+
+## TASK 1: FIX CONTACT DETAIL PAGE (CRITICAL BUG)
+================================================
+
+**Problem:**
+- John Smith contact was created + exported
+- Clicking on contact shows "No contact found"
+- Should show contact details, email, phone, interactions
+
+**Diagnosis:**
+
+```
+1. Check database:
+   SELECT * FROM contacts WHERE name = 'John Smith'
+   - Does it exist?
+   - Does it have org_id?
+   - Is org_id matching current user's org?
+
+2. Check API: GET /api/contacts/:id
+   - Get the contact ID from above
+   - Call endpoint
+   - Does it return the contact?
+   - If null/404: API is broken
+
+3. Check frontend: /contacts/:id
+   - Is it calling the right API endpoint?
+   - Is it passing correct contact ID?
+   - Console errors?
+```
+
+**Fix:**
+
+In `/api/contacts/:id` route:
+```
+GET /api/contacts/:id
+
+1. Get contact ID from URL param
+2. Query: SELECT * FROM contacts WHERE id = ? AND org_id = user.org_id
+3. Return full contact object with:
+   - name, email, phone, company
+   - interactions (linked)
+   - leads (linked)
+   
+If contact doesn't exist or org_id mismatch: return 404
+
+Frontend:
+- Check if API returns data
+- If null: show error "Contact not found"
+- If data: render contact details
+```
+
+**Done when:**
+- [ ] Click contact in list
+- [ ] Detail page loads
+- [ ] Shows name, email, phone
+- [ ] Shows recent interactions
+- [ ] No "No contact found" error
+
+---
+
+## TASK 2: FIX VOICE INPUT - WHISPER TRANSCRIPTION (CRITICAL BUG)
+===============================================================
+
+**Problem:**
+- User clicks record button
+- Says something
+- Nothing happens
+- Getting 502 errors on /api/voice/transcribe
+
+**Diagnosis:**
+
+```
+1. Check /api/voice/transcribe endpoint exists
+   - Is it receiving audio file?
+   - Is WHISPER_API_KEY set in .env?
+   - Call Whisper API working?
+
+2. Test endpoint directly:
+   POST /api/voice/transcribe
+   With audio file
+   
+3. Check logs:
+   - What's the actual error?
+   - Is Whisper API responding?
+   - Is audio format correct (WAV/MP3)?
+
+4. Frontend:
+   - Recording button working?
+   - Sending audio to API?
+   - Getting 502 response?
+```
+
+**Fix:**
+
+Backend: `/api/voice/transcribe`
+```
+1. Accept audio file (multipart form-data)
+2. Check file size (max 25MB)
+3. Call Whisper API:
+   - POST to https://api.openai.com/v1/audio/transcriptions
+   - Headers: Authorization: Bearer {WHISPER_API_KEY}
+   - Language: 'en' or 'hi' for Hinglish
+4. Return: { text: "transcribed text" }
+5. Error handling:
+   - If Whisper fails: return 502 with message
+   - If file too large: return 413
+   - If no audio: return 400
+```
+
+Frontend: Chat.tsx
+```
+1. Record button → capture audio
+2. Stop recording → send to /api/voice/transcribe
+3. Get text back
+4. Add to chat input
+5. User can edit or send
+```
+
+**Done when:**
+- [ ] Click record button
+- [ ] Speak into microphone
+- [ ] Stop recording
+- [ ] Text appears in chat
+- [ ] No 502 errors
+- [ ] Works with English and Hinglish
+
+---
+
+## TASK 3: ADD TTS MUTE TOGGLE (QUICK FEATURE)
+==============================================
+
+**Problem:**
+- Agent always speaks
+- User can't disable for meetings/quiet places
+
+**Build:**
+
+Frontend: Chat.tsx
+
+```
+1. Add state: const [ttsEnabled, setTtsEnabled] = useState(true)
+
+2. Add button in Chat header:
+   Button: {ttsEnabled ? "🔊 Mute" : "🔇 Unmute"}
+   onClick: setTtsEnabled(!ttsEnabled)
+
+3. In playTts() function:
+   if (ttsEnabled) {
+     // Play audio
+     const audio = new Audio(audioUrl)
+     audio.play()
+   } else {
+     // Skip audio, just show text
+   }
+
+4. Persist preference:
+   useEffect(() => {
+     localStorage.setItem('ttsEnabled', ttsEnabled)
+   }, [ttsEnabled])
+   
+   On load:
+   const saved = localStorage.getItem('ttsEnabled')
+   setTtsEnabled(saved !== 'false')
+
+5. Visual indicator:
+   Show icon change: 🔊 → 🔇
+   Tooltip: "Agent TTS muted"
+```
+
+**Done when:**
+- [ ] See mute button in Chat
+- [ ] Click mute: agent stops speaking
+- [ ] Click unmute: agent speaks again
+- [ ] Send message while muted: no audio
+- [ ] Refresh page: setting saved
+
+---
+
+## TASK 4: TASKS KANBAN DASHBOARD
+================================
+
+**Currently:** Tasks list is basic, no visual workflow
+
+**Build:**
+
+Frontend: New page `/tasks-kanban`
+
+```
+Show tasks in 4 columns:
+
+┌─────────────┬──────────────┬─────────────┬────────────────┐
+│  TODAY      │  PENDING     │  FINISHED   │  TOMORROW      │
+├─────────────┼──────────────┼─────────────┼────────────────┤
+│ • Send      │ • Call John  │ ✓ Email     │ • Schedule     │
+│   proposal  │ • Get        │   sent      │   kickoff      │
+│             │   approval   │ ✓ Follow-up │ • Prepare      │
+│             │              │   done      │   deck         │
+└─────────────┴──────────────┴─────────────┴────────────────┘
+
+Each card shows:
+- Task title
+- Due date
+- Lead/contact name
+- Priority badge (High/Medium/Low)
+
+Drag-drop: Move between columns (optional, can add later)
+
+Click card: Show task detail
+- Description
+- Lead/contact
+- Due date/time
+- Priority
+- Status
+- Mark complete button
+- Edit button
+
+Backend endpoints (may already exist):
+- GET /api/tasks?due_date=today
+- GET /api/tasks?due_date=tomorrow
+- GET /api/tasks?status=completed
+- PUT /api/tasks/:id { status: 'completed' }
+
+Frontend:
+1. Create Tasks Kanban page
+2. Query tasks by due date
+3. Separate into 4 columns
+4. Render cards in each column
+5. Click card → show detail
+6. Mark complete → move to FINISHED column
+
+Done when:
+[ ] See TODAY column with today's tasks
+[ ] See TOMORROW column with tomorrow's tasks
+[ ] See PENDING column with overdue/unscheduled
+[ ] See FINISHED column with completed tasks
+[ ] Can click task to see details
+[ ] Can mark task complete
+```
+
+---
+
+## TASK 5: TASKS CALENDAR VIEW
+==============================
+
+**New page:** `/tasks-calendar`
+
+```
+Show calendar grid (Month view)
+
+┌─────────────────────────────────────┐
+│  ← March 2026 →                     │
+├─────────────────────────────────────┤
+│ Sun│ Mon│ Tue│ Wed│ Thu│ Fri│ Sat   │
+├─────┴─────┴─────┴─────┴─────┴─────┴─┤
+│     │   1│   2│   3│   4│   5│   6 │
+│     │ 🔵│   │ 🔵│   │ 🔴│   │
+│     │ 2 │   │ 1 │   │ 3 │   │
+│  7  │   8│   9│ 10│ 11│ 12│ 13│
+│     │ 🔵│   │   │ 🔴│   │   │
+│     │ 1 │   │   │ 2 │   │   │
+└─────────────────────────────────────┘
+
+Legend:
+- 🔵 = Tasks today
+- 🔴 = Overdue tasks
+- Number = task count
+
+Click date: Show all tasks for that day
+- List of tasks
+- Can mark complete
+- Can edit
+
+Navigation:
+- [< Previous Month] [Today] [Next Month >]
+- Week view (optional, later)
+- Day view (optional, later)
+
+Backend:
+- GET /api/tasks?month=2026-03
+- Return tasks grouped by due_date
+
+Frontend:
+1. Create Calendar component (grid)
+2. Query tasks for month
+3. Show dots/numbers on dates
+4. Click date → show tasks for that day
+5. Task detail modal
+```
+
+---
+
+## LATER: GOOGLE CALENDAR SYNC
+==============================
+
+(Not building now, but document the plan)
+
+```
+Future feature:
+1. Connect Google Calendar API
+2. Export SalesOS tasks to Google Calendar
+3. Import Google Calendar events to SalesOS
+4. Two-way sync
+
+Not needed yet. Build when user asks.
+```
+
+---
+
+## BUILD ORDER:
+
+Priority:
+1. **TASK 1: Fix Contact Detail** (30 min) - CRITICAL BUG
+2. **TASK 2: Fix Voice Input** (30 min) - CRITICAL BUG
+3. **TASK 3: TTS Mute Toggle** (15 min) - Quick win
+4. **TASK 4: Tasks Kanban** (1 hour) - New feature
+5. **TASK 5: Tasks Calendar** (1 hour) - New feature
+
+Total: 3 hours
+
+---
+
+## TEST CHECKLIST:
+
+Contact Detail:
+- [ ] Create contact via chat
+- [ ] Go to Contacts list
+- [ ] Click contact
+- [ ] Detail page loads
+- [ ] Shows email, phone, interactions
+
+Voice Input:
+- [ ] Go to Chat
+- [ ] Click record
+- [ ] Say something
+- [ ] Stop recording
+- [ ] Text appears
+- [ ] Works with English and Hindi/Hinglish mix
+
+TTS Mute:
+- [ ] See mute button
+- [ ] Click mute
+- [ ] Agent stops speaking
+- [ ] Refresh page → muted still
+
+Tasks Kanban:
+- [ ] See 4 columns: TODAY, TOMORROW, PENDING, FINISHED
+- [ ] Tasks in correct column
+- [ ] Click task → see details
+- [ ] Mark complete → moves to FINISHED
+
+Tasks Calendar:
+- [ ] See calendar grid
+- [ ] Tasks appear on dates
+- [ ] Click date → see tasks
+- [ ] Shows count per day
+
+---
+
+**GIVE THIS TO REPLIT. Start with TASK 1.**

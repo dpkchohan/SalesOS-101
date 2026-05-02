@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, or, ilike, sql, desc } from "drizzle-orm";
+import { and, eq, or, ilike, sql, desc, inArray } from "drizzle-orm";
 import {
   db,
   contactsTable,
@@ -116,7 +116,7 @@ router.get("/contacts/:id", requireAuth, async (req, res): Promise<void> => {
       .select()
       .from(interactionsTable)
       .where(
-        and(eq(interactionsTable.orgId, r.orgId), sql`${interactionsTable.leadId} = ANY(${leadIds})`),
+        and(eq(interactionsTable.orgId, r.orgId), inArray(interactionsTable.leadId, leadIds)),
       )
       .orderBy(desc(interactionsTable.createdAt))
       .limit(20);
