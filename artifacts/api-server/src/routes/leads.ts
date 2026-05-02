@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, sql, desc, isNull } from "drizzle-orm";
+import { and, eq, sql, desc, isNull, inArray } from "drizzle-orm";
 import {
   db,
   leadsTable,
@@ -68,7 +68,7 @@ async function listLeadsWithMeta(orgId: string, where: any) {
       count: sql<number>`count(*)::int`,
     })
     .from(aiSignalsTable)
-    .where(sql`${aiSignalsTable.leadId} = ANY(${ids})`)
+    .where(inArray(aiSignalsTable.leadId, ids))
     .groupBy(aiSignalsTable.leadId);
   const countMap = new Map(counts.map((c) => [c.leadId, c.count]));
 
