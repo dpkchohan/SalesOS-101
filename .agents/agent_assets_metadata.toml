@@ -1,0 +1,8 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "OQkGN0SoNlxW_70bk0ZrC"
+uri = "file://artifacts/salesos-web/public/icon-512x512.png"
+type = "image"
+title = "SalesOS app icon logo"

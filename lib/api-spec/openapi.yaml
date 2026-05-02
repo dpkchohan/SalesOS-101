@@ -3,34 +3,973 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: SalesOS API — sales CRM with AI chat intent and red flag analysis
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
-    description: Health operations
+  - name: auth
+  - name: companies
+  - name: contacts
+  - name: leads
+  - name: interactions
+  - name: tasks
+  - name: signals
+  - name: documents
+  - name: dashboard
+  - name: chat
+  - name: voice
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
           content:
             application/json:
+              schema: { $ref: "#/components/schemas/HealthStatus" }
+
+  /me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current authenticated user (with org)
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+
+  # ---------- Dashboard ----------
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      summary: Pipeline counts, today's tasks, active red flags
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DashboardSummary" }
+
+  # ---------- Companies ----------
+  /companies:
+    get:
+      operationId: listCompanies
+      tags: [companies]
+      parameters:
+        - { in: query, name: search, schema: { type: string } }
+      responses:
+        "200":
+          description: Companies
+          content:
+            application/json:
               schema:
-                $ref: "#/components/schemas/HealthStatus"
+                type: array
+                items: { $ref: "#/components/schemas/Company" }
+    post:
+      operationId: createCompany
+      tags: [companies]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CompanyInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Company" }
+  /companies/{id}:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string } }
+    get:
+      operationId: getCompany
+      tags: [companies]
+      responses:
+        "200":
+          description: Company
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Company" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      operationId: updateCompany
+      tags: [companies]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CompanyInput" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Company" }
+
+  # ---------- Contacts ----------
+  /contacts:
+    get:
+      operationId: listContacts
+      tags: [contacts]
+      parameters:
+        - { in: query, name: search, schema: { type: string } }
+        - { in: query, name: companyId, schema: { type: string } }
+        - { in: query, name: page, schema: { type: integer, default: 1 } }
+        - { in: query, name: limit, schema: { type: integer, default: 20 } }
+      responses:
+        "200":
+          description: Contacts page
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContactsPage" }
+    post:
+      operationId: createContact
+      tags: [contacts]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ContactInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Contact" }
+  /contacts/{id}:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string } }
+    get:
+      operationId: getContact
+      tags: [contacts]
+      responses:
+        "200":
+          description: Contact with company, leads, recent interactions
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContactDetail" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      operationId: updateContact
+      tags: [contacts]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ContactInput" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Contact" }
+    delete:
+      operationId: deleteContact
+      tags: [contacts]
+      responses:
+        "204": { description: Deleted }
+
+  # ---------- Leads ----------
+  /leads:
+    get:
+      operationId: listLeads
+      tags: [leads]
+      parameters:
+        - in: query
+          name: stage
+          schema: { $ref: "#/components/schemas/LeadStage" }
+        - { in: query, name: assignedTo, schema: { type: string } }
+      responses:
+        "200":
+          description: Leads
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/LeadWithContact" }
+    post:
+      operationId: createLead
+      tags: [leads]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LeadInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Lead" }
+  /leads/pipeline:
+    get:
+      operationId: getPipeline
+      tags: [leads]
+      summary: Leads grouped by stage for a kanban board
+      responses:
+        "200":
+          description: Pipeline columns
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Pipeline" }
+  /leads/{id}:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string } }
+    get:
+      operationId: getLead
+      tags: [leads]
+      responses:
+        "200":
+          description: Lead detail with contact, interactions, tasks, signals
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LeadDetail" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      operationId: updateLead
+      tags: [leads]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LeadUpdate" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Lead" }
+    delete:
+      operationId: deleteLead
+      tags: [leads]
+      responses:
+        "204": { description: Deleted }
+  /leads/{id}/analyze:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string } }
+    post:
+      operationId: analyzeLead
+      tags: [signals]
+      summary: Run Claude to detect red flags on this lead
+      responses:
+        "200":
+          description: Detected signals
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AiSignal" }
+
+  # ---------- Interactions ----------
+  /interactions:
+    get:
+      operationId: listInteractions
+      tags: [interactions]
+      parameters:
+        - { in: query, name: leadId, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Interactions for lead
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Interaction" }
+    post:
+      operationId: createInteraction
+      tags: [interactions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InteractionInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Interaction" }
+
+  # ---------- Tasks ----------
+  /tasks:
+    get:
+      operationId: listTasks
+      tags: [tasks]
+      parameters:
+        - { in: query, name: leadId, schema: { type: string } }
+        - { in: query, name: dueDate, schema: { type: string, format: date } }
+        - { in: query, name: dueToday, schema: { type: boolean } }
+        - { in: query, name: includeCompleted, schema: { type: boolean, default: false } }
+      responses:
+        "200":
+          description: Tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Task" }
+    post:
+      operationId: createTask
+      tags: [tasks]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TaskInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Task" }
+  /tasks/{id}:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string } }
+    put:
+      operationId: updateTask
+      tags: [tasks]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TaskUpdate" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Task" }
+    delete:
+      operationId: deleteTask
+      tags: [tasks]
+      responses:
+        "204": { description: Deleted }
+
+  # ---------- AI Signals ----------
+  /signals:
+    get:
+      operationId: listSignals
+      tags: [signals]
+      parameters:
+        - { in: query, name: leadId, schema: { type: string } }
+      responses:
+        "200":
+          description: Signals
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AiSignal" }
+
+  # ---------- Documents ----------
+  /documents:
+    get:
+      operationId: listDocuments
+      tags: [documents]
+      parameters:
+        - { in: query, name: leadId, schema: { type: string } }
+      responses:
+        "200":
+          description: Documents
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Document" }
+    post:
+      operationId: createDocument
+      tags: [documents]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DocumentInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Document" }
+  /documents/{id}:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string } }
+    put:
+      operationId: updateDocument
+      tags: [documents]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DocumentUpdate" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Document" }
+
+  # ---------- Chat (Claude intent engine) ----------
+  /chat:
+    post:
+      operationId: sendChat
+      tags: [chat]
+      summary: Send a natural-language command to Claude. Parses intent and executes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ChatInput" }
+      responses:
+        "200":
+          description: Chat reply
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChatReply" }
+
+  # ---------- Voice ----------
+  /voice/transcribe:
+    post:
+      operationId: transcribeAudio
+      tags: [voice]
+      summary: Transcribe audio (Sarvam Saarika STT) - supports Hinglish
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TranscribeInput" }
+      responses:
+        "200":
+          description: Transcript
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TranscribeReply" }
+  /voice/speak:
+    post:
+      operationId: speakText
+      tags: [voice]
+      summary: Convert text to speech (Sarvam Bulbul TTS)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SpeakInput" }
+      responses:
+        "200":
+          description: Audio
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SpeakReply" }
+
 components:
+  responses:
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+
   schemas:
     HealthStatus:
       type: object
+      required: [status]
       properties:
-        status:
-          type: string
-      required:
-        - status
+        status: { type: string }
 
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+
+    LeadStage:
+      type: string
+      enum: [new, interested, qualified, negotiating, won, lost]
+
+    TaskPriority:
+      type: string
+      enum: [high, medium, low]
+
+    InteractionType:
+      type: string
+      enum: [call, email, meeting, note]
+
+    InteractionSentiment:
+      type: string
+      enum: [positive, neutral, negative]
+
+    SignalSeverity:
+      type: string
+      enum: [high, medium, low]
+
+    DocumentType:
+      type: string
+      enum: [proposal, contract, case_study]
+
+    DocumentStatus:
+      type: string
+      enum: [draft, sent, approved]
+
+    Me:
+      type: object
+      required: [id, email, name, role, orgId, orgName]
+      properties:
+        id: { type: string }
+        email: { type: string }
+        name: { type: string }
+        role: { type: string }
+        orgId: { type: string }
+        orgName: { type: string }
+
+    Company:
+      type: object
+      required: [id, name, createdAt]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        website: { type: ["string", "null"] }
+        industry: { type: ["string", "null"] }
+        size: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+
+    CompanyInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        website: { type: ["string", "null"] }
+        industry: { type: ["string", "null"] }
+        size: { type: ["string", "null"] }
+
+    Contact:
+      type: object
+      required: [id, name, createdAt]
+      properties:
+        id: { type: string }
+        companyId: { type: ["string", "null"] }
+        name: { type: string }
+        email: { type: ["string", "null"] }
+        phone: { type: ["string", "null"] }
+        title: { type: ["string", "null"] }
+        tags:
+          type: array
+          items: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    ContactInput:
+      type: object
+      required: [name]
+      properties:
+        companyId: { type: ["string", "null"] }
+        name: { type: string }
+        email: { type: ["string", "null"] }
+        phone: { type: ["string", "null"] }
+        title: { type: ["string", "null"] }
+        tags:
+          type: array
+          items: { type: string }
+
+    ContactDetail:
+      type: object
+      required: [id, name, leads, interactions, createdAt]
+      properties:
+        id: { type: string }
+        companyId: { type: ["string", "null"] }
+        company:
+          oneOf:
+            - { $ref: "#/components/schemas/Company" }
+            - { type: "null" }
+        name: { type: string }
+        email: { type: ["string", "null"] }
+        phone: { type: ["string", "null"] }
+        title: { type: ["string", "null"] }
+        tags:
+          type: array
+          items: { type: string }
+        leads:
+          type: array
+          items: { $ref: "#/components/schemas/Lead" }
+        interactions:
+          type: array
+          items: { $ref: "#/components/schemas/Interaction" }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    ContactsPage:
+      type: object
+      required: [data, total, page, limit]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/ContactWithCompany" }
+        total: { type: integer }
+        page: { type: integer }
+        limit: { type: integer }
+
+    ContactWithCompany:
+      type: object
+      required: [id, name, createdAt]
+      properties:
+        id: { type: string }
+        companyId: { type: ["string", "null"] }
+        companyName: { type: ["string", "null"] }
+        name: { type: string }
+        email: { type: ["string", "null"] }
+        phone: { type: ["string", "null"] }
+        title: { type: ["string", "null"] }
+        tags:
+          type: array
+          items: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    Lead:
+      type: object
+      required: [id, contactId, stage, currency, createdAt]
+      properties:
+        id: { type: string }
+        contactId: { type: string }
+        assignedTo: { type: ["string", "null"] }
+        stage: { $ref: "#/components/schemas/LeadStage" }
+        valueUsd: { type: ["integer", "null"] }
+        currency: { type: string }
+        closeDate:
+          type: ["string", "null"]
+          format: date
+        source: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    LeadWithContact:
+      allOf:
+        - $ref: "#/components/schemas/Lead"
+        - type: object
+          properties:
+            contactName: { type: string }
+            companyName: { type: ["string", "null"] }
+            assigneeName: { type: ["string", "null"] }
+            openSignalCount: { type: integer }
+
+    LeadInput:
+      type: object
+      required: [contactId, stage]
+      properties:
+        contactId: { type: string }
+        assignedTo: { type: ["string", "null"] }
+        stage: { $ref: "#/components/schemas/LeadStage" }
+        valueUsd: { type: ["integer", "null"] }
+        currency: { type: string, default: "USD" }
+        closeDate:
+          type: ["string", "null"]
+          format: date
+        source: { type: ["string", "null"] }
+
+    LeadUpdate:
+      type: object
+      properties:
+        assignedTo: { type: ["string", "null"] }
+        stage: { $ref: "#/components/schemas/LeadStage" }
+        valueUsd: { type: ["integer", "null"] }
+        currency: { type: string }
+        closeDate:
+          type: ["string", "null"]
+          format: date
+        source: { type: ["string", "null"] }
+
+    LeadDetail:
+      type: object
+      required: [id, contactId, stage, contact, interactions, tasks, signals, currency, createdAt]
+      properties:
+        id: { type: string }
+        contactId: { type: string }
+        assignedTo: { type: ["string", "null"] }
+        assigneeName: { type: ["string", "null"] }
+        stage: { $ref: "#/components/schemas/LeadStage" }
+        valueUsd: { type: ["integer", "null"] }
+        currency: { type: string }
+        closeDate:
+          type: ["string", "null"]
+          format: date
+        source: { type: ["string", "null"] }
+        contact: { $ref: "#/components/schemas/Contact" }
+        company:
+          oneOf:
+            - { $ref: "#/components/schemas/Company" }
+            - { type: "null" }
+        interactions:
+          type: array
+          items: { $ref: "#/components/schemas/Interaction" }
+        tasks:
+          type: array
+          items: { $ref: "#/components/schemas/Task" }
+        signals:
+          type: array
+          items: { $ref: "#/components/schemas/AiSignal" }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    PipelineColumn:
+      type: object
+      required: [stage, count, totalValue, leads]
+      properties:
+        stage: { $ref: "#/components/schemas/LeadStage" }
+        count: { type: integer }
+        totalValue: { type: integer }
+        leads:
+          type: array
+          items: { $ref: "#/components/schemas/LeadWithContact" }
+
+    Pipeline:
+      type: object
+      required: [columns]
+      properties:
+        columns:
+          type: array
+          items: { $ref: "#/components/schemas/PipelineColumn" }
+
+    ActionItem:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string }
+        dueDate:
+          type: ["string", "null"]
+          format: date
+
+    Interaction:
+      type: object
+      required: [id, leadId, type, date, gist, gains, misses, actionItems, createdAt]
+      properties:
+        id: { type: string }
+        leadId: { type: string }
+        createdBy: { type: ["string", "null"] }
+        type: { $ref: "#/components/schemas/InteractionType" }
+        date: { type: string, format: date }
+        time: { type: ["string", "null"] }
+        gist: { type: string }
+        gains:
+          type: array
+          items: { type: string }
+        misses:
+          type: array
+          items: { type: string }
+        actionItems:
+          type: array
+          items: { $ref: "#/components/schemas/ActionItem" }
+        nextStep: { type: ["string", "null"] }
+        durationMinutes: { type: ["integer", "null"] }
+        sentiment:
+          oneOf:
+            - { $ref: "#/components/schemas/InteractionSentiment" }
+            - { type: "null" }
+        createdAt: { type: string, format: date-time }
+
+    InteractionInput:
+      type: object
+      required: [leadId, type, gist]
+      properties:
+        leadId: { type: string }
+        type: { $ref: "#/components/schemas/InteractionType" }
+        date:
+          type: ["string", "null"]
+          format: date
+        time: { type: ["string", "null"] }
+        gist: { type: string }
+        gains:
+          type: array
+          items: { type: string }
+        misses:
+          type: array
+          items: { type: string }
+        actionItems:
+          type: array
+          items: { $ref: "#/components/schemas/ActionItem" }
+        nextStep: { type: ["string", "null"] }
+        durationMinutes: { type: ["integer", "null"] }
+        sentiment:
+          oneOf:
+            - { $ref: "#/components/schemas/InteractionSentiment" }
+            - { type: "null" }
+
+    Task:
+      type: object
+      required: [id, title, priority, createdAt]
+      properties:
+        id: { type: string }
+        leadId: { type: ["string", "null"] }
+        leadContactName: { type: ["string", "null"] }
+        assignedTo: { type: ["string", "null"] }
+        title: { type: string }
+        description: { type: ["string", "null"] }
+        dueDate:
+          type: ["string", "null"]
+          format: date
+        completedAt:
+          type: ["string", "null"]
+          format: date-time
+        priority: { $ref: "#/components/schemas/TaskPriority" }
+        createdAt: { type: string, format: date-time }
+
+    TaskInput:
+      type: object
+      required: [title]
+      properties:
+        leadId: { type: ["string", "null"] }
+        assignedTo: { type: ["string", "null"] }
+        title: { type: string }
+        description: { type: ["string", "null"] }
+        dueDate:
+          type: ["string", "null"]
+          format: date
+        priority: { $ref: "#/components/schemas/TaskPriority", default: medium }
+
+    TaskUpdate:
+      type: object
+      properties:
+        title: { type: string }
+        description: { type: ["string", "null"] }
+        dueDate:
+          type: ["string", "null"]
+          format: date
+        completed: { type: boolean }
+        priority: { $ref: "#/components/schemas/TaskPriority" }
+        assignedTo: { type: ["string", "null"] }
+
+    AiSignal:
+      type: object
+      required: [id, leadId, signalType, severity, message, createdAt]
+      properties:
+        id: { type: string }
+        leadId: { type: string }
+        leadContactName: { type: ["string", "null"] }
+        signalType: { type: string }
+        severity: { $ref: "#/components/schemas/SignalSeverity" }
+        message: { type: string }
+        recommendation: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+
+    Document:
+      type: object
+      required: [id, leadId, type, title, status, format, createdAt]
+      properties:
+        id: { type: string }
+        leadId: { type: string }
+        type: { $ref: "#/components/schemas/DocumentType" }
+        title: { type: string }
+        content: { type: ["string", "null"] }
+        format: { type: string }
+        status: { $ref: "#/components/schemas/DocumentStatus" }
+        sentAt:
+          type: ["string", "null"]
+          format: date-time
+        createdAt: { type: string, format: date-time }
+
+    DocumentInput:
+      type: object
+      required: [leadId, type, title]
+      properties:
+        leadId: { type: string }
+        type: { $ref: "#/components/schemas/DocumentType" }
+        title: { type: string }
+        content: { type: ["string", "null"] }
+        format: { type: string, default: html }
+
+    DocumentUpdate:
+      type: object
+      properties:
+        title: { type: string }
+        content: { type: ["string", "null"] }
+        status: { $ref: "#/components/schemas/DocumentStatus" }
+
+    DashboardSummary:
+      type: object
+      required: [pipeline, todaysTasks, activeSignals, totalPipelineValue]
+      properties:
+        pipeline:
+          type: array
+          items:
+            type: object
+            required: [stage, count, totalValue]
+            properties:
+              stage: { $ref: "#/components/schemas/LeadStage" }
+              count: { type: integer }
+              totalValue: { type: integer }
+        totalPipelineValue: { type: integer }
+        activeSignals:
+          type: array
+          items: { $ref: "#/components/schemas/AiSignal" }
+        todaysTasks:
+          type: array
+          items: { $ref: "#/components/schemas/Task" }
+        recentInteractions:
+          type: array
+          items: { $ref: "#/components/schemas/Interaction" }
+
+    ChatInput:
+      type: object
+      required: [text]
+      properties:
+        text: { type: string }
+
+    ChatReply:
+      type: object
+      required: [success, message, intent]
+      properties:
+        success: { type: boolean }
+        message: { type: string }
+        intent: { type: string }
+        contactId: { type: ["string", "null"] }
+        leadId: { type: ["string", "null"] }
+        taskId: { type: ["string", "null"] }
+        interactionId: { type: ["string", "null"] }
+
+    TranscribeInput:
+      type: object
+      required: [audioBase64]
+      properties:
+        audioBase64:
+          type: string
+          description: Base64-encoded audio file (wav, mp3, webm, ogg, etc.)
+        mimeType:
+          type: string
+          default: audio/webm
+        languageCode:
+          type: string
+          default: unknown
+          description: BCP-47 code or "unknown" to auto-detect (Sarvam Saarika supports Hinglish)
+
+    TranscribeReply:
+      type: object
+      required: [text]
+      properties:
+        text: { type: string }
+        languageCode: { type: ["string", "null"] }
+
+    SpeakInput:
+      type: object
+      required: [text]
+      properties:
+        text: { type: string }
+        languageCode:
+          type: string
+          default: en-IN
+        speaker:
+          type: string
+          default: anushka
+
+    SpeakReply:
+      type: object
+      required: [audioBase64, mimeType]
+      properties:
+        audioBase64: { type: string }
+        mimeType: { type: string }

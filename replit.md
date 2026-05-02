@@ -1,8 +1,25 @@
-# Workspace
+# SalesOS
 
 ## Overview
 
-pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
+A mobile-first sales CRM built on the pnpm workspace monorepo. SalesOS gives sales reps a calm command deck for contacts, a kanban-style leads pipeline, interaction timelines, tasks, AI red-flag signals from Claude, conversational chat, and voice I/O via Sarvam STT/TTS. Installable as a PWA.
+
+## Artifacts
+
+- `artifacts/api-server` — Express 5 + Drizzle backend (auth, leads, contacts, interactions, tasks, AI signals, documents, chat, voice).
+- `artifacts/salesos-web` — React + Vite + wouter + Clerk frontend with tailwind, framer-motion, and PWA service worker.
+- `artifacts/mockup-sandbox` — Canvas component preview server.
+
+## Auth & onboarding
+
+- Clerk (via `@clerk/express` on the API and `@clerk/react` on the web) provides sign-in / sign-up.
+- On the first authenticated API call, `lib/auth.ts` fetches the Clerk profile, creates an organization + user row, and idempotently seeds demo data (4 companies, 5 contacts, 4 leads, 5 interactions, 6 tasks, 2 AI signals, 3 documents) so the app is alive on first paint.
+
+## AI
+
+- `lib/claude.ts` wraps the Anthropic SDK using `claude-haiku-4-5` for lead analysis and the chat assistant.
+- `lib/aiAnalyze.ts` produces structured red-flag signals stored in `aiSignalsTable`.
+- Voice: `routes/voice.ts` calls Sarvam `speech-to-text-translate` and `text-to-speech` for push-to-talk chat.
 
 ## Stack
 
@@ -10,11 +27,12 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **Node.js version**: 24
 - **Package manager**: pnpm
 - **TypeScript version**: 5.9
-- **API framework**: Express 5
+- **API framework**: Express 5 (CORS allowlisted to localhost / `.replit.dev` / `.replit.app`)
 - **Database**: PostgreSQL + Drizzle ORM
 - **Validation**: Zod (`zod/v4`), `drizzle-zod`
 - **API codegen**: Orval (from OpenAPI spec)
-- **Build**: esbuild (CJS bundle)
+- **Build**: esbuild (ESM bundle)
+- **Frontend**: React 19 + Vite 7 + wouter v3 + tailwind v4 + framer-motion + lucide-react
 
 ## Key Commands
 
