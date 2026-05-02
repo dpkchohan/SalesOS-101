@@ -1,0 +1,569 @@
+SALESOS - DEVELOPMENT FINALIZATION CHECKLIST
+=============================================
+
+All 6 critical components needed before starting dev.
+
+---
+
+## 1. DATABASE SCHEMA (DETAILED)
+=====================================
+
+**Supabase PostgreSQL Tables:**
+
+```sql
+-- Organizations/Teams
+CREATE TABLE organizations (
+  id UUID PRIMARY KEY,
+  name VARCHAR(255),
+  website VARCHAR(255),
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Users
+CREATE TABLE users (
+  id UUID PRIMARY KEY,
+  org_id UUID REFERENCES organizations(id),
+  email VARCHAR(255) UNIQUE,
+  name VARCHAR(255),
+  role VARCHAR(50), -- 'admin', 'manager', 'sales'
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Companies
+CREATE TABLE companies (
+  id UUID PRIMARY KEY,
+  org_id UUID REFERENCES organizations(id),
+  name VARCHAR(255),
+  website VARCHAR(255),
+  industry VARCHAR(100),
+  size VARCHAR(50), -- '1-10', '11-50', '51-200', etc.
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Contacts
+CREATE TABLE contacts (
+  id UUID PRIMARY KEY,
+  org_id UUID REFERENCES organizations(id),
+  company_id UUID REFERENCES companies(id),
+  name VARCHAR(255),
+  email VARCHAR(255),
+  phone VARCHAR(20),
+  title VARCHAR(100),
+  tags JSONB, -- ["decision_maker", "technical"]
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Leads
+CREATE TABLE leads (
+  id UUID PRIMARY KEY,
+  org_id UUID REFERENCES organizations(id),
+  contact_id UUID REFERENCES contacts(id),
+  assigned_to UUID REFERENCES users(id),
+  stage VARCHAR(50), -- 'new', 'interested', 'qualified', 'negotiating', 'won', 'lost'
+  value_usd INT, -- in paise/cents (store as integer)
+  currency VARCHAR(10) DEFAULT 'USD',
+  close_date DATE,
+  source VARCHAR(100), -- 'cold_call', 'referral', 'inbound', etc.
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Interactions (Timeline)
+CREATE TABLE interactions (
+  id UUID PRIMARY KEY,
+  org_id UUID REFERENCES organizations(id),
+  lead_id UUID REFERENCES leads(id),
+  created_by UUID REFERENCES users(id),
+  type VARCHAR(50), -- 'call', 'email', 'meeting', 'note'
+  date DATE,
+  time TIME,
+  gist TEXT, -- 1-2 line summary
+  gains JSONB, -- ["budget_confirmed", "timeline_clear"]
+  misses JSONB, -- ["needs_board_approval", "competitor_mentioned"]
+  action_items JSONB, -- [{"title": "Send spec", "due_date": "2026-03-26"}]
+  next_step TEXT,
+  duration_minutes INT, -- for calls
+  sentiment VARCHAR(50), -- 'positive', 'neutral', 'negative'
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Tasks
+CREATE TABLE tasks (
+  id UUID PRIMARY KEY,
+  org_id UUID REFERENCES organizations(id),
+  lead_id UUID REFERENCES leads(id),
+  assigned_to UUID REFERENCES users(id),
+  title VARCHAR(255),
+  description TEXT,
+  due_date DATE,
+  completed_at TIMESTAMP,
+  priority VARCHAR(20), -- 'high', 'medium', 'low'
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- AI Signals (Red flags, coaching)
+CREATE TABLE ai_signals (
+  id UUID PRIMARY KEY,
+  org_id UUID REFERENCES organizations(id),
+  lead_id UUID REFERENCES leads(id),
+  signal_type VARCHAR(50), -- 'deal_stalling', 'budget_unclear', 'timeline_vague'
+  severity VARCHAR(20), -- 'high', 'medium', 'low'
+  message TEXT,
+  recommendation TEXT,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Proposals/Documents
+CREATE TABLE documents (
+  id UUID PRIMARY KEY,
+  org_id UUID REFERENCES organizations(id),
+  lead_id UUID REFERENCES leads(id),
+  type VARCHAR(50), -- 'proposal', 'contract', 'case_study'
+  title VARCHAR(255),
+  content TEXT, -- HTML content
+  pdf_url VARCHAR(500), -- Google Drive link
+  format VARCHAR(50), -- 'pdf', 'googledocs', 'word'
+  status VARCHAR(50), -- 'draft', 'sent', 'approved'
+  sent_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Emails Sent
+CREATE TABLE emails (
+  id UUID PRIMARY KEY,
+  org_id UUID REFERENCES organizations(id),
+  lead_id UUID REFERENCES leads(id),
+  to_email VARCHAR(255),
+  subject VARCHAR(255),
+  body TEXT,
+  document_id UUID REFERENCES documents(id),
+  sent_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+---
+
+## 2. API ENDPOINTS (FULL SPEC)
+===============================
+
+**Base URL:** `/api/v1`
+
+### **CONTACTS**
+```
+POST /contacts
+Request: { name, email, phone, company_id, title, tags }
+Response: { id, name, email, ... }
+
+GET /contacts/:id
+Response: { id, name, email, company, interactions[], tasks[] }
+
+PUT /contacts/:id
+Request: { name, email, phone, title }
+Response: { id, ... updated fields }
+
+DELETE /contacts/:id
+Response: { success: true }
+
+GET /contacts (with pagination)
+Query: ?page=1&limit=20&search=john
+Response: { data: [], total: 150, page: 1 }
+```
+
+### **LEADS**
+```
+POST /leads
+Request: { contact_id, stage, value_usd, close_date }
+Response: { id, contact_id, stage, ... }
+
+GET /leads/:id
+Response: { id, contact, stage, value, timeline[], tasks[] }
+
+PUT /leads/:id
+Request: { stage, value_usd, close_date, assigned_to }
+Response: { id, ... }
+
+GET /leads?stage=negotiating
+Response: { data: [...], total: 15 }
+```
+
+### **INTERACTIONS**
+```
+POST /interactions
+Request: { lead_id, type, gist, gains, misses, action_items, next_step, sentiment }
+Response: { id, lead_id, type, ... }
+
+GET /interactions/:lead_id
+Response: { data: [ {date, gist, gains, misses, action_items} ], total: 20 }
+```
+
+### **TASKS**
+```
+POST /tasks
+Request: { lead_id, title, due_date, assigned_to, priority }
+Response: { id, title, due_date, ... }
+
+PUT /tasks/:id
+Request: { title, due_date, completed_at, priority }
+Response: { id, ... }
+
+GET /tasks?due_date=2026-03-26
+Response: { data: [...], total: 5 }
+```
+
+### **AI SIGNALS (Red Flags)**
+```
+GET /ai-signals?lead_id=xyz
+Response: { data: [ {signal_type, severity, message, recommendation} ] }
+```
+
+### **DOCUMENTS**
+```
+POST /documents
+Request: { lead_id, type, title, content, format }
+Response: { id, title, pdf_url, status: 'draft' }
+
+PUT /documents/:id
+Request: { status: 'sent', sent_at }
+Response: { id, status, ... }
+```
+
+### **EMAILS**
+```
+POST /emails
+Request: { lead_id, to_email, subject, body, document_id }
+Response: { id, sent_at, ... }
+```
+
+### **Auth**
+```
+POST /auth/signup
+Request: { email, password, org_name }
+Response: { user: {}, token: 'jwt...' }
+
+POST /auth/login
+Request: { email, password }
+Response: { user: {}, token: 'jwt...' }
+```
+
+---
+
+## 3. UI WIREFRAMES (MOBILE)
+=============================
+
+### **SCREEN 1: Home Dashboard**
+```
+┌─────────────────────────────┐
+│ ☰ SalesOS        👤 Profile │
+├─────────────────────────────┤
+│                             │
+│ 📊 PIPELINE                 │
+│ • New: 5                    │
+│ • Interested: 8             │
+│ • Qualified: 7              │
+│ • Negotiating: 3            │
+│                             │
+│ 🚨 RED FLAGS (3)            │
+│ • John's deal stalling      │
+│ • Sarah's budget unclear    │
+│ • Raj's timeline vague      │
+│                             │
+│ 📋 TODAY'S TASKS (2)        │
+│ • Send tech spec to John    │
+│ • Call Sarah about budget   │
+│                             │
+│ [➕ ADD LEAD] [👥 CONTACTS] │
+└─────────────────────────────┘
+```
+
+### **SCREEN 2: Contact Detail**
+```
+┌─────────────────────────────┐
+│ ← John Smith | Acme Corp    │
+├─────────────────────────────┤
+│ 📧 john@tcs.com             │
+│ 📱 +1-555-1234              │
+│ 🏢 Title: CFO               │
+│                             │
+│ ✏️ [EDIT]                   │
+│                             │
+│ 📅 TIMELINE                 │
+│ ┌──────────────────────────┐│
+│ │ Mar 26 | 2:00 PM         ││
+│ │ 🎯 Discussed pricing     ││
+│ │ ✅ Budget: $50k          ││
+│ │ ⚠️ Needs board approval  ││
+│ │ ✅ Follow-up: Wed 2 PM   ││
+│ └──────────────────────────┘│
+│                             │
+│ │ Mar 24 | 10:00 AM        │
+│ │ 🎯 Initial call          │
+│ │ ✅ Timeline: Q2          │
+│ └──────────────────────────┘│
+│                             │
+│ 🎤 [RECORD NOTE]            │
+└─────────────────────────────┘
+```
+
+### **SCREEN 3: Voice Input**
+```
+┌─────────────────────────────┐
+│ Add New Lead                │
+├─────────────────────────────┤
+│                             │
+│         🎤 (RECORDING)      │
+│                             │
+│ Listening...                │
+│                             │
+│                             │
+│ [⏹ STOP]                    │
+└─────────────────────────────┘
+
+↓ (After recording)
+
+┌─────────────────────────────┐
+│ "Add John from Acme,        │
+│  $50k budget, Q2 close"     │
+│                             │
+│ [✅ CONFIRM] [🔄 RETRY]     │
+└─────────────────────────────┘
+```
+
+### **SCREEN 4: Lead Details**
+```
+┌─────────────────────────────┐
+│ ← John | Acme | $50k        │
+├─────────────────────────────┤
+│ Stage: Negotiating          │
+│ Close: Q2 2026              │
+│ Assigned: Deepak            │
+│                             │
+│ 🚨 RED FLAGS: None          │
+│ ✅ NEXT: Send tech spec     │
+│                             │
+│ 📅 TIMELINE (see above)     │
+│                             │
+│ 📋 TASKS (2)                │
+│ ☐ Send tech spec (Today)    │
+│ ☐ Schedule kickoff (Wed)    │
+│                             │
+│ 🎤 [LOG CALL]               │
+│ 📄 [GENERATE PROPOSAL]      │
+└─────────────────────────────┘
+```
+
+---
+
+## 4. REPLIT PROJECT SETUP
+===========================
+
+**Folder Structure:**
+```
+salesos/
+├── backend/
+│   ├── src/
+│   │   ├── server.js (Express app)
+│   │   ├── routes/
+│   │   │   ├── contacts.js
+│   │   │   ├── leads.js
+│   │   │   ├── interactions.js
+│   │   │   ├── tasks.js
+│   │   │   ├── documents.js
+│   │   │   └── auth.js
+│   │   ├── controllers/
+│   │   │   └── (business logic)
+│   │   ├── middleware/
+│   │   │   ├── auth.js
+│   │   │   └── errorHandler.js
+│   │   └── utils/
+│   │       ├── supabase.js
+│   │       ├── claude.js
+│   │       ├── whisper.js
+│   │       └── sarvan.js
+│   ├── .env.example
+│   └── package.json
+│
+├── frontend/
+│   ├── src/
+│   │   ├── pages/
+│   │   │   ├── index.js (dashboard)
+│   │   │   ├── contacts/[id].js
+│   │   │   ├── leads/[id].js
+│   │   │   └── auth/login.js
+│   │   ├── components/
+│   │   │   ├── VoiceInput.js
+│   │   │   ├── Timeline.js
+│   │   │   └── ContactCard.js
+│   │   ├── styles/
+│   │   │   └── globals.css
+│   │   └── utils/
+│   │       ├── api.js
+│   │       └── auth.js
+│   └── package.json
+│
+└── README.md
+```
+
+**package.json (Backend):**
+```json
+{
+  "dependencies": {
+    "express": "^4.18.2",
+    "supabase": "^2.38.0",
+    "@anthropic-ai/sdk": "^0.9.0",
+    "dotenv": "^16.3.1",
+    "cors": "^2.8.5",
+    "jsonwebtoken": "^9.1.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
+```
+
+**package.json (Frontend):**
+```json
+{
+  "dependencies": {
+    "next": "^14.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  }
+}
+```
+
+**.env.example:**
+```
+SUPABASE_URL=https://xxx.supabase.co
+SUPABASE_KEY=xxx
+CLAUDE_API_KEY=sk-xxx
+WHISPER_API_KEY=xxx
+SARVAN_API_KEY=xxx
+GMAIL_API_KEY=xxx
+JWT_SECRET=your-secret-key
+```
+
+---
+
+## 5. TESTING STRATEGY
+======================
+
+**Module 1: Contact Management**
+
+Manual Testing:
+- [ ] Add contact via API (Postman)
+- [ ] Verify contact in Supabase
+- [ ] Edit contact fields
+- [ ] Delete contact (soft delete = archive)
+- [ ] Search contacts by name
+- [ ] Filter by company
+
+API Testing (cURL):
+```bash
+# Create contact
+curl -X POST http://localhost:3000/api/v1/contacts \
+  -H "Content-Type: application/json" \
+  -d '{"name": "John", "email": "john@acme.com", "company_id": "123"}'
+
+# Expect: { id: "456", name: "John", ... }
+```
+
+✅ "Done" = All 6 tests pass + contact appears in dashboard
+
+---
+
+**Module 2: Voice Input**
+
+Manual Testing:
+- [ ] Tap record button on phone
+- [ ] Speak clearly
+- [ ] Text appears on screen
+- [ ] Confirm/Retry buttons work
+- [ ] Whisper accuracy > 90%
+- [ ] Hinglish (mix of Hindi/English) works
+
+✅ "Done" = Audio transcribed correctly, text displayed
+
+---
+
+**Module 5: Add Contact via Voice**
+
+Manual Testing:
+- [ ] Say "Add John from TCS, john@tcs.com"
+- [ ] SalesOS repeats back
+- [ ] Confirm creates contact
+- [ ] Contact appears in dashboard
+- [ ] Timeline entry created
+
+✅ "Done" = End-to-end voice flow works, contact saved
+
+---
+
+## 6. DEPLOYMENT CHECKLIST
+===========================
+
+**Before Pushing to Railway:**
+
+Code:
+- [ ] No API keys in code (use .env)
+- [ ] No console.log() statements (use proper logging)
+- [ ] Error handling for all API calls
+- [ ] 404 responses for missing resources
+- [ ] Input validation (email format, required fields)
+
+Database:
+- [ ] All tables created in Supabase
+- [ ] Indexes on frequently queried fields (email, lead.stage)
+- [ ] RLS (Row-Level Security) policies set up (optional, tier 2)
+
+Frontend:
+- [ ] Mobile responsive (test on iPhone)
+- [ ] Loading states for API calls
+- [ ] Error messages for failed requests
+- [ ] No hardcoded URLs (use env variables)
+
+APIs:
+- [ ] Whisper API key set in .env
+- [ ] Sarvan TTS key set in .env
+- [ ] Claude API key set in .env
+- [ ] Gmail OAuth configured (later, not MVP)
+
+Testing:
+- [ ] Create test contact via API ✅
+- [ ] Verify in database ✅
+- [ ] Delete test contact ✅
+- [ ] Voice input records audio ✅
+- [ ] Voice output plays back ✅
+
+Railway Deployment:
+- [ ] Create Railway account
+- [ ] Connect GitHub repo
+- [ ] Set environment variables in Railway
+- [ ] Deploy
+- [ ] Test live endpoints
+
+Monitoring:
+- [ ] Check Railway logs for errors
+- [ ] Test API endpoints on live URL
+- [ ] Verify database connection
+- [ ] Check Whisper/Sarvan API calls
+
+---
+
+## CHECKLIST SUMMARY
+
+✅ Database Schema (detailed SQL)
+✅ API Endpoints (full request/response specs)
+✅ UI Wireframes (4 core screens)
+✅ Replit Setup (folder structure + packages)
+✅ Testing Strategy (module-by-module)
+✅ Deployment Checklist (pre-launch)
+
+---
+
+**READY TO PROCEED?**
+
+If all 6 sections look good, I'll create the final DEV DOC (one comprehensive file with everything).
+
+Anything you want me to change/add before we proceed?

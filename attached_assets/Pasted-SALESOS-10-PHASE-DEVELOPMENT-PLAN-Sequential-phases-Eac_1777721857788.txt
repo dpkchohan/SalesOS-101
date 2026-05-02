@@ -1,0 +1,463 @@
+SALESOS - 10 PHASE DEVELOPMENT PLAN
+===================================
+
+Sequential phases. Each phase is complete before moving to next.
+Secret keys already added: CLAUDE_API_KEY, SARVAN_API_KEY
+
+---
+
+## PHASE 1: DATABASE SCHEMA (2 days)
+======================================
+
+**What:**
+- Create Drizzle ORM schema in `lib/db/src/schema/`
+- Tables: organizations, users, companies, contacts, leads, interactions, tasks, ai_signals, documents, emails
+
+**Tech Stack:**
+- Drizzle ORM
+- PostgreSQL (via Neon)
+- Indexes on: email, leads.stage, tasks.due_date, org_id
+
+**Output:**
+- All tables created in PostgreSQL
+- Schema ready for data
+- Run: `pnpm --filter @workspace/db run push`
+
+**Done Criteria:**
+- [ ] All 10 tables exist in DB
+- [ ] Relationships correct
+- [ ] Indexes created
+- [ ] Seed script ready (empty orgs)
+
+---
+
+## PHASE 2: AUTHENTICATION (1.5 days)
+=====================================
+
+**What:**
+- Clerk auth integration (signup, login, logout)
+- API middleware to protect routes
+- Clerk auth in React frontend
+
+**Tech Stack:**
+- @clerk/express (backend)
+- @clerk/react (frontend)
+- JWT validation
+
+**Output:**
+- Users can sign up at `/signup`
+- Users can log in at `/login`
+- All API routes protected with `authenticateUser()` middleware
+- Frontend redirects unauthenticated to login
+
+**Done Criteria:**
+- [ ] Sign up creates user in DB
+- [ ] Login works, returns JWT
+- [ ] API routes reject requests without valid token
+- [ ] Frontend shows login page, redirects after auth
+
+---
+
+## PHASE 3: CORE CRUD ENDPOINTS (3 days)
+=========================================
+
+**What:**
+- Implement all API routes in `artifacts/api-server/src/routes/`
+- Routes: contacts (CRUD + search), companies (CRUD), leads (CRUD + by stage), tasks (CRUD + by due date), interactions (create + list by lead), documents (create + update status), emails (log sent emails)
+
+**Tech Stack:**
+- Express route handlers
+- Zod validation
+- Drizzle queries
+
+**Endpoints:**
+```
+POST /api/contacts (create)
+GET /api/contacts (list + search + paginate)
+GET /api/contacts/:id (detail with timeline)
+PUT /api/contacts/:id (update)
+DELETE /api/contacts/:id (archive)
+
+POST /api/companies
+GET /api/companies
+PUT /api/companies/:id
+
+POST /api/leads
+GET /api/leads (filter by stage)
+PUT /api/leads/:id (change stage, value, close date)
+
+POST /api/interactions
+GET /api/interactions/:lead_id
+
+POST /api/tasks
+GET /api/tasks
+PUT /api/tasks/:id (mark complete)
+
+POST /api/documents
+PUT /api/documents/:id (mark sent)
+
+GET /api/dashboard/summary (pipeline counts, today's tasks, active signals)
+```
+
+**Output:**
+- All 20+ endpoints working
+- Data persists to PostgreSQL
+- Responses validated with Zod
+
+**Done Criteria:**
+- [ ] All CRUD endpoints tested with Postman
+- [ ] Search/filter working
+- [ ] Dashboard summary endpoint returns correct counts
+- [ ] Error handling (404, 400, 500)
+
+---
+
+## PHASE 4: CHAT ENGINE - INTENT DETECTION (2 days)
+===================================================
+
+**What:**
+- Create `/api/chat` endpoint
+- Claude API integration to understand user intent
+- Parse commands: "Add John from TCS", "Move lead to negotiating", "Log call with Sarah"
+
+**Tech Stack:**
+- Claude API (@anthropic-ai/sdk)
+- Prompt engineering for intent detection
+
+**Workflow:**
+```
+User: "Add John from TCS, $50k budget, Q2 close"
+  ↓
+POST /api/chat (send text)
+  ↓
+Claude parses intent + entities
+  ↓
+Returns: { intent: "create_lead", contact_name: "John", company: "TCS", budget: 50000, close_date: "Q2" }
+  ↓
+Backend executes (create contact + lead)
+  ↓
+Response: { success: true, lead_id: "123", message: "John from TCS added" }
+```
+
+**Output:**
+- `/api/chat` endpoint accepts user text
+- Claude parses and returns structured JSON
+- Backend executes action based on intent
+- Frontend displays result
+
+**Done Criteria:**
+- [ ] Chat endpoint working
+- [ ] Claude correctly parses 5+ intents (add contact, create lead, log interaction, move lead, create task)
+- [ ] Entities extracted correctly (names, emails, budgets, dates)
+- [ ] Actions execute in DB
+
+---
+
+## PHASE 5: WHISPER INTEGRATION - VOICE-TO-TEXT (1.5 days)
+==========================================================
+
+**What:**
+- Create `/api/transcribe` endpoint
+- Receive audio file → Whisper API → Return text
+- Support Hinglish (language parameter)
+
+**Tech Stack:**
+- Whisper API (openai package)
+- FormData for audio upload
+
+**Workflow:**
+```
+User records audio on mobile
+  ↓
+POST /api/transcribe (send audio file)
+  ↓
+Whisper transcribes
+  ↓
+Returns: { text: "Add John from TCS" }
+  ↓
+Frontend sends text to /api/chat (Phase 4)
+  ↓
+Rest proceeds as normal
+```
+
+**Output:**
+- `/api/transcribe` accepts audio files
+- Returns transcribed text
+- Hinglish support enabled (language: 'hi')
+
+**Done Criteria:**
+- [ ] Audio upload endpoint working
+- [ ] Whisper API called correctly
+- [ ] Text returned accurately
+- [ ] Hinglish/mixed language recognized
+- [ ] Error handling for bad audio
+
+---
+
+## PHASE 6: SARVAN INTEGRATION - TEXT-TO-SPEECH (1.5 days)
+=========================================================
+
+**What:**
+- Create `/api/speak` endpoint
+- Receive text → Sarvan API → Return audio
+- Return audio URL for frontend to play
+
+**Tech Stack:**
+- Sarvan API (HTTP calls)
+- Audio streaming
+
+**Workflow:**
+```
+Backend response: "John from TCS added"
+  ↓
+POST /api/speak (send text)
+  ↓
+Sarvan generates audio
+  ↓
+Returns: { audio_url: "https://..." }
+  ↓
+Frontend plays audio
+```
+
+**Output:**
+- `/api/speak` endpoint accepts text
+- Returns audio URL
+- Frontend plays on mobile
+
+**Done Criteria:**
+- [ ] Speak endpoint working
+- [ ] Sarvan API called correctly
+- [ ] Audio generated and returned
+- [ ] Audio plays on frontend
+
+---
+
+## PHASE 7: RED FLAGS / AI SIGNALS (2 days)
+===========================================
+
+**What:**
+- Claude analyzes leads for red flags
+- Creates AI signal records automatically
+- Shows on dashboard + lead detail
+
+**Tech Stack:**
+- Claude API (analysis)
+- Drizzle insert into ai_signals table
+
+**Red Flags to Detect:**
+- Deal stalling (no contact > 5 days)
+- Budget unconfirmed
+- Timeline vague
+- Long in one stage (> 20 days)
+
+**Workflow:**
+```
+Endpoint: POST /api/leads/:id/analyze
+  ↓
+Claude reads lead + interaction history
+  ↓
+Claude detects: "Deal stalling. No contact in 7 days."
+  ↓
+Creates ai_signal record
+  ↓
+Returns signal to frontend
+  ↓
+Dashboard shows red flags
+```
+
+**Output:**
+- Leads auto-analyzed for risks
+- AI signals stored and displayed
+- Real-time alerts on dashboard
+
+**Done Criteria:**
+- [ ] `/api/leads/:id/analyze` working
+- [ ] Claude detects all 4+ red flag types
+- [ ] Signals persisted to DB
+- [ ] Dashboard shows active signals
+- [ ] Lead detail shows relevant signals
+
+---
+
+## PHASE 8: FRONTEND - AUTHENTICATION & BASIC SCREENS (3 days)
+=============================================================
+
+**What:**
+- React Vite app at `/`
+- Clerk sign-in/sign-up pages
+- Dashboard (pipeline summary, red flags, today's tasks)
+- Contacts list + detail with timeline
+- Leads list + lead detail
+
+**Tech Stack:**
+- React 18
+- React Router (navigation)
+- Clerk React components
+- Tailwind CSS (styling)
+- Lucide React (icons)
+- Axios (API calls)
+
+**Screens:**
+1. `/login` - Sign in/up
+2. `/dashboard` - Pipeline counts, red flags, tasks
+3. `/contacts` - List all contacts (search + paginate)
+4. `/contacts/:id` - Detail + timeline
+5. `/leads` - List all leads (filter by stage)
+6. `/leads/:id` - Detail + interactions + tasks
+
+**Output:**
+- Full frontend working
+- Mobile-first responsive design
+- Connected to backend APIs
+- User sees real data from DB
+
+**Done Criteria:**
+- [ ] All 6 screens render correctly
+- [ ] Navigation working
+- [ ] Auth required to access screens
+- [ ] Mobile layout responsive
+- [ ] Data fetched from backend APIs
+- [ ] Forms submit and save to DB
+
+---
+
+## PHASE 9: CONVERSATIONAL UI - TEXT CHAT (2 days)
+==================================================
+
+**What:**
+- Add chat interface to app
+- User types commands
+- Frontend sends to `/api/chat`
+- Backend executes intent + returns result
+- Result displayed in chat
+
+**Tech Stack:**
+- Chat input component
+- Message display component
+- Real-time API calls
+
+**Chat Flow:**
+```
+User types: "Add John from TCS, $50k budget"
+  ↓
+Click send
+  ↓
+POST /api/chat
+  ↓
+Claude parses intent
+  ↓
+Backend creates contact + lead
+  ↓
+Response: "John from TCS added as a lead"
+  ↓
+Message appears in chat
+```
+
+**Output:**
+- Chat screen with input
+- Conversation history
+- Commands execute automatically
+- Results shown as chat messages
+
+**Done Criteria:**
+- [ ] Chat input + send working
+- [ ] Messages displayed in order
+- [ ] Backend API called correctly
+- [ ] Intents execute (add contact, create lead, move stage, etc.)
+- [ ] Error messages shown if action fails
+- [ ] Mobile layout scrollable
+
+---
+
+## PHASE 10: PROGRESSIVE WEB APP + VOICE (2 days)
+================================================
+
+**What:**
+- Convert React app to PWA (installable on mobile home screen)
+- Voice input: record audio → Whisper → chat
+- Voice output: response → Sarvan → play audio
+- Offline support (cache API responses)
+
+**Tech Stack:**
+- Web Audio API (record)
+- Service Workers (offline)
+- Manifest.json (PWA)
+- Web Push (notifications, optional)
+
+**Features:**
+1. Record button on chat screen
+2. Click record → speak → stop
+3. Audio sent to `/api/transcribe`
+4. Text added to chat input
+5. User confirms or edits
+6. Sends to `/api/chat`
+7. Backend response → `/api/speak`
+8. Audio plays on phone speaker
+9. PWA: "Add to Home Screen" on iOS/Android
+10. Offline: Last 10 messages cached
+
+**Output:**
+- App installable as mobile app
+- Voice input working (no typing needed)
+- Voice output working (hear responses)
+- Offline mode functional
+
+**Done Criteria:**
+- [ ] Service Worker registered
+- [ ] PWA installable on phone
+- [ ] Record button working
+- [ ] Audio captured + sent to Whisper
+- [ ] Transcription appears in chat
+- [ ] Sarvan audio plays
+- [ ] Offline caching working
+- [ ] App works on iOS + Android
+- [ ] Responsive on all mobile sizes
+
+---
+
+## TIMELINE SUMMARY
+===================
+
+Phase 1: 2 days (DB schema)
+Phase 2: 1.5 days (Auth)
+Phase 3: 3 days (CRUD endpoints)
+Phase 4: 2 days (Claude chat intent)
+Phase 5: 1.5 days (Whisper voice input)
+Phase 6: 1.5 days (Sarvan voice output)
+Phase 7: 2 days (AI red flags)
+Phase 8: 3 days (Frontend basic)
+Phase 9: 2 days (Chat UI)
+Phase 10: 2 days (PWA + voice)
+
+**TOTAL: 21 days (3 weeks)**
+
+---
+
+## DEPLOYMENT
+
+**After Phase 10 Complete:**
+- Push to GitHub
+- Deploy to Railway (1 hour)
+- PWA live at salesos.railway.app
+- Install on mobile
+- Share with customers
+
+---
+
+## ENVIRONMENT VARIABLES ALREADY SET
+
+✅ CLAUDE_API_KEY (provided by you)
+✅ SARVAN_API_KEY (provided by you)
+
+Also needed:
+- DATABASE_URL (Neon PostgreSQL)
+- CLERK_SECRET_KEY
+- CLERK_PUBLISHABLE_KEY
+
+---
+
+## READY?
+
+Phases 1-10 in order. Each phase complete before next.
+
+Start with Phase 1 (database). Let me know when done, move to Phase 2.
