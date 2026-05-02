@@ -79,8 +79,14 @@ router.post("/documents/generate-proposal", requireAuth, async (req, res): Promi
       company: companiesTable,
     })
     .from(leadsTable)
-    .leftJoin(contactsTable, eq(leadsTable.contactId, contactsTable.id))
-    .leftJoin(companiesTable, eq(contactsTable.companyId, companiesTable.id))
+    .leftJoin(
+      contactsTable,
+      and(eq(leadsTable.contactId, contactsTable.id), eq(contactsTable.orgId, r.orgId)),
+    )
+    .leftJoin(
+      companiesTable,
+      and(eq(contactsTable.companyId, companiesTable.id), eq(companiesTable.orgId, r.orgId)),
+    )
     .where(and(eq(leadsTable.id, body.data.leadId), eq(leadsTable.orgId, r.orgId)));
 
   if (!leadRow || !leadRow.contact) {
