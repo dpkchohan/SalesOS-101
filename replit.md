@@ -21,6 +21,14 @@ A mobile-first sales CRM built on the pnpm workspace monorepo. SalesOS gives sal
 - `lib/aiAnalyze.ts` produces structured red-flag signals stored in `aiSignalsTable`.
 - Voice: `routes/voice.ts` calls Sarvam `speech-to-text-translate` and `text-to-speech` for push-to-talk chat.
 
+## Import / Export
+
+- `routes/importExport.ts` (multer + xlsx) handles CSV and Excel ingest from HubSpot, Salesforce, Pipedrive, etc.
+  - `POST /api/import/preview` returns headers, sample rows, and an auto-detected column → SalesOS field mapping.
+  - `POST /api/import/contacts` processes the file with the user's mapping, dedupes contacts by `(orgId, email)`, auto-creates companies, validates emails, maps lead status (`In Progress` → `negotiating`, `Open` → `interested`, etc.), and creates a lead per row with a recognized status.
+  - `GET /api/export/contacts?format=csv|xlsx` and `GET /api/export/leads?format=csv|xlsx` stream downloads of the org's data.
+- Frontend: `pages/Import.tsx` is a 4-step wizard (upload → map → progress → done). `components/ExportMenu.tsx` is the CSV/Excel dropdown surfaced on Contacts and Pipeline.
+
 ## Stack
 
 - **Monorepo tool**: pnpm workspaces

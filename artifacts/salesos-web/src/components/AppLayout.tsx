@@ -7,6 +7,7 @@ import {
   CheckSquare,
   MessageCircle,
   FileText,
+  Upload,
   LogOut,
   Settings,
 } from "lucide-react";
@@ -20,6 +21,7 @@ const NAV = [
   { to: "/tasks", label: "Tasks", icon: CheckSquare },
   { to: "/chat", label: "Chat", icon: MessageCircle },
   { to: "/documents", label: "Docs", icon: FileText },
+  { to: "/import", label: "Import", icon: Upload },
 ];
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
@@ -95,7 +97,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         <main className="flex-1 pb-24 md:pb-8">{children}</main>
 
         <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-sidebar text-sidebar-foreground border-t border-sidebar-border safe-bottom">
-          <div className="grid grid-cols-6">
+          <div className="grid grid-cols-7">
             {NAV.map(({ to, label, icon: Icon }) => (
               <Link key={to} to={to}
                   className={cn(

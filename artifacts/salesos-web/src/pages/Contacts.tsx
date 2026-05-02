@@ -9,6 +9,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Search, Briefcase, Mail, Phone, X } from "lucide-react";
 import { PageHeader } from "@/components/AppLayout";
+import { ExportMenu } from "@/components/ExportMenu";
 import { initials, relativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -28,13 +29,16 @@ export default function Contacts() {
         title="Contacts"
         subtitle={data ? `${data.total} in your book` : "Loading…"}
         right={
-          <button
-            onClick={() => setShowNew(true)}
-            className="flex items-center gap-1.5 bg-primary text-primary-foreground font-semibold text-[13px] px-3.5 py-2 rounded-lg hover:bg-primary/90 transition-colors shadow-sm"
-            data-testid="button-newcontact"
-          >
-            <Plus size={15} /> New
-          </button>
+          <div className="flex items-center gap-2">
+            <ExportMenu resource="contacts" testIdPrefix="contacts-export" />
+            <button
+              onClick={() => setShowNew(true)}
+              className="flex items-center gap-1.5 bg-primary text-primary-foreground font-semibold text-[13px] px-3.5 py-2 rounded-lg hover:bg-primary/90 transition-colors shadow-sm"
+              data-testid="button-newcontact"
+            >
+              <Plus size={15} /> New
+            </button>
+          </div>
         }
       />
       <div className="px-4 md:px-8 mb-3">

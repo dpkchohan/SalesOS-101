@@ -10,6 +10,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { AlertCircle, MoveRight } from "lucide-react";
 import { PageHeader } from "@/components/AppLayout";
+import { ExportMenu } from "@/components/ExportMenu";
 import { formatCurrency, initials, STAGES, STAGE_META } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -35,7 +36,11 @@ export default function Pipeline() {
 
   return (
     <div>
-      <PageHeader title="Pipeline" subtitle="Drag-free kanban — tap a card to advance the stage" />
+      <PageHeader
+        title="Pipeline"
+        subtitle="Drag-free kanban — tap a card to advance the stage"
+        right={<ExportMenu resource="leads" testIdPrefix="leads-export" />}
+      />
       {isLoading && <div className="px-4 md:px-8 text-muted-foreground">Loading…</div>}
       <div className="md:hidden px-4 space-y-5 pb-6">
         {data?.columns.map((col) => (

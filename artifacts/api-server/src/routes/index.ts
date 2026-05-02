@@ -11,6 +11,7 @@ import documentsRouter from "./documents";
 import dashboardRouter from "./dashboard";
 import chatRouter from "./chat";
 import voiceRouter from "./voice";
+import importExportRouter from "./importExport";
 
 const router: IRouter = Router();
 
@@ -26,5 +27,6 @@ router.use(documentsRouter);
 router.use(dashboardRouter);
 router.use(chatRouter);
 router.use(voiceRouter);
+router.use(importExportRouter);
 
 export default router;

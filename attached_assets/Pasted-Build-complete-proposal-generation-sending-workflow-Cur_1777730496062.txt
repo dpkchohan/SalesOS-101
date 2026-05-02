@@ -1,0 +1,156 @@
+Build complete proposal generation & sending workflow.
+
+Current issue:
+- Documents page shows cards but not clickable
+- No way to generate proposal from chat
+- No approval/preview flow
+- No email sending
+
+Build this flow:
+
+STEP 1: Chat Command Recognition
+When user says: "Send Deepak Kumar a proposal about our conversation today with 5 items"
+
+Backend:
+- /api/chat endpoint receives message
+- Claude parses: intent="generate_proposal", contact="Deepak Kumar", items=5
+- Returns: { action: "generate_proposal", contact_id: "123", context: "5 items from conversation" }
+
+Frontend:
+- Display: "Generating proposal for Deepak Kumar..."
+
+STEP 2: Proposal Generation (Claude)
+Endpoint: POST /api/documents/generate
+
+Input:
+{
+  contact_id: "123",
+  context: "Discussed: 1) pricing, 2) timeline, 3) features, 4) implementation, 5) support",
+  type: "proposal"
+}
+
+Claude prompt:
+"Generate a professional proposal for [contact] at [company]. Based on conversation discussing: [context items]. Include: Executive Summary, Problem Statement, Solution, Pricing, Timeline, Next Steps. Use company branding (logo, colors)."
+
+Output:
+{
+  document_id: "doc-456",
+  title: "Proposal - Deepak Kumar - Phenomeny LLP",
+  content: "<html>...</html>",
+  preview_url: "..."
+}
+
+Store in DB: documents table
+- type: "proposal"
+- content: HTML (full proposal)
+- status: "draft"
+- contact_id: "123"
+
+STEP 3: Preview + Approval
+Frontend: Document Preview Screen
+
+Show:
+- Full proposal rendered as HTML
+- Branding applied (logo at top, colors, footer)
+- Buttons: [Request Changes] [Approve & Send]
+
+If user clicks "Request Changes":
+- Text input: "Make pricing section clearer"
+- Send back to Claude: "Update proposal based on feedback: [user feedback]"
+- Re-render proposal
+
+STEP 4: Generate Email
+Once approved, endpoint: POST /api/documents/send-email
+
+Input:
+{
+  document_id: "doc-456",
+  contact_email: "deepak@phenomeny.in",
+  subject: "Your SalesOS Proposal"
+}
+
+Claude generates email:
+"Hi Deepak,
+
+Following up on our conversation today, I've attached a customized proposal for Phenomeny LLP.
+
+Key highlights:
+- 5 items we discussed
+- Implementation timeline: 30 days
+- ROI: [calculated]
+
+Let's schedule a call to discuss. Available Wednesday 2-3 PM?
+
+–[User Name]"
+
+Email backend:
+- Attach proposal as PDF (convert HTML to PDF)
+- Send via Gmail API
+- Log in emails table
+- Update document status: "sent"
+
+STEP 5: Mobile Sharing
+When document opened in mobile app:
+
+Show sharing options:
+- [Email] - opens compose with proposal
+- [Copy Link] - generates shareable link
+- [WhatsApp] - sends proposal via WhatsApp
+- [Drive] - saves to Google Drive
+- [More] - other options
+
+STEP 6: Document Detail Page
+Frontend: /documents/:id
+
+Show:
+- Full proposal content
+- Status: Draft / Sent / Approved
+- Created: 1h ago
+- Sent to: [email] at [date/time]
+- View count: [how many times opened]
+- Buttons:
+  - [Edit] - request changes
+  - [Share] - mobile share sheet
+  - [Download PDF] - download as PDF
+  - [Send Again] - resend via email
+  - [View History] - version history
+
+Fix the broken things:
+
+1. Document cards clickable → navigate to /documents/:id
+
+2. Add /documents/:id page (detail view)
+
+3. Add chat command: "Send [contact] a proposal"
+   - Should trigger full workflow
+   - Show progress: "Generating..." → "Review proposal" → "Sending..."
+
+4. Add email sending:
+   - Convert HTML proposal to PDF
+   - Send via Gmail API with PDF attachment
+   - Log in emails table
+
+5. Add mobile sharing:
+   - iOS/Android share sheet
+   - Generate shareable link
+   - WhatsApp/Email options
+
+Test Flow:
+[ ] Chat: "Send Deepak Kumar a proposal"
+[ ] See proposal preview
+[ ] Click "Approve & Send"
+[ ] Email sent to deepak@phenomeny.in
+[ ] Can view document detail page
+[ ] Can share on mobile
+[ ] Can download PDF
+[ ] Email appears in emails table
+[ ] Document status = "sent"
+
+Priority:
+1. Make document cards clickable (5 min)
+2. Add document detail page (15 min)
+3. Chat command for proposal generation (20 min)
+4. Email sending with PDF (20 min)
+5. Mobile sharing options (15 min)
+
+Total: 1.5 hours

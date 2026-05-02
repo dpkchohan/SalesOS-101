@@ -27,6 +27,7 @@ import ContactDetail from "./pages/ContactDetail";
 import Tasks from "./pages/Tasks";
 import Chat from "./pages/Chat";
 import Documents from "./pages/Documents";
+import Import from "./pages/Import";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/not-found";
 
@@ -171,6 +172,7 @@ function SignedInApp() {
         <Route path="/tasks" component={Tasks} />
         <Route path="/chat" component={Chat} />
         <Route path="/documents" component={Documents} />
+        <Route path="/import" component={Import} />
         <Route path="/settings" component={Settings} />
         <Route component={NotFound} />
       </Switch>
@@ -240,6 +242,7 @@ function ClerkProviderWithRoutes() {
           <Route path="/tasks" component={ProtectedRoutes} />
           <Route path="/chat" component={ProtectedRoutes} />
           <Route path="/documents" component={ProtectedRoutes} />
+          <Route path="/import" component={ProtectedRoutes} />
           <Route path="/settings" component={ProtectedRoutes} />
           <Route component={NotFound} />
         </Switch>
