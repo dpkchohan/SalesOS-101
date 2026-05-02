@@ -13,25 +13,30 @@ router.get("/signals", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: q.error.message });
     return;
   }
-  const conditions = [eq(aiSignalsTable.orgId, r.orgId)];
-  if (q.data.leadId) conditions.push(eq(aiSignalsTable.leadId, q.data.leadId));
-  const rows = await db
-    .select({
-      id: aiSignalsTable.id,
-      leadId: aiSignalsTable.leadId,
-      leadContactName: contactsTable.name,
-      signalType: aiSignalsTable.signalType,
-      severity: aiSignalsTable.severity,
-      message: aiSignalsTable.message,
-      recommendation: aiSignalsTable.recommendation,
-      createdAt: aiSignalsTable.createdAt,
-    })
-    .from(aiSignalsTable)
-    .leftJoin(leadsTable, eq(aiSignalsTable.leadId, leadsTable.id))
-    .leftJoin(contactsTable, eq(leadsTable.contactId, contactsTable.id))
-    .where(and(...conditions))
-    .orderBy(desc(aiSignalsTable.createdAt));
-  res.json(ListSignalsResponse.parse(rows));
+  try {
+    const conditions = [eq(aiSignalsTable.orgId, r.orgId)];
+    if (q.data.leadId) conditions.push(eq(aiSignalsTable.leadId, q.data.leadId));
+    const rows = await db
+      .select({
+        id: aiSignalsTable.id,
+        leadId: aiSignalsTable.leadId,
+        leadContactName: contactsTable.name,
+        signalType: aiSignalsTable.signalType,
+        severity: aiSignalsTable.severity,
+        message: aiSignalsTable.message,
+        recommendation: aiSignalsTable.recommendation,
+        createdAt: aiSignalsTable.createdAt,
+      })
+      .from(aiSignalsTable)
+      .leftJoin(leadsTable, eq(aiSignalsTable.leadId, leadsTable.id))
+      .leftJoin(contactsTable, eq(leadsTable.contactId, contactsTable.id))
+      .where(and(...conditions))
+      .orderBy(desc(aiSignalsTable.createdAt));
+    res.json(ListSignalsResponse.parse(rows));
+  } catch (err) {
+    req.log.error({ err }, "Failed to list signals");
+    res.status(500).json({ error: "Failed to list signals" });
+  }
 });
 
 export default router;

@@ -22,11 +22,16 @@ router.get("/companies", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: q.error.message });
     return;
   }
-  const where = q.data.search
-    ? and(eq(companiesTable.orgId, r.orgId), ilike(companiesTable.name, `%${q.data.search}%`))
-    : eq(companiesTable.orgId, r.orgId);
-  const rows = await db.select().from(companiesTable).where(where).orderBy(companiesTable.name);
-  res.json(ListCompaniesResponse.parse(rows));
+  try {
+    const where = q.data.search
+      ? and(eq(companiesTable.orgId, r.orgId), ilike(companiesTable.name, `%${q.data.search}%`))
+      : eq(companiesTable.orgId, r.orgId);
+    const rows = await db.select().from(companiesTable).where(where).orderBy(companiesTable.name);
+    res.json(ListCompaniesResponse.parse(rows));
+  } catch (err) {
+    req.log.error({ err }, "Failed to list companies");
+    res.status(500).json({ error: "Failed to list companies" });
+  }
 });
 
 router.post("/companies", requireAuth, async (req, res): Promise<void> => {
@@ -36,11 +41,16 @@ router.post("/companies", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: body.error.message });
     return;
   }
-  const [row] = await db
-    .insert(companiesTable)
-    .values({ ...body.data, orgId: r.orgId })
-    .returning();
-  res.status(201).json(GetCompanyResponse.parse(row));
+  try {
+    const [row] = await db
+      .insert(companiesTable)
+      .values({ ...body.data, orgId: r.orgId })
+      .returning();
+    res.status(201).json(GetCompanyResponse.parse(row));
+  } catch (err) {
+    req.log.error({ err }, "Failed to create company");
+    res.status(500).json({ error: "Failed to create company" });
+  }
 });
 
 router.get("/companies/:id", requireAuth, async (req, res): Promise<void> => {
@@ -50,15 +60,20 @@ router.get("/companies/:id", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: params.error.message });
     return;
   }
-  const [row] = await db
-    .select()
-    .from(companiesTable)
-    .where(and(eq(companiesTable.id, params.data.id), eq(companiesTable.orgId, r.orgId)));
-  if (!row) {
-    res.status(404).json({ error: "Company not found" });
-    return;
+  try {
+    const [row] = await db
+      .select()
+      .from(companiesTable)
+      .where(and(eq(companiesTable.id, params.data.id), eq(companiesTable.orgId, r.orgId)));
+    if (!row) {
+      res.status(404).json({ error: "Company not found" });
+      return;
+    }
+    res.json(GetCompanyResponse.parse(row));
+  } catch (err) {
+    req.log.error({ err }, "Failed to get company");
+    res.status(500).json({ error: "Failed to get company" });
   }
-  res.json(GetCompanyResponse.parse(row));
 });
 
 router.put("/companies/:id", requireAuth, async (req, res): Promise<void> => {
@@ -69,16 +84,21 @@ router.put("/companies/:id", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: "Invalid input" });
     return;
   }
-  const [row] = await db
-    .update(companiesTable)
-    .set(body.data)
-    .where(and(eq(companiesTable.id, params.data.id), eq(companiesTable.orgId, r.orgId)))
-    .returning();
-  if (!row) {
-    res.status(404).json({ error: "Company not found" });
-    return;
+  try {
+    const [row] = await db
+      .update(companiesTable)
+      .set(body.data)
+      .where(and(eq(companiesTable.id, params.data.id), eq(companiesTable.orgId, r.orgId)))
+      .returning();
+    if (!row) {
+      res.status(404).json({ error: "Company not found" });
+      return;
+    }
+    res.json(UpdateCompanyResponse.parse(row));
+  } catch (err) {
+    req.log.error({ err }, "Failed to update company");
+    res.status(500).json({ error: "Failed to update company" });
   }
-  res.json(UpdateCompanyResponse.parse(row));
 });
 
 export default router;

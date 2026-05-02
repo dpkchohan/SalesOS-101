@@ -29,48 +29,53 @@ router.get("/contacts", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: q.error.message });
     return;
   }
-  const { search, companyId, page, limit } = q.data;
-  const conditions = [eq(contactsTable.orgId, r.orgId)];
-  if (companyId) conditions.push(eq(contactsTable.companyId, companyId));
-  if (search) {
-    const s = `%${search}%`;
-    conditions.push(
-      or(
-        ilike(contactsTable.name, s),
-        ilike(contactsTable.email, s),
-        ilike(contactsTable.title, s),
-      )!,
-    );
+  try {
+    const { search, companyId, page, limit } = q.data;
+    const conditions = [eq(contactsTable.orgId, r.orgId)];
+    if (companyId) conditions.push(eq(contactsTable.companyId, companyId));
+    if (search) {
+      const s = `%${search}%`;
+      conditions.push(
+        or(
+          ilike(contactsTable.name, s),
+          ilike(contactsTable.email, s),
+          ilike(contactsTable.title, s),
+        )!,
+      );
+    }
+    const where = and(...conditions);
+
+    const totalRow = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(contactsTable)
+      .where(where);
+    const total = totalRow[0]?.count ?? 0;
+
+    const rows = await db
+      .select({
+        id: contactsTable.id,
+        companyId: contactsTable.companyId,
+        companyName: companiesTable.name,
+        name: contactsTable.name,
+        email: contactsTable.email,
+        phone: contactsTable.phone,
+        title: contactsTable.title,
+        tags: contactsTable.tags,
+        createdAt: contactsTable.createdAt,
+        updatedAt: contactsTable.updatedAt,
+      })
+      .from(contactsTable)
+      .leftJoin(companiesTable, eq(contactsTable.companyId, companiesTable.id))
+      .where(where)
+      .orderBy(desc(contactsTable.createdAt))
+      .limit(limit)
+      .offset((page - 1) * limit);
+
+    res.json(ListContactsResponse.parse({ data: rows, total, page, limit }));
+  } catch (err) {
+    req.log.error({ err }, "Failed to list contacts");
+    res.status(500).json({ error: "Failed to list contacts" });
   }
-  const where = and(...conditions);
-
-  const totalRow = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(contactsTable)
-    .where(where);
-  const total = totalRow[0]?.count ?? 0;
-
-  const rows = await db
-    .select({
-      id: contactsTable.id,
-      companyId: contactsTable.companyId,
-      companyName: companiesTable.name,
-      name: contactsTable.name,
-      email: contactsTable.email,
-      phone: contactsTable.phone,
-      title: contactsTable.title,
-      tags: contactsTable.tags,
-      createdAt: contactsTable.createdAt,
-      updatedAt: contactsTable.updatedAt,
-    })
-    .from(contactsTable)
-    .leftJoin(companiesTable, eq(contactsTable.companyId, companiesTable.id))
-    .where(where)
-    .orderBy(desc(contactsTable.createdAt))
-    .limit(limit)
-    .offset((page - 1) * limit);
-
-  res.json(ListContactsResponse.parse({ data: rows, total, page, limit }));
 });
 
 router.post("/contacts", requireAuth, async (req, res): Promise<void> => {
@@ -80,12 +85,17 @@ router.post("/contacts", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: body.error.message });
     return;
   }
-  const { tags, ...rest } = body.data;
-  const [row] = await db
-    .insert(contactsTable)
-    .values({ ...rest, tags: tags ?? [], orgId: r.orgId })
-    .returning();
-  res.status(201).json(UpdateContactResponse.parse(row));
+  try {
+    const { tags, ...rest } = body.data;
+    const [row] = await db
+      .insert(contactsTable)
+      .values({ ...rest, tags: tags ?? [], orgId: r.orgId })
+      .returning();
+    res.status(201).json(UpdateContactResponse.parse(row));
+  } catch (err) {
+    req.log.error({ err }, "Failed to create contact");
+    res.status(500).json({ error: "Failed to create contact" });
+  }
 });
 
 router.get("/contacts/:id", requireAuth, async (req, res): Promise<void> => {
@@ -95,33 +105,38 @@ router.get("/contacts/:id", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: params.error.message });
     return;
   }
-  const [row] = await db
-    .select()
-    .from(contactsTable)
-    .where(and(eq(contactsTable.id, params.data.id), eq(contactsTable.orgId, r.orgId)));
-  if (!row) {
-    res.status(404).json({ error: "Contact not found" });
-    return;
-  }
-  let company = null;
-  if (row.companyId) {
-    const [c] = await db.select().from(companiesTable).where(eq(companiesTable.id, row.companyId));
-    company = c ?? null;
-  }
-  const leads = await db.select().from(leadsTable).where(eq(leadsTable.contactId, row.id));
-  const leadIds: string[] = leads.map((l: { id: string }) => l.id);
-  let interactions: (typeof interactionsTable.$inferSelect)[] = [];
-  if (leadIds.length > 0) {
-    interactions = await db
+  try {
+    const [row] = await db
       .select()
-      .from(interactionsTable)
-      .where(
-        and(eq(interactionsTable.orgId, r.orgId), inArray(interactionsTable.leadId, leadIds)),
-      )
-      .orderBy(desc(interactionsTable.createdAt))
-      .limit(20);
+      .from(contactsTable)
+      .where(and(eq(contactsTable.id, params.data.id), eq(contactsTable.orgId, r.orgId)));
+    if (!row) {
+      res.status(404).json({ error: "Contact not found" });
+      return;
+    }
+    let company = null;
+    if (row.companyId) {
+      const [c] = await db.select().from(companiesTable).where(eq(companiesTable.id, row.companyId));
+      company = c ?? null;
+    }
+    const leads = await db.select().from(leadsTable).where(eq(leadsTable.contactId, row.id));
+    const leadIds: string[] = leads.map((l: { id: string }) => l.id);
+    let interactions: (typeof interactionsTable.$inferSelect)[] = [];
+    if (leadIds.length > 0) {
+      interactions = await db
+        .select()
+        .from(interactionsTable)
+        .where(
+          and(eq(interactionsTable.orgId, r.orgId), inArray(interactionsTable.leadId, leadIds)),
+        )
+        .orderBy(desc(interactionsTable.createdAt))
+        .limit(20);
+    }
+    res.json(GetContactResponse.parse({ ...row, company, leads, interactions }));
+  } catch (err) {
+    req.log.error({ err }, "Failed to get contact");
+    res.status(500).json({ error: "Failed to get contact" });
   }
-  res.json(GetContactResponse.parse({ ...row, company, leads, interactions }));
 });
 
 router.put("/contacts/:id", requireAuth, async (req, res): Promise<void> => {
@@ -132,17 +147,22 @@ router.put("/contacts/:id", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: "Invalid input" });
     return;
   }
-  const { tags, ...rest } = body.data;
-  const [row] = await db
-    .update(contactsTable)
-    .set({ ...rest, ...(tags !== undefined ? { tags } : {}) })
-    .where(and(eq(contactsTable.id, params.data.id), eq(contactsTable.orgId, r.orgId)))
-    .returning();
-  if (!row) {
-    res.status(404).json({ error: "Contact not found" });
-    return;
+  try {
+    const { tags, ...rest } = body.data;
+    const [row] = await db
+      .update(contactsTable)
+      .set({ ...rest, ...(tags !== undefined ? { tags } : {}) })
+      .where(and(eq(contactsTable.id, params.data.id), eq(contactsTable.orgId, r.orgId)))
+      .returning();
+    if (!row) {
+      res.status(404).json({ error: "Contact not found" });
+      return;
+    }
+    res.json(UpdateContactResponse.parse(row));
+  } catch (err) {
+    req.log.error({ err }, "Failed to update contact");
+    res.status(500).json({ error: "Failed to update contact" });
   }
-  res.json(UpdateContactResponse.parse(row));
 });
 
 router.delete("/contacts/:id", requireAuth, async (req, res): Promise<void> => {
@@ -152,15 +172,20 @@ router.delete("/contacts/:id", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: params.error.message });
     return;
   }
-  const [row] = await db
-    .delete(contactsTable)
-    .where(and(eq(contactsTable.id, params.data.id), eq(contactsTable.orgId, r.orgId)))
-    .returning();
-  if (!row) {
-    res.status(404).json({ error: "Contact not found" });
-    return;
+  try {
+    const [row] = await db
+      .delete(contactsTable)
+      .where(and(eq(contactsTable.id, params.data.id), eq(contactsTable.orgId, r.orgId)))
+      .returning();
+    if (!row) {
+      res.status(404).json({ error: "Contact not found" });
+      return;
+    }
+    res.sendStatus(204);
+  } catch (err) {
+    req.log.error({ err }, "Failed to delete contact");
+    res.status(500).json({ error: "Failed to delete contact" });
   }
-  res.sendStatus(204);
 });
 
 export default router;

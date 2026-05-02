@@ -12,6 +12,7 @@ import {
 import {
   ListDocumentsQueryParams,
   ListDocumentsResponse,
+  ListDocumentsResponseItem,
   CreateDocumentBody,
   UpdateDocumentParams,
   UpdateDocumentBody,
@@ -32,14 +33,19 @@ router.get("/documents", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: q.error.message });
     return;
   }
-  const conditions = [eq(documentsTable.orgId, r.orgId)];
-  if (q.data.leadId) conditions.push(eq(documentsTable.leadId, q.data.leadId));
-  const rows = await db
-    .select()
-    .from(documentsTable)
-    .where(and(...conditions))
-    .orderBy(desc(documentsTable.createdAt));
-  res.json(ListDocumentsResponse.parse(rows));
+  try {
+    const conditions = [eq(documentsTable.orgId, r.orgId)];
+    if (q.data.leadId) conditions.push(eq(documentsTable.leadId, q.data.leadId));
+    const rows = await db
+      .select()
+      .from(documentsTable)
+      .where(and(...conditions))
+      .orderBy(desc(documentsTable.createdAt));
+    res.json(ListDocumentsResponse.parse(rows));
+  } catch (err) {
+    req.log.error({ err }, "Failed to list documents");
+    res.status(500).json({ error: "Failed to list documents" });
+  }
 });
 
 router.post("/documents", requireAuth, async (req, res): Promise<void> => {
@@ -49,19 +55,24 @@ router.post("/documents", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: body.error.message });
     return;
   }
-  const [lead] = await db
-    .select()
-    .from(leadsTable)
-    .where(and(eq(leadsTable.id, body.data.leadId), eq(leadsTable.orgId, r.orgId)));
-  if (!lead) {
-    res.status(404).json({ error: "Lead not found" });
-    return;
+  try {
+    const [lead] = await db
+      .select()
+      .from(leadsTable)
+      .where(and(eq(leadsTable.id, body.data.leadId), eq(leadsTable.orgId, r.orgId)));
+    if (!lead) {
+      res.status(404).json({ error: "Lead not found" });
+      return;
+    }
+    const [row] = await db
+      .insert(documentsTable)
+      .values({ ...body.data, orgId: r.orgId })
+      .returning();
+    res.status(201).json(ListDocumentsResponseItem.parse(row));
+  } catch (err) {
+    req.log.error({ err }, "Failed to create document");
+    res.status(500).json({ error: "Failed to create document" });
   }
-  const [row] = await db
-    .insert(documentsTable)
-    .values({ ...body.data, orgId: r.orgId })
-    .returning();
-  res.status(201).json(row);
 });
 
 router.post("/documents/generate-proposal", requireAuth, async (req, res): Promise<void> => {
@@ -169,18 +180,23 @@ router.put("/documents/:id", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: "Invalid input" });
     return;
   }
-  const update: Record<string, unknown> = { ...body.data };
-  if (body.data.status === "sent") update.sentAt = new Date();
-  const [row] = await db
-    .update(documentsTable)
-    .set(update)
-    .where(and(eq(documentsTable.id, params.data.id), eq(documentsTable.orgId, r.orgId)))
-    .returning();
-  if (!row) {
-    res.status(404).json({ error: "Document not found" });
-    return;
+  try {
+    const update: Record<string, unknown> = { ...body.data };
+    if (body.data.status === "sent") update.sentAt = new Date();
+    const [row] = await db
+      .update(documentsTable)
+      .set(update)
+      .where(and(eq(documentsTable.id, params.data.id), eq(documentsTable.orgId, r.orgId)))
+      .returning();
+    if (!row) {
+      res.status(404).json({ error: "Document not found" });
+      return;
+    }
+    res.json(UpdateDocumentResponse.parse(row));
+  } catch (err) {
+    req.log.error({ err }, "Failed to update document");
+    res.status(500).json({ error: "Failed to update document" });
   }
-  res.json(UpdateDocumentResponse.parse(row));
 });
 
 export default router;
