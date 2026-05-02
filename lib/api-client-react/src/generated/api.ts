@@ -21,6 +21,8 @@ import type {
   ChatInput,
   ChatReply,
   Company,
+  CompanyCredentials,
+  CompanyCredentialsInput,
   CompanyInput,
   Contact,
   ContactDetail,
@@ -30,6 +32,7 @@ import type {
   Document,
   DocumentInput,
   DocumentUpdate,
+  GenerateProposalInput,
   HealthStatus,
   Interaction,
   InteractionInput,
@@ -2316,6 +2319,86 @@ export const useCreateDocument = <
   return useMutation(getCreateDocumentMutationOptions(options));
 };
 
+export const getGetDocumentUrl = (id: string) => {
+  return `/api/documents/${id}`;
+};
+
+export const getDocument = async (
+  id: string,
+  options?: RequestInit,
+): Promise<Document> => {
+  return customFetch<Document>(getGetDocumentUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetDocumentQueryKey = (id: string) => {
+  return [`/api/documents/${id}`] as const;
+};
+
+export const getGetDocumentQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDocument>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getDocument>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetDocumentQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getDocument>>> = ({
+    signal,
+  }) => getDocument(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getDocument>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetDocumentQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getDocument>>
+>;
+export type GetDocumentQueryError = ErrorType<void>;
+
+export function useGetDocument<
+  TData = Awaited<ReturnType<typeof getDocument>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getDocument>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetDocumentQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
 export const getUpdateDocumentUrl = (id: string) => {
   return `/api/documents/${id}`;
 };
@@ -2395,6 +2478,254 @@ export const useUpdateDocument = <
   TContext
 > => {
   return useMutation(getUpdateDocumentMutationOptions(options));
+};
+
+/**
+ * @summary Generate a branded HTML proposal via Claude using lead context + company branding
+ */
+export const getGenerateProposalUrl = () => {
+  return `/api/documents/generate-proposal`;
+};
+
+export const generateProposal = async (
+  generateProposalInput: GenerateProposalInput,
+  options?: RequestInit,
+): Promise<Document> => {
+  return customFetch<Document>(getGenerateProposalUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(generateProposalInput),
+  });
+};
+
+export const getGenerateProposalMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateProposal>>,
+    TError,
+    { data: BodyType<GenerateProposalInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof generateProposal>>,
+  TError,
+  { data: BodyType<GenerateProposalInput> },
+  TContext
+> => {
+  const mutationKey = ["generateProposal"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof generateProposal>>,
+    { data: BodyType<GenerateProposalInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return generateProposal(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type GenerateProposalMutationResult = NonNullable<
+  Awaited<ReturnType<typeof generateProposal>>
+>;
+export type GenerateProposalMutationBody = BodyType<GenerateProposalInput>;
+export type GenerateProposalMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Generate a branded HTML proposal via Claude using lead context + company branding
+ */
+export const useGenerateProposal = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateProposal>>,
+    TError,
+    { data: BodyType<GenerateProposalInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof generateProposal>>,
+  TError,
+  { data: BodyType<GenerateProposalInput> },
+  TContext
+> => {
+  return useMutation(getGenerateProposalMutationOptions(options));
+};
+
+/**
+ * @summary Get the org's company branding profile (returns nulls if not set)
+ */
+export const getGetCompanyCredentialsUrl = () => {
+  return `/api/company-credentials`;
+};
+
+export const getCompanyCredentials = async (
+  options?: RequestInit,
+): Promise<CompanyCredentials> => {
+  return customFetch<CompanyCredentials>(getGetCompanyCredentialsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetCompanyCredentialsQueryKey = () => {
+  return [`/api/company-credentials`] as const;
+};
+
+export const getGetCompanyCredentialsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCompanyCredentials>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getCompanyCredentials>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetCompanyCredentialsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getCompanyCredentials>>
+  > = ({ signal }) => getCompanyCredentials({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getCompanyCredentials>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetCompanyCredentialsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getCompanyCredentials>>
+>;
+export type GetCompanyCredentialsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get the org's company branding profile (returns nulls if not set)
+ */
+
+export function useGetCompanyCredentials<
+  TData = Awaited<ReturnType<typeof getCompanyCredentials>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getCompanyCredentials>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetCompanyCredentialsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create or update the org's company branding profile
+ */
+export const getUpsertCompanyCredentialsUrl = () => {
+  return `/api/company-credentials`;
+};
+
+export const upsertCompanyCredentials = async (
+  companyCredentialsInput: CompanyCredentialsInput,
+  options?: RequestInit,
+): Promise<CompanyCredentials> => {
+  return customFetch<CompanyCredentials>(getUpsertCompanyCredentialsUrl(), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(companyCredentialsInput),
+  });
+};
+
+export const getUpsertCompanyCredentialsMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof upsertCompanyCredentials>>,
+    TError,
+    { data: BodyType<CompanyCredentialsInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof upsertCompanyCredentials>>,
+  TError,
+  { data: BodyType<CompanyCredentialsInput> },
+  TContext
+> => {
+  const mutationKey = ["upsertCompanyCredentials"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof upsertCompanyCredentials>>,
+    { data: BodyType<CompanyCredentialsInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return upsertCompanyCredentials(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpsertCompanyCredentialsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof upsertCompanyCredentials>>
+>;
+export type UpsertCompanyCredentialsMutationBody =
+  BodyType<CompanyCredentialsInput>;
+export type UpsertCompanyCredentialsMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create or update the org's company branding profile
+ */
+export const useUpsertCompanyCredentials = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof upsertCompanyCredentials>>,
+    TError,
+    { data: BodyType<CompanyCredentialsInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof upsertCompanyCredentials>>,
+  TError,
+  { data: BodyType<CompanyCredentialsInput> },
+  TContext
+> => {
+  return useMutation(getUpsertCompanyCredentialsMutationOptions(options));
 };
 
 /**

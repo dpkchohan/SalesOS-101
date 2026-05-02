@@ -18,4 +18,6 @@ export interface ChatReply {
   taskId?: string | null;
   /** @nullable */
   interactionId?: string | null;
+  /** @nullable */
+  documentId?: string | null;
 }

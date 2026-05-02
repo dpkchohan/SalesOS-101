@@ -6,10 +6,14 @@ import {
   leadsTable,
   tasksTable,
   interactionsTable,
+  documentsTable,
+  companiesTable,
+  companyCredentialsTable,
 } from "@workspace/db";
 import { SendChatBody, SendChatResponse } from "@workspace/api-zod";
 import { requireAuth, type AuthenticatedRequest } from "../lib/auth";
 import { claudeJson } from "../lib/claude";
+import { generateProposalHtml } from "../lib/proposalGen";
 
 const router: IRouter = Router();
 
@@ -19,6 +23,7 @@ interface Intent {
     | "log_interaction"
     | "create_contact"
     | "update_lead_stage"
+    | "send_proposal"
     | "search"
     | "general";
   reply: string;
@@ -38,6 +43,8 @@ interface Intent {
   contact?: { name: string; email?: string | null; phone?: string | null; title?: string | null };
   // update_lead_stage
   stage?: "new" | "interested" | "qualified" | "negotiating" | "won" | "lost";
+  // send_proposal
+  proposalContext?: string | null;
 }
 
 const SYSTEM = `You are SalesOS, an in-app assistant for a sales rep. Parse the user's message into a structured intent. Always reply with strict JSON, no prose outside JSON.
@@ -47,6 +54,7 @@ Intents:
 - "log_interaction": user wants to log a call/email/meeting/note. Example: "logged a call with John, he wants pricing by Friday"
 - "create_contact": user wants to add a new contact. Example: "add new contact Sarah Lee at Globex, sarah@globex.com"
 - "update_lead_stage": user wants to move a lead to a different stage. Stages: new, interested, qualified, negotiating, won, lost
+- "send_proposal": user wants to generate a proposal. Example: "send John Smith a proposal about pricing and timeline" → contactName="John Smith", proposalContext="pricing and timeline"
 - "search": user is looking for info about a contact or lead
 - "general": fallback for greetings and questions
 
@@ -58,7 +66,8 @@ Respond JSON shape:
   "contactName": "<contact to attach the task/interaction/stage update to, if mentioned>",
   "interaction": { "type": "call|email|meeting|note", "gist": "...", "gains": [], "misses": [], "nextStep": "...", "sentiment": "positive|neutral|negative" },
   "contact": { "name": "...", "email": "...", "phone": "...", "title": "..." },
-  "stage": "new|interested|qualified|negotiating|won|lost"
+  "stage": "new|interested|qualified|negotiating|won|lost",
+  "proposalContext": "<short summary of what the proposal should cover, if intent is send_proposal>"
 }
 Only include the fields relevant to the chosen intent.`;
 
@@ -115,6 +124,7 @@ router.post("/chat", requireAuth, async (req, res): Promise<void> => {
     leadId: null as string | null,
     taskId: null as string | null,
     interactionId: null as string | null,
+    documentId: null as string | null,
   };
 
   try {
@@ -188,6 +198,64 @@ router.post("/chat", requireAuth, async (req, res): Promise<void> => {
           .returning();
         reply.interactionId = i.id;
         reply.leadId = leadId;
+      }
+    } else if (intent.intent === "send_proposal") {
+      if (!intent.contactName) {
+        reply.message = "Tell me which contact this proposal is for (e.g. \"send Sarah a proposal about pricing\").";
+      } else {
+        const c = await findContactByName(r.orgId, intent.contactName);
+        if (!c) {
+          reply.message = `Couldn't find contact "${intent.contactName}". Add them first, then ask again.`;
+        } else {
+          reply.contactId = c.id;
+          const l = await findLeadForContact(r.orgId, c.id);
+          if (!l) {
+            reply.message = `Found ${c.name}, but no open lead. Create a lead first, then I can draft the proposal.`;
+          } else {
+            reply.leadId = l.id;
+            const [company] = c.companyId
+              ? await db
+                  .select()
+                  .from(companiesTable)
+                  .where(and(eq(companiesTable.id, c.companyId), eq(companiesTable.orgId, r.orgId)))
+                  .limit(1)
+              : [null];
+            const interactions = await db
+              .select()
+              .from(interactionsTable)
+              .where(and(eq(interactionsTable.leadId, l.id), eq(interactionsTable.orgId, r.orgId)))
+              .orderBy(desc(interactionsTable.date), desc(interactionsTable.createdAt))
+              .limit(15);
+            const [creds] = await db
+              .select()
+              .from(companyCredentialsTable)
+              .where(eq(companyCredentialsTable.orgId, r.orgId))
+              .limit(1);
+            const html = await generateProposalHtml({
+              branding: creds ?? null,
+              contact: c,
+              company: company ?? null,
+              lead: l,
+              interactions,
+              extraContext: intent.proposalContext ?? null,
+            });
+            const title = `Proposal — ${c.name}${company ? ` (${company.name})` : ""}`;
+            const [doc] = await db
+              .insert(documentsTable)
+              .values({
+                orgId: r.orgId,
+                leadId: l.id,
+                type: "proposal",
+                title,
+                content: html,
+                format: "html",
+                status: "draft",
+              })
+              .returning();
+            reply.documentId = doc.id;
+            reply.message = `Drafted "${title}". Open Documents to review or send.`;
+          }
+        }
       }
     } else if (intent.intent === "update_lead_stage" && intent.stage && intent.contactName) {
       const c = await findContactByName(r.orgId, intent.contactName);

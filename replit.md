@@ -19,8 +19,19 @@ A mobile-first sales CRM built on the pnpm workspace monorepo. SalesOS gives sal
 
 - `lib/claude.ts` wraps the Anthropic SDK using `claude-haiku-4-5` for lead analysis and the chat assistant.
 - `lib/aiAnalyze.ts` produces structured red-flag signals stored in `aiSignalsTable`.
+- `lib/proposalGen.ts` calls Claude with the contact, lead, recent interactions, and the org's branding profile to author a structured proposal, then renders it as standalone branded HTML (inline styles + print media query) saved as a `documents` row.
 - Voice: `routes/voice.ts` uses OpenAI Whisper (`gpt-4o-mini-transcribe` via Replit AI Integrations proxy) for push-to-talk speech-to-text and Sarvam `text-to-speech` for spoken replies. The Chat header has a TTS mute toggle persisted in `localStorage` (`salesos.ttsEnabled`).
 - Tasks page has three views as tabs: List (`/tasks`), Kanban (`/tasks-kanban` — Today/Tomorrow/Pending/Finished columns), and Calendar (`/tasks-calendar` — month grid with click-day modal). All three live under a shared `TasksTabs` strip exported from `pages/Tasks.tsx`.
+
+## Branding & Proposals
+
+- `companyCredentialsTable` (one row per org, unique on `orgId`) stores company name, base64 logo data URL, three brand colors, footer text, and contact details (website/email/phone/address/tax id).
+- `GET/PUT /api/company-credentials` — read and upsert the org's branding profile.
+- `POST /api/documents/generate-proposal { contactId, leadId, proposalContext }` — fetches contact + lead + recent interactions + branding, calls Claude, saves a `draft` document, and returns it.
+- `GET /api/documents/:id` — fetches one document, used by the detail page.
+- Chat: a `send_proposal` intent in `routes/chat.ts` resolves a contact by name, finds an open lead, generates the HTML proposal, and returns the new `documentId` on the chat reply so the UI can deep-link to the preview.
+- Settings page (`pages/Settings.tsx`) has Account and Company tabs. The Company tab is the branding form (logo file → base64 ≤ ~2 MB, three color pickers with hex inputs, contact + footer fields, sticky save).
+- Document detail page (`pages/DocumentDetail.tsx`, route `/documents/:id`) previews the proposal HTML in a sandboxed iframe via `srcdoc`, with Print/Save-PDF (`iframe.contentWindow.print()`), Mark sent, and Mark approved actions. The iframe uses `sandbox="allow-same-origin allow-modals"` so generated HTML cannot run scripts.
 
 ## Import / Export
 

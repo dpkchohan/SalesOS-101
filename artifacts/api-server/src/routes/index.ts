@@ -12,6 +12,7 @@ import dashboardRouter from "./dashboard";
 import chatRouter from "./chat";
 import voiceRouter from "./voice";
 import importExportRouter from "./importExport";
+import companyCredentialsRouter from "./companyCredentials";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(dashboardRouter);
 router.use(chatRouter);
 router.use(voiceRouter);
 router.use(importExportRouter);
+router.use(companyCredentialsRouter);
 
 export default router;

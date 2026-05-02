@@ -20,6 +20,7 @@ tags:
   - name: dashboard
   - name: chat
   - name: voice
+  - name: branding
 
 paths:
   /healthz:
@@ -403,6 +404,17 @@ paths:
   /documents/{id}:
     parameters:
       - { in: path, name: id, required: true, schema: { type: string } }
+    get:
+      operationId: getDocument
+      tags: [documents]
+      responses:
+        "200":
+          description: Document
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Document" }
+        "404":
+          description: Not found
     put:
       operationId: updateDocument
       tags: [documents]
@@ -417,6 +429,51 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Document" }
+
+  /documents/generate-proposal:
+    post:
+      operationId: generateProposal
+      tags: [documents]
+      summary: Generate a branded HTML proposal via Claude using lead context + company branding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GenerateProposalInput" }
+      responses:
+        "201":
+          description: Generated proposal (saved as draft document)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Document" }
+
+  # ---------- Company Credentials / Branding ----------
+  /company-credentials:
+    get:
+      operationId: getCompanyCredentials
+      tags: [branding]
+      summary: Get the org's company branding profile (returns nulls if not set)
+      responses:
+        "200":
+          description: Branding profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CompanyCredentials" }
+    put:
+      operationId: upsertCompanyCredentials
+      tags: [branding]
+      summary: Create or update the org's company branding profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CompanyCredentialsInput" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CompanyCredentials" }
 
   # ---------- Chat (Claude intent engine) ----------
   /chat:
@@ -891,6 +948,50 @@ components:
         content: { type: ["string", "null"] }
         status: { $ref: "#/components/schemas/DocumentStatus" }
 
+    GenerateProposalInput:
+      type: object
+      required: [leadId]
+      properties:
+        leadId: { type: string }
+        contactId: { type: ["string", "null"] }
+        context: { type: ["string", "null"], description: "Optional extra context (e.g. 'discussed pricing and timeline')" }
+
+    CompanyCredentials:
+      type: object
+      required: [orgId]
+      properties:
+        id: { type: ["string", "null"] }
+        orgId: { type: string }
+        companyName: { type: ["string", "null"] }
+        companyLogoUrl: { type: ["string", "null"], description: "Data-URL or hosted image URL for the company logo" }
+        primaryColor: { type: ["string", "null"] }
+        secondaryColor: { type: ["string", "null"] }
+        accentColor: { type: ["string", "null"] }
+        footerText: { type: ["string", "null"] }
+        website: { type: ["string", "null"] }
+        phone: { type: ["string", "null"] }
+        email: { type: ["string", "null"] }
+        address: { type: ["string", "null"] }
+        taxId: { type: ["string", "null"] }
+        updatedAt:
+          type: ["string", "null"]
+          format: date-time
+
+    CompanyCredentialsInput:
+      type: object
+      properties:
+        companyName: { type: ["string", "null"] }
+        companyLogoUrl: { type: ["string", "null"] }
+        primaryColor: { type: ["string", "null"] }
+        secondaryColor: { type: ["string", "null"] }
+        accentColor: { type: ["string", "null"] }
+        footerText: { type: ["string", "null"] }
+        website: { type: ["string", "null"] }
+        phone: { type: ["string", "null"] }
+        email: { type: ["string", "null"] }
+        address: { type: ["string", "null"] }
+        taxId: { type: ["string", "null"] }
+
     DashboardSummary:
       type: object
       required: [pipeline, todaysTasks, activeSignals, totalPipelineValue]
@@ -932,6 +1033,7 @@ components:
         leadId: { type: ["string", "null"] }
         taskId: { type: ["string", "null"] }
         interactionId: { type: ["string", "null"] }
+        documentId: { type: ["string", "null"] }
 
     TranscribeInput:
       type: object

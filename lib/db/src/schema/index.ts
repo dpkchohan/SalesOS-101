@@ -7,3 +7,4 @@ export * from "./interactions";
 export * from "./tasks";
 export * from "./aiSignals";
 export * from "./documents";
+export * from "./companyCredentials";

@@ -401,6 +401,75 @@ export interface DocumentUpdate {
   status?: DocumentStatus;
 }
 
+export interface GenerateProposalInput {
+  leadId: string;
+  /** @nullable */
+  contactId?: string | null;
+  /**
+   * Optional extra context (e.g. 'discussed pricing and timeline')
+   * @nullable
+   */
+  context?: string | null;
+}
+
+export interface CompanyCredentials {
+  /** @nullable */
+  id?: string | null;
+  orgId: string;
+  /** @nullable */
+  companyName?: string | null;
+  /**
+   * Data-URL or hosted image URL for the company logo
+   * @nullable
+   */
+  companyLogoUrl?: string | null;
+  /** @nullable */
+  primaryColor?: string | null;
+  /** @nullable */
+  secondaryColor?: string | null;
+  /** @nullable */
+  accentColor?: string | null;
+  /** @nullable */
+  footerText?: string | null;
+  /** @nullable */
+  website?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  address?: string | null;
+  /** @nullable */
+  taxId?: string | null;
+  /** @nullable */
+  updatedAt?: string | null;
+}
+
+export interface CompanyCredentialsInput {
+  /** @nullable */
+  companyName?: string | null;
+  /** @nullable */
+  companyLogoUrl?: string | null;
+  /** @nullable */
+  primaryColor?: string | null;
+  /** @nullable */
+  secondaryColor?: string | null;
+  /** @nullable */
+  accentColor?: string | null;
+  /** @nullable */
+  footerText?: string | null;
+  /** @nullable */
+  website?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  address?: string | null;
+  /** @nullable */
+  taxId?: string | null;
+}
+
 export type DashboardSummaryPipelineItem = {
   stage: LeadStage;
   count: number;
@@ -431,6 +500,8 @@ export interface ChatReply {
   taskId?: string | null;
   /** @nullable */
   interactionId?: string | null;
+  /** @nullable */
+  documentId?: string | null;
 }
 
 export interface TranscribeInput {

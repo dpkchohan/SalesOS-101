@@ -724,6 +724,22 @@ export const CreateDocumentBody = zod.object({
   format: zod.string().default(createDocumentBodyFormatDefault),
 });
 
+export const GetDocumentParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetDocumentResponse = zod.object({
+  id: zod.string(),
+  leadId: zod.string(),
+  type: zod.enum(["proposal", "contract", "case_study"]),
+  title: zod.string(),
+  content: zod.string().nullish(),
+  format: zod.string(),
+  status: zod.enum(["draft", "sent", "approved"]),
+  sentAt: zod.coerce.date().nullish(),
+  createdAt: zod.coerce.date(),
+});
+
 export const UpdateDocumentParams = zod.object({
   id: zod.coerce.string(),
 });
@@ -747,6 +763,78 @@ export const UpdateDocumentResponse = zod.object({
 });
 
 /**
+ * @summary Generate a branded HTML proposal via Claude using lead context + company branding
+ */
+export const GenerateProposalBody = zod.object({
+  leadId: zod.string(),
+  contactId: zod.string().nullish(),
+  context: zod
+    .string()
+    .nullish()
+    .describe("Optional extra context (e.g. 'discussed pricing and timeline')"),
+});
+
+/**
+ * @summary Get the org's company branding profile (returns nulls if not set)
+ */
+export const GetCompanyCredentialsResponse = zod.object({
+  id: zod.string().nullish(),
+  orgId: zod.string(),
+  companyName: zod.string().nullish(),
+  companyLogoUrl: zod
+    .string()
+    .nullish()
+    .describe("Data-URL or hosted image URL for the company logo"),
+  primaryColor: zod.string().nullish(),
+  secondaryColor: zod.string().nullish(),
+  accentColor: zod.string().nullish(),
+  footerText: zod.string().nullish(),
+  website: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  email: zod.string().nullish(),
+  address: zod.string().nullish(),
+  taxId: zod.string().nullish(),
+  updatedAt: zod.coerce.date().nullish(),
+});
+
+/**
+ * @summary Create or update the org's company branding profile
+ */
+export const UpsertCompanyCredentialsBody = zod.object({
+  companyName: zod.string().nullish(),
+  companyLogoUrl: zod.string().nullish(),
+  primaryColor: zod.string().nullish(),
+  secondaryColor: zod.string().nullish(),
+  accentColor: zod.string().nullish(),
+  footerText: zod.string().nullish(),
+  website: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  email: zod.string().nullish(),
+  address: zod.string().nullish(),
+  taxId: zod.string().nullish(),
+});
+
+export const UpsertCompanyCredentialsResponse = zod.object({
+  id: zod.string().nullish(),
+  orgId: zod.string(),
+  companyName: zod.string().nullish(),
+  companyLogoUrl: zod
+    .string()
+    .nullish()
+    .describe("Data-URL or hosted image URL for the company logo"),
+  primaryColor: zod.string().nullish(),
+  secondaryColor: zod.string().nullish(),
+  accentColor: zod.string().nullish(),
+  footerText: zod.string().nullish(),
+  website: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  email: zod.string().nullish(),
+  address: zod.string().nullish(),
+  taxId: zod.string().nullish(),
+  updatedAt: zod.coerce.date().nullish(),
+});
+
+/**
  * @summary Send a natural-language command to Claude. Parses intent and executes.
  */
 export const SendChatBody = zod.object({
@@ -761,6 +849,7 @@ export const SendChatResponse = zod.object({
   leadId: zod.string().nullish(),
   taskId: zod.string().nullish(),
   interactionId: zod.string().nullish(),
+  documentId: zod.string().nullish(),
 });
 
 /**

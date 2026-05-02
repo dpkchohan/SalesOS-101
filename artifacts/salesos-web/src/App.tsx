@@ -29,6 +29,7 @@ import TasksKanban from "./pages/TasksKanban";
 import TasksCalendar from "./pages/TasksCalendar";
 import Chat from "./pages/Chat";
 import Documents from "./pages/Documents";
+import DocumentDetail from "./pages/DocumentDetail";
 import Import from "./pages/Import";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/not-found";
@@ -176,6 +177,7 @@ function SignedInApp() {
         <Route path="/tasks-calendar" component={TasksCalendar} />
         <Route path="/chat" component={Chat} />
         <Route path="/documents" component={Documents} />
+        <Route path="/documents/:id" component={DocumentDetail} />
         <Route path="/import" component={Import} />
         <Route path="/settings" component={Settings} />
         <Route component={NotFound} />
@@ -248,6 +250,7 @@ function ClerkProviderWithRoutes() {
           <Route path="/tasks-calendar" component={ProtectedRoutes} />
           <Route path="/chat" component={ProtectedRoutes} />
           <Route path="/documents" component={ProtectedRoutes} />
+          <Route path="/documents/:id" component={ProtectedRoutes} />
           <Route path="/import" component={ProtectedRoutes} />
           <Route path="/settings" component={ProtectedRoutes} />
           <Route component={NotFound} />
