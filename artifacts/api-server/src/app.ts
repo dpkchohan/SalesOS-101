@@ -83,7 +83,12 @@ if (process.env.NODE_ENV === "production") {
   const webRoot = path.resolve(process.cwd(), "artifacts/salesos-web/dist/public");
   if (existsSync(webRoot)) {
     app.use(express.static(webRoot));
-    app.get("*", (_req, res) => {
+    // SPA fallback. Express 5 / path-to-regexp v8 rejects the bare "*" path
+    // string, so use a middleware (no path) that only handles GET requests
+    // for non-API routes and returns the SPA shell.
+    app.use((req, res, next) => {
+      if (req.method !== "GET") return next();
+      if (req.path.startsWith("/api/")) return next();
       res.sendFile(path.join(webRoot, "index.html"));
     });
   }

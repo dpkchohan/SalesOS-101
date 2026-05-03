@@ -1,0 +1,121 @@
+2026-05-03 21:59:29.78
+f9e33a9b
+User
+throw new PathError(`Missing parameter name at index ${index}`, str);
+2026-05-03 21:59:29.78
+f9e33a9b
+User
+at pathToRegexp (/home/runner/workspace/node_modules/.pnpm/path-to-regexp@8.3.0/node_modules/path-to-regexp/src/index.ts:480:54)
+2026-05-03 21:59:29.78
+f9e33a9b
+User
+at Object.match2 (/home/runner/workspace/node_modules/.pnpm/path-to-regexp@8.3.0/node_modules/path-to-regexp/src/index.ts:438:28)
+2026-05-03 21:59:29.78
+f9e33a9b
+User
+/home/runner/workspace/node_modules/.pnpm/path-to-regexp@8.3.0/node_modules/path-to-regexp/src/index.ts:225
+2026-05-03 21:59:29.78
+f9e33a9b
+User
+^
+2026-05-03 21:59:38.70
+cf02555e
+User
+{"level":30,"time":1777825778708,"pid":19,"hostname":"localhost","req":{"id":191,"method":"POST","url":"/api/__clerk/v1/client/sessions/sess_3DAYMdtyAlYYPGQrinsY0d1Mo9P/tokens"},"res":{"statusCode":200},"responseTime":115,"msg":"request completed"}
+2026-05-03 22:00:27.35
+f9e33a9b
+System
+seccomp port detection incomplete, trying /proc/net/tcp fallback seccompDetected=0 expected=[8080]
+2026-05-03 22:00:27.36
+f9e33a9b
+System
+sending SIGTERM to artifact process artifact=artifacts/api-server
+2026-05-03 22:00:27.36
+f9e33a9b
+System
+a port configuration was specified but the required port was never opened
+2026-05-03 22:00:27.36
+f9e33a9b
+System
+all artifact processes stopped
+2026-05-03 22:00:27.36
+f9e33a9b
+System
+not all artifact ports opened within timeout expected=[8080] detected=0
+2026-05-03 22:04:22.74
+cf02555e
+User
+{"level":30,"time":1777826062746,"pid":19,"hostname":"localhost","req":{"id":192,"method":"POST","url":"/api/__clerk/v1/client/sessions/sess_3DAYMdtyAlYYPGQrinsY0d1Mo9P/tokens"},"res":{"statusCode":200},"responseTime":162,"msg":"request completed"}
+2026-05-03 22:05:06.35
+cf02555e
+User
+{"level":30,"time":1777826106358,"pid":19,"hostname":"localhost","req":{"id":193,"method":"POST","url":"/api/__clerk/v1/client/sessions/sess_3DAYMdtyAlYYPGQrinsY0d1Mo9P/touch"},"res":{"statusCode":200},"responseTime":162,"msg":"request completed"}
+2026-05-03 22:05:13.04
+cf02555e
+User
+{"level":30,"time":1777826113041,"pid":19,"hostname":"localhost","req":{"id":194,"method":"GET","url":"/api/dashboard/summary"},"res":{"statusCode":200},"responseTime":1017,"msg":"request completed"}
+2026-05-03 22:09:06.78
+cf02555e
+User
+{"level":30,"time":1777826346783,"pid":19,"hostname":"localhost","req":{"id":195,"method":"POST","url":"/api/__clerk/v1/client/sessions/sess_3DAYMdtyAlYYPGQrinsY0d1Mo9P/tokens"},"res":{"statusCode":200},"responseTime":171,"msg":"request completed"}
+2026-05-03 22:12:13.49
+cf02555e
+User
+{"level":30,"time":1777826533498,"pid":19,"hostname":"localhost","req":{"id":196,"method":"POST","url":"/api/__clerk/v1/client/sessions/sess_3DAYMdtyAlYYPGQrinsY0d1Mo9P/touch"},"res":{"statusCode":200},"responseTime":163,"msg":"request completed"}
+2026-05-03 22:12:17.97
+cf02555e
+User
+{"level":30,"time":1777826537975,"pid":19,"hostname":"localhost","req":{"id":197,"method":"GET","url":"/api/leads/pipeline"},"res":{"statusCode":304},"responseTime":1080,"msg":"request completed"}
+2026-05-03 22:12:20.11
+cf02555e
+User
+{"level":30,"time":1777826540118,"pid":19,"hostname":"localhost","req":{"id":198,"method":"GET","url":"/api/leads/400e5a03-28a7-4fd9-8fa3-525ff586e7f7"},"res":{"statusCode":200},"responseTime":136,"msg":"request completed"}
+2026-05-03 22:13:03.98
+cf02555e
+User
+{"level":30,"time":1777826583987,"pid":19,"hostname":"localhost","req":{"id":199,"method":"POST","url":"/api/leads/400e5a03-28a7-4fd9-8fa3-525ff586e7f7/analyze"},"res":{"statusCode":200},"responseTime":3112,"msg":"request completed"}
+2026-05-03 22:13:04.43
+cf02555e
+User
+{"level":30,"time":1777826584433,"pid":19,"hostname":"localhost","req":{"id":200,"method":"GET","url":"/api/leads/400e5a03-28a7-4fd9-8fa3-525ff586e7f7"},"res":{"statusCode":200},"responseTime":121,"msg":"request completed"}
+2026-05-03 22:13:50.26
+cf02555e
+User
+{"level":30,"time":1777826630269,"pid":19,"hostname":"localhost","req":{"id":201,"method":"POST","url":"/api/__clerk/v1/client/sessions/sess_3DAYMdtyAlYYPGQrinsY0d1Mo9P/tokens"},"res":{"statusCode":200},"responseTime":148,"msg":"request completed"}
+2026-05-03 22:14:00.29
+cf02555e
+User
+{"level":30,"time":1777826640291,"pid":19,"hostname":"localhost","req":{"id":202,"method":"GET","url":"/api/dashboard/summary"},"res":{"statusCode":200},"responseTime":265,"msg":"request completed"}
+2026-05-03 22:14:10.96
+cf02555e
+User
+{"level":30,"time":1777826650960,"pid":19,"hostname":"localhost","req":{"id":203,"method":"GET","url":"/api/contacts"},"res":{"statusCode":200},"responseTime":314,"msg":"request completed"}
+2026-05-03 22:14:47.06
+cf02555e
+User
+{"level":30,"time":1777826687064,"pid":19,"hostname":"localhost","req":{"id":204,"method":"GET","url":"/api/dashboard/summary"},"res":{"statusCode":304},"responseTime":327,"msg":"request completed"}
+2026-05-03 22:16:07.27
+cf02555e
+User
+{"level":30,"time":1777826767276,"pid":19,"hostname":"localhost","req":{"id":205,"method":"POST","url":"/api/chat"},"res":{"statusCode":200},"responseTime":5465,"msg":"request completed"}
+2026-05-03 22:16:10.48
+cf02555e
+User
+{"level":30,"time":1777826770480,"pid":19,"hostname":"localhost","req":{"id":206,"method":"POST","url":"/api/voice/speak"},"res":{"statusCode":200},"responseTime":2887,"msg":"request completed"}
+2026-05-03 22:18:34.70
+cf02555e
+User
+{"level":30,"time":1777826914705,"pid":19,"hostname":"localhost","req":{"id":207,"method":"POST","url":"/api/__clerk/v1/client/sessions/sess_3DAYMdtyAlYYPGQrinsY0d1Mo9P/tokens"},"res":{"statusCode":200},"responseTime":126,"msg":"request completed"}
+2026-05-03 22:19:10.19
+cf02555e
+User
+{"level":30,"time":1777826950198,"pid":19,"hostname":"localhost","req":{"id":208,"method":"POST","url":"/api/__clerk/v1/client/sessions/sess_3DAYMdtyAlYYPGQrinsY0d1Mo9P/touch"},"res":{"statusCode":200},"responseTime":193,"msg":"request completed"}
+
+2026-05-03 22:23:18.72
+cf02555e
+User
+{"level":30,"time":1777827198723,"pid":19,"hostname":"localhost","req":{"id":209,"method":"POST","url":"/api/__clerk/v1/client/sessions/sess_3DAYMdtyAlYYPGQrinsY0d1Mo9P/tokens"},"res":{"statusCode":200},"responseTime":145,"msg":"request completed"}
+2026-05-03 22:26:40.84
+cf02555e
+User
+{"level":30,"time":1777827400844,"pid":19,"hostname":"localhost","req":{"id":210,"method":"POST","url":"/api/__clerk/v1/client/sessions/sess_3DAYMdtyAlYYPGQrinsY0d1Mo9P/touch"},"res":{"statusCode":200},"responseTime":194,"msg":"request completed"}
