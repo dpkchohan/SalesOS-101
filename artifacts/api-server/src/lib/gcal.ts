@@ -12,9 +12,28 @@ export interface CalendarEventInput {
   timeZone?: string;
 }
 
+function defaultTimeZone(): string {
+  return (
+    process.env.SALESOS_DEFAULT_TZ ||
+    process.env.TZ ||
+    Intl.DateTimeFormat().resolvedOptions().timeZone ||
+    "UTC"
+  );
+}
+
+function nextDay(yyyymmdd: string): string {
+  const d = new Date(`${yyyymmdd}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+function isValidHHMM(s: string): boolean {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(s);
+}
+
 function buildEventBody(input: CalendarEventInput): Record<string, unknown> {
-  const tz = input.timeZone ?? "Asia/Kolkata";
-  if (input.time) {
+  const tz = input.timeZone ?? defaultTimeZone();
+  if (input.time && isValidHHMM(input.time)) {
     const startIso = `${input.date}T${input.time}:00`;
     const [hh, mm] = input.time.split(":").map((n) => parseInt(n, 10));
     const dur = input.durationMinutes ?? 30;
@@ -29,11 +48,12 @@ function buildEventBody(input: CalendarEventInput): Record<string, unknown> {
       end: { dateTime: endIso, timeZone: tz },
     };
   }
+  // All-day event: Google Calendar requires end.date to be EXCLUSIVE (the day after start).
   return {
     summary: input.title,
     description: input.description ?? "",
     start: { date: input.date },
-    end: { date: input.date },
+    end: { date: nextDay(input.date) },
   };
 }
 
