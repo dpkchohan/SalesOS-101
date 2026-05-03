@@ -56,6 +56,7 @@ interface Msg {
   attachment?: ChatAttachment;
   appliedNote?: string;
   duplicate?: DuplicateContactInfo;
+  documentId?: string | null;
 }
 
 const SUGGESTIONS = [
@@ -369,6 +370,10 @@ export default function Chat() {
                 matchedField: resp.duplicateMatchedField ?? "match",
               }
             : undefined;
+          const documentId =
+            resp && typeof resp === "object" && "documentId" in resp
+              ? ((resp as { documentId?: string | null }).documentId ?? null)
+              : null;
           setMessages((m) => [
             ...m,
             {
@@ -377,6 +382,7 @@ export default function Chat() {
               text: resp.message,
               intent: resp.intent,
               duplicate: dup,
+              documentId,
             },
           ]);
           // Speak the assistant's reply via Sarvam TTS (silent fallback on failure).
@@ -629,6 +635,24 @@ export default function Chat() {
                           data-testid="chat-duplicate-open"
                         >
                           Open existing contact →
+                        </Link>
+                      </div>
+                    </div>
+                  )}
+                  {m.role === "assistant" && m.documentId && (
+                    <div
+                      className="mt-2 flex items-start gap-2 p-2 rounded-lg bg-primary/10 border border-primary/30 text-[12px]"
+                      data-testid="chat-proposal-card"
+                    >
+                      <Sparkles size={13} className="text-primary mt-0.5 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-primary">Proposal drafted</div>
+                        <Link
+                          href={`/documents/${m.documentId}`}
+                          className="inline-block mt-1 text-primary hover:underline"
+                          data-testid="chat-proposal-open"
+                        >
+                          Open document →
                         </Link>
                       </div>
                     </div>

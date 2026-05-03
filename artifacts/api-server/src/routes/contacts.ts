@@ -195,23 +195,25 @@ router.post("/contacts", requireAuth, async (req, res): Promise<void> => {
     const emailNorm = normalizeEmail(rest.email);
     const phoneNorm = normalizePhone(rest.phone);
 
-    if (!force) {
-      const dup = await findDuplicate({
-        orgId: r.orgId,
-        email: rest.email,
-        phone: rest.phone,
+    const existingDup = await findDuplicate({
+      orgId: r.orgId,
+      email: rest.email,
+      phone: rest.phone,
+    });
+    if (existingDup && !force) {
+      res.status(200).json({
+        duplicateDetected: true,
+        matchedField: existingDup.matchedField,
+        existing: contactDto(existingDup.contact),
       });
-      if (dup) {
-        res.status(200).json({
-          duplicateDetected: true,
-          matchedField: dup.matchedField,
-          existing: contactDto(dup.contact),
-        });
-        return;
-      }
+      return;
     }
 
     const customerNo = await assignCustomerNo(r.orgId);
+    // When forced over an existing duplicate, mark the new row as a duplicate of
+    // the existing one so it shows up in the Duplicates tab and bypasses the
+    // partial unique index (which excludes is_duplicate = true).
+    const isForcedDuplicate = !!(existingDup && force);
 
     try {
       const [row] = await db
@@ -225,6 +227,10 @@ router.post("/contacts", requireAuth, async (req, res): Promise<void> => {
           tags: tags ?? [],
           orgId: r.orgId,
           customerNo,
+          isDuplicate: isForcedDuplicate,
+          duplicateOf: isForcedDuplicate ? existingDup.contact.id : null,
+          mergedAt: isForcedDuplicate ? new Date() : null,
+          mergedReason: isForcedDuplicate ? "user-forced" : null,
         })
         .returning();
       res.status(201).json(UpdateContactResponse.parse(contactDto(row)));
@@ -238,6 +244,30 @@ router.post("/contacts", requireAuth, async (req, res): Promise<void> => {
           phone: rest.phone,
         });
         if (dup) {
+          if (force) {
+            // Race: another writer inserted the primary between our findDuplicate
+            // and insert. Retry the insert as a forced duplicate so it bypasses
+            // the partial unique index (which excludes is_duplicate=true rows).
+            const [row] = await db
+              .insert(contactsTable)
+              .values({
+                ...rest,
+                email: rest.email ?? null,
+                emailNormalized: emailNorm,
+                phone: rest.phone ?? null,
+                phoneNormalized: phoneNorm,
+                tags: tags ?? [],
+                orgId: r.orgId,
+                customerNo,
+                isDuplicate: true,
+                duplicateOf: dup.contact.id,
+                mergedAt: new Date(),
+                mergedReason: "user-forced",
+              })
+              .returning();
+            res.status(201).json(UpdateContactResponse.parse(contactDto(row)));
+            return;
+          }
           res.status(200).json({
             duplicateDetected: true,
             matchedField: dup.matchedField,

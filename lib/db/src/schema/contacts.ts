@@ -53,10 +53,10 @@ export const contactsTable = pgTable(
     // when an email is provided. NULL emails are allowed to repeat.
     uniqueIndex("contacts_org_email_unique")
       .on(t.orgId, sql`lower(${t.email})`)
-      .where(sql`${t.email} is not null`),
+      .where(sql`${t.email} is not null and ${t.isDuplicate} = false`),
     uniqueIndex("contacts_org_phone_unique")
       .on(t.orgId, t.phoneNormalized)
-      .where(sql`${t.phoneNormalized} is not null`),
+      .where(sql`${t.phoneNormalized} is not null and ${t.isDuplicate} = false`),
     uniqueIndex("contacts_org_customer_no_unique")
       .on(t.orgId, t.customerNo)
       .where(sql`${t.customerNo} is not null`),
