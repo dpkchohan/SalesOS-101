@@ -156,6 +156,13 @@ function ClerkQueryClientCacheInvalidator() {
         prevUserIdRef.current !== userId
       ) {
         qc.clear();
+        if ("serviceWorker" in navigator) {
+          navigator.serviceWorker.ready
+            .then((reg) => {
+              reg.active?.postMessage({ type: "CLEAR_API_CACHE" });
+            })
+            .catch(() => {});
+        }
       }
       prevUserIdRef.current = userId;
     });

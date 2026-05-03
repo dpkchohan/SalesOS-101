@@ -10,7 +10,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Mic, Volume2, VolumeX, Loader2, Sparkles } from "lucide-react";
+import { Send, Mic, Volume2, VolumeX, Loader2, Sparkles, Square } from "lucide-react";
 import { PageHeader } from "@/components/AppLayout";
 import { cn } from "@/lib/utils";
 
@@ -39,6 +39,7 @@ export default function Chat() {
   ]);
   const [input, setInput] = useState("");
   const [recording, setRecording] = useState(false);
+  const [ttsPlaying, setTtsPlaying] = useState(false);
   const [ttsEnabled, setTtsEnabled] = useState<boolean>(() => {
     if (typeof window === "undefined") return true;
     return localStorage.getItem("salesos.ttsEnabled") !== "false";
@@ -47,6 +48,7 @@ export default function Chat() {
     localStorage.setItem("salesos.ttsEnabled", ttsEnabled ? "true" : "false");
     if (!ttsEnabled) {
       audioRef.current?.pause();
+      setTtsPlaying(false);
     }
   }, [ttsEnabled]);
   const ttsEnabledRef = useRef(ttsEnabled);
@@ -93,8 +95,12 @@ export default function Chat() {
             lastObjectUrlRef.current = url;
             const audio = new Audio(url);
             audioRef.current = audio;
+            audio.onended = () => setTtsPlaying(false);
+            audio.onpause = () => setTtsPlaying(false);
+            audio.onplay = () => setTtsPlaying(true);
             audio.play().catch((err) => {
               console.warn("TTS autoplay blocked:", err);
+              setTtsPlaying(false);
             });
           } catch (err) {
             console.warn("TTS playback failed:", err);
@@ -141,21 +147,24 @@ export default function Chat() {
   const startRecord = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      const preferredTypes = ["audio/webm", "audio/mp4", "audio/ogg"];
+      const mimeType = preferredTypes.find((t) => MediaRecorder.isTypeSupported(t)) ?? "";
+      const mr = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      const actualMime = mr.mimeType || mimeType || "audio/webm";
       chunksRef.current = [];
       mr.ondataavailable = (e) => {
         if (e.data.size) chunksRef.current.push(e.data);
       };
       mr.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        const blob = new Blob(chunksRef.current, { type: actualMime });
         const buf = await blob.arrayBuffer();
         const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
         transcribe.mutate(
-          { data: { audioBase64: b64, mimeType: "audio/webm" } },
+          { data: { audioBase64: b64, mimeType: actualMime } },
           {
             onSuccess: (resp) => {
-              if (resp.text) sendText(resp.text);
+              if (resp.text) setInput(resp.text);
             },
           },
         );
@@ -237,6 +246,24 @@ export default function Chat() {
             </motion.div>
           ))}
         </AnimatePresence>
+        {ttsPlaying && (
+          <div className="flex items-center gap-2 text-[12px] text-primary" data-testid="tts-playing-indicator">
+            <Volume2 size={13} className="animate-pulse" />
+            <span>Playing…</span>
+            <button
+              type="button"
+              onClick={() => {
+                audioRef.current?.pause();
+                setTtsPlaying(false);
+              }}
+              className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
+              data-testid="button-tts-stop"
+              aria-label="Stop audio"
+            >
+              <Square size={11} className="fill-current" /> Stop
+            </button>
+          </div>
+        )}
         {(send.isPending || transcribe.isPending) && (
           <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
             <Loader2 size={13} className="animate-spin" />
@@ -273,30 +300,49 @@ export default function Chat() {
           onTouchStart={startRecord}
           onTouchEnd={stopRecord}
           className={cn(
-            "w-11 h-11 rounded-full grid place-items-center transition-all flex-shrink-0",
+            "w-11 h-11 rounded-full grid place-items-center transition-all flex-shrink-0 relative",
             recording
               ? "bg-rose-500 text-white scale-110 shadow-lg shadow-rose-500/40"
               : "bg-muted text-muted-foreground hover:bg-muted/80",
           )}
           data-testid="button-mic"
           aria-label="Hold to record"
+          aria-pressed={recording}
         >
           <Mic size={18} />
+          {recording && (
+            <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-rose-400 rounded-full animate-ping" />
+          )}
         </button>
-        <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              sendText(input);
-            }
-          }}
-          placeholder={recording ? "Listening…" : "Type or hold mic to talk…"}
-          rows={1}
-          className="flex-1 bg-card border border-card-border rounded-2xl px-4 py-2.5 text-[14px] outline-none focus:border-primary resize-none max-h-32"
-          data-testid="input-chat"
-        />
+        <div className="flex-1 flex flex-col gap-1.5">
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                sendText(input);
+              }
+            }}
+            placeholder={recording ? "Listening…" : transcribe.isPending ? "Transcribing…" : "Type or hold mic to talk…"}
+            rows={1}
+            className="flex-1 bg-card border border-card-border rounded-2xl px-4 py-2.5 text-[14px] outline-none focus:border-primary resize-none max-h-32"
+            data-testid="input-chat"
+          />
+          {transcribe.isPending === false && input.trim() && (
+            <div className="flex items-center gap-1.5 px-1">
+              <span className="text-[11px] text-muted-foreground">Edit above or</span>
+              <button
+                type="button"
+                onClick={() => sendText(input)}
+                className="text-[11px] font-semibold text-primary hover:underline"
+                data-testid="button-confirm-send"
+              >
+                tap to send →
+              </button>
+            </div>
+          )}
+        </div>
         <button
           type="submit"
           disabled={!input.trim() || send.isPending}
