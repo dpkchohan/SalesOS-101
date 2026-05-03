@@ -190,7 +190,7 @@ function NewTaskDialog({ onClose }: { onClose: () => void }) {
     e.preventDefault();
     if (!title.trim()) return;
     create.mutate(
-      { data: { title, dueDate: dueDate ? new Date(dueDate) : null, priority } },
+      { data: { title, dueDate: dueDate || null, priority } },
       {
         onSuccess: () => {
           qc.invalidateQueries({ queryKey: getListTasksQueryKey() });

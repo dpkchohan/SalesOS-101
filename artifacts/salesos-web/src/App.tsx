@@ -21,6 +21,7 @@ import { AppLayout } from "./components/AppLayout";
 import Landing from "./pages/Landing";
 import Dashboard from "./pages/Dashboard";
 import Pipeline from "./pages/Pipeline";
+import Leads from "./pages/Leads";
 import LeadDetail from "./pages/LeadDetail";
 import Contacts from "./pages/Contacts";
 import ContactDetail from "./pages/ContactDetail";
@@ -170,6 +171,7 @@ function SignedInApp() {
       <Switch>
         <Route path="/" component={Dashboard} />
         <Route path="/pipeline" component={Pipeline} />
+        <Route path="/leads" component={Leads} />
         <Route path="/leads/:id" component={LeadDetail} />
         <Route path="/contacts" component={Contacts} />
         <Route path="/contacts/:id" component={ContactDetail} />
@@ -244,6 +246,7 @@ function ClerkProviderWithRoutes() {
           <Route path="/sign-up/*?" component={SignUpPage} />
           <Route path="/" component={HomeRoute} />
           <Route path="/pipeline" component={ProtectedRoutes} />
+          <Route path="/leads" component={ProtectedRoutes} />
           <Route path="/leads/:id" component={ProtectedRoutes} />
           <Route path="/contacts" component={ProtectedRoutes} />
           <Route path="/contacts/:id" component={ProtectedRoutes} />

@@ -379,7 +379,7 @@ function NewInteractionDialog({
         data: {
           leadId,
           type,
-          date: new Date(),
+          date: new Date().toISOString().slice(0, 10),
           gist,
           nextStep: nextStep || null,
           sentiment,
@@ -500,7 +500,7 @@ function NewTaskDialog({
         data: {
           leadId,
           title,
-          dueDate: dueDate ? new Date(dueDate) : null,
+          dueDate: dueDate || null,
           priority,
         },
       },

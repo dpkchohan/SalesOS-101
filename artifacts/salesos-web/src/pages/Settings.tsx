@@ -115,7 +115,7 @@ function AccountTab() {
 
 function CalendarStatusCard() {
   const { data, isLoading, refetch, isFetching } = useGetCalendarStatus({
-    query: { staleTime: 60_000, refetchOnWindowFocus: false },
+    query: { staleTime: 60_000, refetchOnWindowFocus: false, queryKey: ["calendarStatus"] },
   });
   const connected = data?.connected === true;
   const onConnect = () => {

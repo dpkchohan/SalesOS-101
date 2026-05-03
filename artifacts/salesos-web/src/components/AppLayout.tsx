@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   Kanban,
   Users,
+  TrendingUp,
   CheckSquare,
   MessageCircle,
   FileText,
@@ -16,10 +17,11 @@ import { cn } from "@/lib/utils";
 
 const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/pipeline", label: "Pipeline", icon: Kanban },
   { to: "/contacts", label: "Contacts", icon: Users },
-  { to: "/tasks", label: "Tasks", icon: CheckSquare },
+  { to: "/leads", label: "Leads", icon: TrendingUp },
+  { to: "/pipeline", label: "Pipeline", icon: Kanban },
   { to: "/chat", label: "Chat", icon: MessageCircle },
+  { to: "/tasks", label: "Tasks", icon: CheckSquare },
   { to: "/documents", label: "Docs", icon: FileText },
   { to: "/import", label: "Import", icon: Upload },
 ];
@@ -97,7 +99,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         <main className="flex-1 pb-24 md:pb-8">{children}</main>
 
         <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-sidebar text-sidebar-foreground border-t border-sidebar-border safe-bottom">
-          <div className="grid grid-cols-7">
+          <div className="grid grid-cols-8">
             {NAV.map(({ to, label, icon: Icon }) => (
               <Link key={to} to={to}
                   className={cn(
