@@ -161,7 +161,10 @@ router.post("/chat", requireAuth, async (req, res): Promise<void> => {
           leadId,
           title: intent.task.title,
           dueDate: intent.task.dueDate ?? null,
-          dueTime: intent.task.dueTime ?? null,
+          dueTime:
+            intent.task.dueTime && /^([01]\d|2[0-3]):[0-5]\d$/.test(intent.task.dueTime)
+              ? intent.task.dueTime
+              : null,
           priority: intent.task.priority ?? "medium",
         })
         .returning();
