@@ -306,6 +306,7 @@ function CompanyTab() {
   const [form, setForm] = useState<FormState>(EMPTY);
   const [logoError, setLogoError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [autoColorNote, setAutoColorNote] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -330,6 +331,7 @@ function CompanyTab() {
 
   const onFile = async (file: File) => {
     setLogoError(null);
+    setAutoColorNote(null);
     if (!file.type.startsWith("image/")) {
       setLogoError("Please choose an image file.");
       return;
@@ -339,9 +341,26 @@ function CompanyTab() {
       return;
     }
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       const result = reader.result;
-      if (typeof result === "string") update("companyLogoUrl", result);
+      if (typeof result !== "string") return;
+      const palette = await extractLogoPalette(result).catch(() => null);
+      setForm((s) => ({
+        ...s,
+        companyLogoUrl: result,
+        ...(palette
+          ? {
+              primaryColor: palette[0] ?? s.primaryColor,
+              secondaryColor: palette[1] ?? s.secondaryColor,
+              accentColor: palette[2] ?? s.accentColor,
+            }
+          : {}),
+      }));
+      if (palette && palette.length > 0) {
+        setAutoColorNote(
+          `Brand colors detected from your logo (${palette.length} swatch${palette.length === 1 ? "" : "es"}). Adjust below if needed.`,
+        );
+      }
     };
     reader.onerror = () => setLogoError("Failed to read file.");
     reader.readAsDataURL(file);
@@ -441,8 +460,17 @@ function CompanyTab() {
             </div>
           </div>
           {logoError && <div className="text-[11px] text-rose-600 mt-1.5">{logoError}</div>}
+          {autoColorNote && !logoError && (
+            <div
+              className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-1.5"
+              data-testid="text-auto-color-note"
+            >
+              {autoColorNote}
+            </div>
+          )}
           <div className="text-[11px] text-muted-foreground mt-1.5">
-            PNG/JPG/SVG, under 2MB. Used in proposal headers.
+            PNG/JPG/SVG, under 2MB. Used in proposal headers. Brand colors are auto-detected on
+            upload.
           </div>
         </Field>
       </SectionCard>
@@ -652,4 +680,78 @@ function ColorField({
       </div>
     </div>
   );
+}
+
+async function extractLogoPalette(dataUrl: string): Promise<string[]> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      try {
+        const maxDim = 96;
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return resolve([]);
+        ctx.drawImage(img, 0, 0, w, h);
+        const { data } = ctx.getImageData(0, 0, w, h);
+        const buckets = new Map<string, { r: number; g: number; b: number; n: number; score: number }>();
+        for (let i = 0; i < data.length; i += 4) {
+          const a = data[i + 3];
+          if (a < 200) continue;
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          const max = Math.max(r, g, b);
+          const min = Math.min(r, g, b);
+          const lum = (max + min) / 2;
+          if (lum < 24 || lum > 235) continue;
+          const sat = max === 0 ? 0 : (max - min) / max;
+          if (sat < 0.18) continue;
+          const br = Math.round(r / 24) * 24;
+          const bg = Math.round(g / 24) * 24;
+          const bb = Math.round(b / 24) * 24;
+          const key = `${br},${bg},${bb}`;
+          const prev = buckets.get(key);
+          const weight = 1 + sat;
+          if (prev) {
+            prev.r += r;
+            prev.g += g;
+            prev.b += b;
+            prev.n += 1;
+            prev.score += weight;
+          } else {
+            buckets.set(key, { r, g, b, n: 1, score: weight });
+          }
+        }
+        const sorted = Array.from(buckets.values())
+          .map((c) => ({
+            r: Math.round(c.r / c.n),
+            g: Math.round(c.g / c.n),
+            b: Math.round(c.b / c.n),
+            score: c.score,
+          }))
+          .sort((a, b) => b.score - a.score);
+        const picked: { r: number; g: number; b: number }[] = [];
+        const dist2 = (a: { r: number; g: number; b: number }, b: { r: number; g: number; b: number }) =>
+          (a.r - b.r) ** 2 + (a.g - b.g) ** 2 + (a.b - b.b) ** 2;
+        for (const c of sorted) {
+          if (picked.every((p) => dist2(p, c) > 60 * 60)) {
+            picked.push(c);
+            if (picked.length >= 3) break;
+          }
+        }
+        const toHex = (n: number) => n.toString(16).padStart(2, "0").toUpperCase();
+        resolve(picked.map((c) => `#${toHex(c.r)}${toHex(c.g)}${toHex(c.b)}`));
+      } catch (e) {
+        reject(e);
+      }
+    };
+    img.onerror = () => reject(new Error("image load failed"));
+    img.src = dataUrl;
+  });
 }
