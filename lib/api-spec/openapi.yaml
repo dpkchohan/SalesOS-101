@@ -144,11 +144,82 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/ContactInput" }
       responses:
+        "200":
+          description: Duplicate detected — server did not create the contact
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DuplicateDetectedReply" }
         "201":
           description: Created
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Contact" }
+  /contacts/duplicates:
+    get:
+      operationId: listDuplicateContacts
+      tags: [contacts]
+      summary: Soft-deleted duplicate contacts
+      responses:
+        "200":
+          description: Duplicate contacts
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DuplicatesResponse" }
+  /contacts/merge:
+    post:
+      operationId: mergeContacts
+      tags: [contacts]
+      summary: Soft-merge a duplicate into a primary contact
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MergeContactsInput" }
+      responses:
+        "200":
+          description: Merged
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MergeContactsResult" }
+  /contacts/deduplicate:
+    post:
+      operationId: deduplicateContacts
+      tags: [contacts]
+      summary: Find duplicate clusters; optionally auto-merge them
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeduplicateInput" }
+      responses:
+        "200":
+          description: Duplicate clusters
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeduplicateResult" }
+  /contacts/backfill:
+    post:
+      operationId: backfillContacts
+      tags: [contacts]
+      summary: Assign per-org customer numbers and normalize email/phone for legacy rows
+      responses:
+        "200":
+          description: Backfill summary
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BackfillContactsResult" }
+  /contacts/{id}/related:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string } }
+    get:
+      operationId: getRelatedContacts
+      tags: [contacts]
+      responses:
+        "200":
+          description: Related contacts
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RelatedContactsResponse" }
   /contacts/{id}:
     parameters:
       - { in: path, name: id, required: true, schema: { type: string } }
@@ -942,6 +1013,7 @@ components:
       properties:
         id: { type: string }
         companyId: { type: ["string", "null"] }
+        customerNo: { type: ["string", "null"] }
         name: { type: string }
         email: { type: ["string", "null"] }
         phone: { type: ["string", "null"] }
@@ -964,6 +1036,26 @@ components:
         tags:
           type: array
           items: { type: string }
+        force:
+          type: boolean
+          description: "Skip duplicate detection and force-create the contact."
+
+    DuplicateDetectedReply:
+      type: object
+      required: [duplicateDetected, matchedField, existing]
+      properties:
+        duplicateDetected:
+          type: boolean
+          enum: [true]
+        matchedField:
+          type: string
+          enum: [email, phone]
+        existing: { $ref: "#/components/schemas/Contact" }
+
+    CreateContactReply:
+      oneOf:
+        - { $ref: "#/components/schemas/Contact" }
+        - { $ref: "#/components/schemas/DuplicateDetectedReply" }
 
     ContactDetail:
       type: object
@@ -971,6 +1063,7 @@ components:
       properties:
         id: { type: string }
         companyId: { type: ["string", "null"] }
+        customerNo: { type: ["string", "null"] }
         company:
           oneOf:
             - { $ref: "#/components/schemas/Company" }
@@ -988,6 +1081,10 @@ components:
         interactions:
           type: array
           items: { $ref: "#/components/schemas/Interaction" }
+        isDuplicate: { type: boolean }
+        duplicateOf: { type: ["string", "null"] }
+        mergedAt: { type: ["string", "null"], format: date-time }
+        mergedReason: { type: ["string", "null"] }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
 
@@ -1009,6 +1106,7 @@ components:
         id: { type: string }
         companyId: { type: ["string", "null"] }
         companyName: { type: ["string", "null"] }
+        customerNo: { type: ["string", "null"] }
         name: { type: string }
         email: { type: ["string", "null"] }
         phone: { type: ["string", "null"] }
@@ -1018,6 +1116,106 @@ components:
           items: { type: string }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+
+    DuplicateContact:
+      type: object
+      required: [id, name, createdAt]
+      properties:
+        id: { type: string }
+        customerNo: { type: ["string", "null"] }
+        name: { type: string }
+        email: { type: ["string", "null"] }
+        phone: { type: ["string", "null"] }
+        title: { type: ["string", "null"] }
+        mergedAt: { type: ["string", "null"], format: date-time }
+        mergedReason: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+        primary:
+          oneOf:
+            - type: object
+              properties:
+                id: { type: string }
+                customerNo: { type: ["string", "null"] }
+                name: { type: string }
+                email: { type: ["string", "null"] }
+                phone: { type: ["string", "null"] }
+            - { type: "null" }
+
+    DuplicatesResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/DuplicateContact" }
+
+    RelatedContactsResponse:
+      type: object
+      required: [duplicates, sameCompany, sameDomain]
+      properties:
+        duplicates:
+          type: array
+          items: { $ref: "#/components/schemas/Contact" }
+        sameCompany:
+          type: array
+          items: { $ref: "#/components/schemas/Contact" }
+        sameDomain:
+          type: array
+          items: { $ref: "#/components/schemas/Contact" }
+
+    MergeContactsInput:
+      type: object
+      required: [primaryId, duplicateId]
+      properties:
+        primaryId: { type: string }
+        duplicateId: { type: string }
+        reason: { type: ["string", "null"] }
+
+    MergeContactsResult:
+      type: object
+      required: [success, primary, duplicate]
+      properties:
+        success: { type: boolean }
+        primary: { $ref: "#/components/schemas/Contact" }
+        duplicate: { $ref: "#/components/schemas/Contact" }
+
+    DeduplicateInput:
+      type: object
+      properties:
+        apply:
+          type: boolean
+          default: false
+
+    DuplicateCluster:
+      type: object
+      required: [field, key, ids]
+      properties:
+        field:
+          type: string
+          enum: [email, phone]
+        key: { type: string }
+        ids:
+          type: array
+          items: { type: string }
+
+    DeduplicateResult:
+      type: object
+      required: [clusters, totalClusters, mergedCount, applied]
+      properties:
+        clusters:
+          type: array
+          items: { $ref: "#/components/schemas/DuplicateCluster" }
+        totalClusters: { type: integer }
+        mergedCount: { type: integer }
+        applied: { type: boolean }
+
+    BackfillContactsResult:
+      type: object
+      required: [totalScanned, customerNosAssigned, normalized]
+      properties:
+        totalScanned: { type: integer }
+        customerNosAssigned: { type: integer }
+        normalized: { type: integer }
 
     Lead:
       type: object
@@ -1406,6 +1604,16 @@ components:
         taskId: { type: ["string", "null"] }
         interactionId: { type: ["string", "null"] }
         documentId: { type: ["string", "null"] }
+        duplicateDetected:
+          type: ["boolean", "null"]
+          description: "True when a chat create_contact intent was blocked because a duplicate exists."
+        duplicateContact:
+          oneOf:
+            - { $ref: "#/components/schemas/Contact" }
+            - { type: "null" }
+        duplicateMatchedField:
+          type: ["string", "null"]
+          enum: [email, phone, null]
 
     TranscribeInput:
       type: object

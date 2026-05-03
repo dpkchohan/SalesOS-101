@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { Link } from "wouter";
 import {
   useSendChat,
   useTranscribeAudio,
@@ -38,6 +39,14 @@ import {
 import { PageHeader } from "@/components/AppLayout";
 import { cn } from "@/lib/utils";
 
+interface DuplicateContactInfo {
+  id: string;
+  name: string;
+  customerNo?: string | null;
+  email?: string | null;
+  matchedField: string;
+}
+
 interface Msg {
   id: string;
   role: "user" | "assistant";
@@ -46,6 +55,7 @@ interface Msg {
   audioUrl?: string;
   attachment?: ChatAttachment;
   appliedNote?: string;
+  duplicate?: DuplicateContactInfo;
 }
 
 const SUGGESTIONS = [
@@ -350,9 +360,24 @@ export default function Chat() {
       { data: { text } },
       {
         onSuccess: (resp) => {
+          const dup = resp.duplicateDetected && resp.duplicateContact
+            ? {
+                id: resp.duplicateContact.id,
+                name: resp.duplicateContact.name,
+                customerNo: resp.duplicateContact.customerNo ?? null,
+                email: resp.duplicateContact.email ?? null,
+                matchedField: resp.duplicateMatchedField ?? "match",
+              }
+            : undefined;
           setMessages((m) => [
             ...m,
-            { id: crypto.randomUUID(), role: "assistant", text: resp.message, intent: resp.intent },
+            {
+              id: crypto.randomUUID(),
+              role: "assistant",
+              text: resp.message,
+              intent: resp.intent,
+              duplicate: dup,
+            },
           ]);
           // Speak the assistant's reply via Sarvam TTS (silent fallback on failure).
           playTts(resp.message);
@@ -579,6 +604,35 @@ export default function Chat() {
                     </div>
                   )}
                   {m.text}
+                  {m.role === "assistant" && m.duplicate && (
+                    <div
+                      className="mt-2 flex items-start gap-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-[12px]"
+                      data-testid="chat-duplicate-card"
+                    >
+                      <AlertTriangle size={13} className="text-amber-500 mt-0.5 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-amber-700 dark:text-amber-400">
+                          Possible duplicate ({m.duplicate.matchedField})
+                        </div>
+                        <div className="text-muted-foreground truncate">
+                          {m.duplicate.name}
+                          {m.duplicate.customerNo && (
+                            <span className="ml-1 font-mono text-[10px] px-1 py-0.5 rounded bg-muted">
+                              {m.duplicate.customerNo}
+                            </span>
+                          )}
+                          {m.duplicate.email && <span className="ml-1">· {m.duplicate.email}</span>}
+                        </div>
+                        <Link
+                          href={`/contacts/${m.duplicate.id}`}
+                          className="inline-block mt-1 text-primary hover:underline"
+                          data-testid="chat-duplicate-open"
+                        >
+                          Open existing contact →
+                        </Link>
+                      </div>
+                    </div>
+                  )}
                   {m.role === "assistant" && m.id !== "intro" && m.text && (
                     <button
                       onClick={() => speakReply(m)}

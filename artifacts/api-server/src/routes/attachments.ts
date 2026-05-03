@@ -16,6 +16,7 @@ import {
   leadsTable,
 } from "@workspace/db";
 import { requireAuth, type AuthenticatedRequest } from "../lib/auth";
+import { assignCustomerNo, normalizePhone } from "../lib/dedup";
 import { objectStorageClient } from "../lib/objectStorage";
 import {
   extractAttachment,
@@ -347,15 +348,18 @@ router.post(
 
       let contactId: string;
       let wasInserted = true;
+      const phoneNorm = normalizePhone(merged.phone);
       if (merged.email) {
+        const newCustomerNo = await assignCustomerNo(r.orgId);
         const result = await db.execute<{ id: string; was_inserted: boolean }>(sql`
-          INSERT INTO contacts (org_id, company_id, name, email, phone, title)
-          VALUES (${r.orgId}, ${companyId}, ${merged.name}, ${merged.email},
-                  ${merged.phone}, ${merged.title})
+          INSERT INTO contacts (org_id, company_id, customer_no, name, email, email_normalized, phone, phone_normalized, title)
+          VALUES (${r.orgId}, ${companyId}, ${newCustomerNo}, ${merged.name}, ${merged.email}, ${merged.email},
+                  ${merged.phone}, ${phoneNorm}, ${merged.title})
           ON CONFLICT (org_id, lower(email)) WHERE email IS NOT NULL
           DO UPDATE SET
             name = COALESCE(NULLIF(EXCLUDED.name, ''), contacts.name),
             phone = COALESCE(EXCLUDED.phone, contacts.phone),
+            phone_normalized = COALESCE(EXCLUDED.phone_normalized, contacts.phone_normalized),
             title = COALESCE(EXCLUDED.title, contacts.title),
             company_id = COALESCE(EXCLUDED.company_id, contacts.company_id),
             updated_at = NOW()
@@ -365,14 +369,17 @@ router.post(
         contactId = rrow.id;
         wasInserted = !!rrow.was_inserted;
       } else {
+        const customerNo = await assignCustomerNo(r.orgId);
         const [created] = await db
           .insert(contactsTable)
           .values({
             orgId: r.orgId,
             companyId,
+            customerNo,
             name: merged.name,
             email: null,
             phone: merged.phone,
+            phoneNormalized: phoneNorm,
             title: merged.title,
           })
           .returning({ id: contactsTable.id });

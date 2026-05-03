@@ -10,6 +10,8 @@ export interface Contact {
   id: string;
   /** @nullable */
   companyId?: string | null;
+  /** @nullable */
+  customerNo?: string | null;
   name: string;
   /** @nullable */
   email?: string | null;

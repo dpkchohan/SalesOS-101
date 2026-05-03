@@ -24,6 +24,7 @@ import type {
   AiSmartImportWorkerBody,
   ApplyAttachmentInput,
   ApplyAttachmentResult,
+  BackfillContactsResult,
   CalendarStatus,
   ChatAttachment,
   ChatInput,
@@ -37,9 +38,13 @@ import type {
   ContactInput,
   ContactsPage,
   DashboardSummary,
+  DeduplicateInput,
+  DeduplicateResult,
   Document,
   DocumentInput,
   DocumentUpdate,
+  DuplicateDetectedReply,
+  DuplicatesResponse,
   GenerateProposalInput,
   HealthStatus,
   ImportJob,
@@ -58,9 +63,12 @@ import type {
   ListSignalsParams,
   ListTasksParams,
   Me,
+  MergeContactsInput,
+  MergeContactsResult,
   NotFoundResponse,
   Pipeline,
   RegenerateProposalInput,
+  RelatedContactsResponse,
   SendDocumentEmailInput,
   SendDocumentEmailResult,
   SpeakInput,
@@ -717,8 +725,8 @@ export const getCreateContactUrl = () => {
 export const createContact = async (
   contactInput: ContactInput,
   options?: RequestInit,
-): Promise<Contact> => {
-  return customFetch<Contact>(getCreateContactUrl(), {
+): Promise<DuplicateDetectedReply | Contact> => {
+  return customFetch<DuplicateDetectedReply | Contact>(getCreateContactUrl(), {
     ...options,
     method: "POST",
     headers: { "Content-Type": "application/json", ...options?.headers },
@@ -789,6 +797,414 @@ export const useCreateContact = <
 > => {
   return useMutation(getCreateContactMutationOptions(options));
 };
+
+/**
+ * @summary Soft-deleted duplicate contacts
+ */
+export const getListDuplicateContactsUrl = () => {
+  return `/api/contacts/duplicates`;
+};
+
+export const listDuplicateContacts = async (
+  options?: RequestInit,
+): Promise<DuplicatesResponse> => {
+  return customFetch<DuplicatesResponse>(getListDuplicateContactsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListDuplicateContactsQueryKey = () => {
+  return [`/api/contacts/duplicates`] as const;
+};
+
+export const getListDuplicateContactsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listDuplicateContacts>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listDuplicateContacts>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListDuplicateContactsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listDuplicateContacts>>
+  > = ({ signal }) => listDuplicateContacts({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listDuplicateContacts>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListDuplicateContactsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listDuplicateContacts>>
+>;
+export type ListDuplicateContactsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Soft-deleted duplicate contacts
+ */
+
+export function useListDuplicateContacts<
+  TData = Awaited<ReturnType<typeof listDuplicateContacts>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listDuplicateContacts>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListDuplicateContactsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Soft-merge a duplicate into a primary contact
+ */
+export const getMergeContactsUrl = () => {
+  return `/api/contacts/merge`;
+};
+
+export const mergeContacts = async (
+  mergeContactsInput: MergeContactsInput,
+  options?: RequestInit,
+): Promise<MergeContactsResult> => {
+  return customFetch<MergeContactsResult>(getMergeContactsUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(mergeContactsInput),
+  });
+};
+
+export const getMergeContactsMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof mergeContacts>>,
+    TError,
+    { data: BodyType<MergeContactsInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof mergeContacts>>,
+  TError,
+  { data: BodyType<MergeContactsInput> },
+  TContext
+> => {
+  const mutationKey = ["mergeContacts"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof mergeContacts>>,
+    { data: BodyType<MergeContactsInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return mergeContacts(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MergeContactsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof mergeContacts>>
+>;
+export type MergeContactsMutationBody = BodyType<MergeContactsInput>;
+export type MergeContactsMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Soft-merge a duplicate into a primary contact
+ */
+export const useMergeContacts = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof mergeContacts>>,
+    TError,
+    { data: BodyType<MergeContactsInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof mergeContacts>>,
+  TError,
+  { data: BodyType<MergeContactsInput> },
+  TContext
+> => {
+  return useMutation(getMergeContactsMutationOptions(options));
+};
+
+/**
+ * @summary Find duplicate clusters; optionally auto-merge them
+ */
+export const getDeduplicateContactsUrl = () => {
+  return `/api/contacts/deduplicate`;
+};
+
+export const deduplicateContacts = async (
+  deduplicateInput?: DeduplicateInput,
+  options?: RequestInit,
+): Promise<DeduplicateResult> => {
+  return customFetch<DeduplicateResult>(getDeduplicateContactsUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(deduplicateInput),
+  });
+};
+
+export const getDeduplicateContactsMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deduplicateContacts>>,
+    TError,
+    { data: BodyType<DeduplicateInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deduplicateContacts>>,
+  TError,
+  { data: BodyType<DeduplicateInput> },
+  TContext
+> => {
+  const mutationKey = ["deduplicateContacts"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deduplicateContacts>>,
+    { data: BodyType<DeduplicateInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return deduplicateContacts(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeduplicateContactsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deduplicateContacts>>
+>;
+export type DeduplicateContactsMutationBody = BodyType<DeduplicateInput>;
+export type DeduplicateContactsMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Find duplicate clusters; optionally auto-merge them
+ */
+export const useDeduplicateContacts = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deduplicateContacts>>,
+    TError,
+    { data: BodyType<DeduplicateInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deduplicateContacts>>,
+  TError,
+  { data: BodyType<DeduplicateInput> },
+  TContext
+> => {
+  return useMutation(getDeduplicateContactsMutationOptions(options));
+};
+
+/**
+ * @summary Assign per-org customer numbers and normalize email/phone for legacy rows
+ */
+export const getBackfillContactsUrl = () => {
+  return `/api/contacts/backfill`;
+};
+
+export const backfillContacts = async (
+  options?: RequestInit,
+): Promise<BackfillContactsResult> => {
+  return customFetch<BackfillContactsResult>(getBackfillContactsUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getBackfillContactsMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof backfillContacts>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof backfillContacts>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["backfillContacts"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof backfillContacts>>,
+    void
+  > = () => {
+    return backfillContacts(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type BackfillContactsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof backfillContacts>>
+>;
+
+export type BackfillContactsMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Assign per-org customer numbers and normalize email/phone for legacy rows
+ */
+export const useBackfillContacts = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof backfillContacts>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof backfillContacts>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getBackfillContactsMutationOptions(options));
+};
+
+export const getGetRelatedContactsUrl = (id: string) => {
+  return `/api/contacts/${id}/related`;
+};
+
+export const getRelatedContacts = async (
+  id: string,
+  options?: RequestInit,
+): Promise<RelatedContactsResponse> => {
+  return customFetch<RelatedContactsResponse>(getGetRelatedContactsUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetRelatedContactsQueryKey = (id: string) => {
+  return [`/api/contacts/${id}/related`] as const;
+};
+
+export const getGetRelatedContactsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getRelatedContacts>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getRelatedContacts>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetRelatedContactsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getRelatedContacts>>
+  > = ({ signal }) => getRelatedContacts(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getRelatedContacts>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetRelatedContactsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getRelatedContacts>>
+>;
+export type GetRelatedContactsQueryError = ErrorType<unknown>;
+
+export function useGetRelatedContacts<
+  TData = Awaited<ReturnType<typeof getRelatedContacts>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getRelatedContacts>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetRelatedContactsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 export const getGetContactUrl = (id: string) => {
   return `/api/contacts/${id}`;

@@ -9,6 +9,7 @@ import {
   leadsTable,
 } from "@workspace/db";
 import { requireAuth, type AuthenticatedRequest } from "../lib/auth";
+import { assignCustomerNo, normalizeEmail, normalizePhone } from "../lib/dedup";
 
 const router: IRouter = Router();
 
@@ -310,15 +311,18 @@ router.post(
 
         const companyId = companyName ? await getOrCreateCompany(companyName) : null;
 
+        const emailNorm = normalizeEmail(email);
+        const phoneNorm = normalizePhone(phone);
         let contactId: string | null = null;
-        if (email) {
+        if (emailNorm) {
           const existing = await db
             .select({ id: contactsTable.id })
             .from(contactsTable)
             .where(
               and(
                 eq(contactsTable.orgId, r.orgId),
-                sql`lower(${contactsTable.email}) = ${email}`,
+                eq(contactsTable.isDuplicate, false),
+                sql`lower(${contactsTable.email}) = ${emailNorm}`,
               ),
             )
             .limit(1);
@@ -329,6 +333,31 @@ router.post(
               .set({
                 name: displayName,
                 phone: phone || undefined,
+                phoneNormalized: phoneNorm ?? undefined,
+                title: title || undefined,
+                companyId: companyId ?? undefined,
+              })
+              .where(eq(contactsTable.id, contactId));
+            summary.contactsUpdated++;
+          }
+        } else if (phoneNorm) {
+          const existing = await db
+            .select({ id: contactsTable.id })
+            .from(contactsTable)
+            .where(
+              and(
+                eq(contactsTable.orgId, r.orgId),
+                eq(contactsTable.isDuplicate, false),
+                eq(contactsTable.phoneNormalized, phoneNorm),
+              ),
+            )
+            .limit(1);
+          if (existing[0]) {
+            contactId = existing[0].id;
+            await db
+              .update(contactsTable)
+              .set({
+                name: displayName,
                 title: title || undefined,
                 companyId: companyId ?? undefined,
               })
@@ -338,14 +367,18 @@ router.post(
         }
 
         if (!contactId) {
+          const customerNo = await assignCustomerNo(r.orgId);
           const [created] = await db
             .insert(contactsTable)
             .values({
               orgId: r.orgId,
               companyId,
+              customerNo,
               name: displayName,
               email: email || null,
+              emailNormalized: emailNorm,
               phone: phone || null,
+              phoneNormalized: phoneNorm,
               title: title || null,
             })
             .returning({ id: contactsTable.id });

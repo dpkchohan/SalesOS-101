@@ -3,23 +3,30 @@ import { Link } from "wouter";
 import {
   useListContacts,
   useCreateContact,
+  useListDuplicateContacts,
+  useMergeContacts,
+  useDeduplicateContacts,
   getListContactsQueryKey,
+  getListDuplicateContactsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Search, Briefcase, Mail, Phone, X } from "lucide-react";
+import { Plus, Search, Briefcase, Mail, Phone, X, Users, Copy, Wand2 } from "lucide-react";
 import { PageHeader } from "@/components/AppLayout";
 import { ExportMenu } from "@/components/ExportMenu";
 import { initials, relativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
+type Tab = "all" | "duplicates";
+
 export default function Contacts() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [showNew, setShowNew] = useState(false);
+  const [tab, setTab] = useState<Tab>("all");
   const params = { search: search || undefined, page, limit: 25 };
   const { data, isLoading } = useListContacts(params, {
-    query: { queryKey: getListContactsQueryKey(params) },
+    query: { queryKey: getListContactsQueryKey(params), enabled: tab === "all" },
   });
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.limit)) : 1;
 
@@ -41,22 +48,49 @@ export default function Contacts() {
           </div>
         }
       />
-      <div className="px-4 md:px-8 mb-3">
-        <div className="relative">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <input
-            type="search"
-            placeholder="Search by name, email, title…"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-            className="w-full bg-card border border-card-border rounded-lg pl-9 pr-4 py-2.5 text-[14px] outline-none focus:border-primary transition-colors"
-            data-testid="input-search-contacts"
-          />
+      <div className="px-4 md:px-8 mb-3 flex flex-col gap-2">
+        <div className="flex items-center gap-1.5 text-[12px]">
+          <button
+            onClick={() => setTab("all")}
+            data-testid="tab-contacts-all"
+            className={cn(
+              "px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5",
+              tab === "all" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <Users size={12} /> All
+          </button>
+          <button
+            onClick={() => setTab("duplicates")}
+            data-testid="tab-contacts-duplicates"
+            className={cn(
+              "px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5",
+              tab === "duplicates" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <Copy size={12} /> Duplicates
+          </button>
         </div>
+        {tab === "all" && (
+          <div className="relative">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="search"
+              placeholder="Search by name, email, title, or CUST-000123…"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              className="w-full bg-card border border-card-border rounded-lg pl-9 pr-4 py-2.5 text-[14px] outline-none focus:border-primary transition-colors"
+              data-testid="input-search-contacts"
+            />
+          </div>
+        )}
       </div>
+      {tab === "duplicates" ? (
+        <DuplicatesPanel />
+      ) : (
       <div className="px-4 md:px-8 space-y-1.5">
         {isLoading && <div className="text-muted-foreground text-[13px]">Loading…</div>}
         {data?.data.length === 0 && !isLoading && (
@@ -89,6 +123,14 @@ export default function Contacts() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <div className="font-semibold text-[14px] truncate">{c.name}</div>
+                      {c.customerNo && (
+                        <span
+                          className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-primary/10 text-primary flex-shrink-0"
+                          data-testid={`cust-badge-${c.id}`}
+                        >
+                          {c.customerNo}
+                        </span>
+                      )}
                       {c.title && (
                         <div className="text-[11px] text-muted-foreground truncate hidden md:block">
                           {c.title}
@@ -142,27 +184,146 @@ export default function Contacts() {
           </div>
         )}
       </div>
+      )}
       {showNew && <NewContactDialog onClose={() => setShowNew(false)} />}
     </div>
   );
+}
+
+function DuplicatesPanel() {
+  const qc = useQueryClient();
+  const { data, isLoading, refetch } = useListDuplicateContacts();
+  const merge = useMergeContacts();
+  const dedupe = useDeduplicateContacts();
+  const [running, setRunning] = useState(false);
+  const runAuto = async () => {
+    setRunning(true);
+    try {
+      await dedupe.mutateAsync({ data: { apply: true } });
+      qc.invalidateQueries({ queryKey: getListContactsQueryKey() });
+      qc.invalidateQueries({ queryKey: getListDuplicateContactsQueryKey() });
+      await refetch();
+    } finally {
+      setRunning(false);
+    }
+  };
+  return (
+    <div className="px-4 md:px-8 space-y-3" data-testid="duplicates-panel">
+      <div className="flex items-center justify-between">
+        <div className="text-[12px] text-muted-foreground">
+          {isLoading
+            ? "Scanning…"
+            : `${data?.data.length ?? 0} duplicate(s) merged into a primary contact.`}
+        </div>
+        <button
+          onClick={runAuto}
+          disabled={running}
+          data-testid="button-run-dedupe"
+          className="flex items-center gap-1.5 text-[12px] font-semibold px-3 py-1.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+        >
+          <Wand2 size={12} /> {running ? "Auto-merging…" : "Auto-merge by email/phone"}
+        </button>
+      </div>
+      {!isLoading && (data?.data.length ?? 0) === 0 && (
+        <div className="text-center py-12 text-muted-foreground text-[13px]">
+          No duplicate contacts on file.
+        </div>
+      )}
+      {data?.data.map((d) => (
+        <div
+          key={d.id}
+          className="rounded-xl bg-card border border-card-border p-4"
+          data-testid={`duplicate-row-${d.id}`}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-[14px] truncate">{d.name}</span>
+                {d.customerNo && (
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                    {d.customerNo}
+                  </span>
+                )}
+              </div>
+              <div className="text-[11.5px] text-muted-foreground mt-0.5 truncate">
+                {d.email ?? "—"} {d.phone && `· ${d.phone}`} ·{" "}
+                {d.mergedReason ?? "merged"}
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                Merged into
+              </div>
+              {d.primary ? (
+                <Link
+                  to={`/contacts/${d.primary.id}`}
+                  className="text-[13px] font-semibold text-primary hover:underline"
+                >
+                  {d.primary.name}
+                  {d.primary.customerNo && (
+                    <span className="ml-1 text-[10px] font-mono text-muted-foreground">
+                      {d.primary.customerNo}
+                    </span>
+                  )}
+                </Link>
+              ) : (
+                <span className="text-[12px] text-muted-foreground">—</span>
+              )}
+            </div>
+          </div>
+        </div>
+      ))}
+      <div className="text-[11px] text-muted-foreground italic pt-1">
+        Merging is soft — duplicates stay in the database with a pointer to the
+        primary contact.
+      </div>
+    </div>
+  );
+  void merge;
 }
 
 function NewContactDialog({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient();
   const create = useCreateContact();
   const [form, setForm] = useState({ name: "", email: "", phone: "", title: "" });
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.name) return;
+  const [duplicate, setDuplicate] = useState<{
+    matchedField: string;
+    existing: { id: string; name: string; customerNo?: string | null; email?: string | null };
+  } | null>(null);
+
+  const doCreate = (force: boolean) => {
     create.mutate(
-      { data: { name: form.name, email: form.email || null, phone: form.phone || null, title: form.title || null } },
       {
-        onSuccess: () => {
+        data: {
+          name: form.name,
+          email: form.email || null,
+          phone: form.phone || null,
+          title: form.title || null,
+          ...(force ? { force: true } : {}),
+        },
+      },
+      {
+        onSuccess: (resp: unknown) => {
+          if (resp && typeof resp === "object" && "duplicateDetected" in resp && (resp as { duplicateDetected?: boolean }).duplicateDetected) {
+            const r = resp as unknown as {
+              matchedField: string;
+              existing: { id: string; name: string; customerNo?: string | null; email?: string | null };
+            };
+            setDuplicate({ matchedField: r.matchedField, existing: r.existing });
+            return;
+          }
           qc.invalidateQueries({ queryKey: getListContactsQueryKey() });
           onClose();
         },
       },
     );
+  };
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.name) return;
+    setDuplicate(null);
+    doCreate(false);
   };
   return (
     <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm grid place-items-end md:place-items-center p-0 md:p-4">
@@ -204,6 +365,40 @@ function NewContactDialog({ onClose }: { onClose: () => void }) {
             <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className={inputCls} />
           </Field>
         </div>
+        {duplicate && (
+          <div
+            className="mt-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-[12.5px]"
+            data-testid="duplicate-warning"
+          >
+            <div className="font-semibold text-amber-300">
+              Possible duplicate by {duplicate.matchedField}
+            </div>
+            <div className="text-amber-200/90 mt-1">
+              {duplicate.existing.name}
+              {duplicate.existing.customerNo && (
+                <span className="ml-1 font-mono">{duplicate.existing.customerNo}</span>
+              )}
+              {duplicate.existing.email && <span className="ml-1">· {duplicate.existing.email}</span>}
+            </div>
+            <div className="flex gap-2 mt-2">
+              <Link
+                to={`/contacts/${duplicate.existing.id}`}
+                className="text-[12px] font-semibold px-2.5 py-1 rounded-md bg-amber-500/20 text-amber-200 hover:bg-amber-500/30"
+                onClick={onClose}
+              >
+                Open existing
+              </Link>
+              <button
+                type="button"
+                onClick={() => doCreate(true)}
+                data-testid="button-force-create-contact"
+                className="text-[12px] font-semibold px-2.5 py-1 rounded-md border border-amber-500/40 text-amber-200 hover:bg-amber-500/10"
+              >
+                Create anyway
+              </button>
+            </div>
+          </div>
+        )}
         <button
           type="submit"
           disabled={create.isPending || !form.name}
@@ -213,7 +408,7 @@ function NewContactDialog({ onClose }: { onClose: () => void }) {
           )}
           data-testid="button-save-contact"
         >
-          {create.isPending ? "Saving…" : "Save contact"}
+          {create.isPending ? "Saving…" : duplicate ? "Try again" : "Save contact"}
         </button>
       </motion.form>
     </div>

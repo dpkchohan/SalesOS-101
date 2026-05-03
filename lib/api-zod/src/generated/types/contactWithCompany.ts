@@ -12,6 +12,8 @@ export interface ContactWithCompany {
   companyId?: string | null;
   /** @nullable */
   companyName?: string | null;
+  /** @nullable */
+  customerNo?: string | null;
   name: string;
   /** @nullable */
   email?: string | null;

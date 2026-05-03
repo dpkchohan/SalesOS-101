@@ -52,11 +52,28 @@ A mobile-first sales CRM built on the pnpm workspace monorepo. SalesOS gives sal
   - `POST /api/attachments/:id/apply { action, contactIndex }` upserts a contact (race-safe via Task #10's `(orgId, lower(email))` unique index) and optionally creates a lead with `source: "chat-attachment"` assigned to the requesting user.
 - Frontend: `pages/Chat.tsx` adds a paperclip button + page-wide drag-drop overlay + a pending-file chip. After upload the assistant message renders an `AttachmentCard` (file header → spinner while extracting → result with summary, confidence, per-contact "Add to Contacts" / "Add as Lead" actions). Polls every 1.5 s until `done`/`failed` and then invalidates the dashboard / contacts / pipeline queries on apply.
 
+## Duplicate Detection & Customer Numbers (Task #17)
+
+- Schema: `contacts` adds `customer_no` (per-org `CUST-NNNNNN`), `email_normalized`, `phone_normalized`, `is_duplicate`, `duplicate_of`, `merged_at`, `merged_reason`. New `org_contact_counters` table holds `(org_id, last_no)` for race-safe sequential allocation via `INSERT … ON CONFLICT DO UPDATE … RETURNING last_no + 1`. Partial unique indexes on `(org_id, email_normalized)` and `(org_id, phone_normalized)` keep duplicates out at the DB layer; merged duplicates have those columns nulled to free the index. Customer numbers are unique per org via `(org_id, customer_no)`.
+- `lib/dedup.ts` exposes `normalizeEmail`, `normalizePhone` (E.164-style digit-only), `findDuplicate`, `assignCustomerNo`, `formatCustomerNo`, `isCustomerNoSearch`. All write paths (`routes/contacts.ts`, `routes/importExport.ts`, `routes/importAi.ts`, `routes/attachments.ts`, `routes/chat.ts`) call `findDuplicate`/`assignCustomerNo` and persist normalized values; raw-SQL upserts include `email_normalized`/`phone_normalized` in the INSERT and `ON CONFLICT DO UPDATE` clauses.
+- API endpoints (added to `routes/contacts.ts`):
+  - `POST /api/contacts` returns 200 `{ duplicateDetected: true, matchedField, existing }` instead of 201 when a duplicate exists; pass `force: true` to override.
+  - `GET /api/contacts/duplicates` lists soft-deleted duplicates with their primary contact.
+  - `GET /api/contacts/:id/related` returns `{ duplicates, sameCompany, sameDomain }`.
+  - `POST /api/contacts/merge { primaryId, duplicateId, reason? }` soft-merges (reassigns leads, backfills missing fields onto primary).
+  - `POST /api/contacts/deduplicate { apply? }` clusters by normalized email/phone and optionally auto-merges.
+  - `POST /api/contacts/backfill` assigns customer numbers + normalizes legacy rows (idempotent).
+- `POST /api/chat` `create_contact` intent now blocks on duplicates and surfaces `duplicateDetected`/`duplicateContact`/`duplicateMatchedField` on the reply.
+- Frontend:
+  - `pages/Contacts.tsx` adds an All / Duplicates tab pair, a CUST badge per row, CUST-NNNNNN search support, and a duplicate-warning panel in the new-contact dialog with **Open existing** and **Create anyway** actions.
+  - `pages/ContactDetail.tsx` shows the CUST badge in the header and a Related panel (merged duplicates, same company, same email domain).
+  - `pages/Chat.tsx` renders the duplicate hint inline when `duplicateDetected` is true on a chat reply.
+
 ## Import / Export
 
 - `routes/importExport.ts` (multer + xlsx) handles CSV and Excel ingest from HubSpot, Salesforce, Pipedrive, etc.
   - `POST /api/import/preview` returns headers, sample rows, and an auto-detected column → SalesOS field mapping.
-  - `POST /api/import/contacts` processes the file with the user's mapping, dedupes contacts by `(orgId, email)`, auto-creates companies, validates emails, maps lead status (`In Progress` → `negotiating`, `Open` → `interested`, etc.), and creates a lead per row with a recognized status.
+  - `POST /api/import/contacts` processes the file with the user's mapping, dedupes contacts by normalized email then normalized phone (and falls back through Task #17's partial unique indexes), assigns CUST numbers to new rows, auto-creates companies, validates emails, maps lead status (`In Progress` → `negotiating`, `Open` → `interested`, etc.), and creates a lead per row with a recognized status.
   - `GET /api/export/contacts?format=csv|xlsx` and `GET /api/export/leads?format=csv|xlsx` stream downloads of the org's data.
 - Frontend: `pages/Import.tsx` is a 4-step wizard (upload → map → progress → done). `components/ExportMenu.tsx` is the CSV/Excel dropdown surfaced on Contacts and Pipeline.
 

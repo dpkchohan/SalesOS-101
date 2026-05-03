@@ -28,6 +28,7 @@ import {
   leadsTable,
 } from "@workspace/db";
 import { requireAuth, type AuthenticatedRequest } from "../lib/auth";
+import { assignCustomerNo, normalizePhone } from "../lib/dedup";
 import {
   parseSmartFile,
   analyzePreview,
@@ -403,39 +404,89 @@ async function processBatch(
       const companyId = c.company ? await getOrCreateCompany(c.company) : null;
 
       let contactId: string | null = null;
+      const phoneNorm = normalizePhone(c.phone);
       if (c.email) {
         // Race-safe upsert keyed on the partial unique index
         // (org_id, lower(email)) WHERE email IS NOT NULL.
         // Drizzle's typed builder can't express expressional conflict targets,
         // so we drop to raw SQL. xmax=0 lets us tell INSERT vs UPDATE.
         const contactName = c.name || c.email || "Unnamed Contact";
-        const result = await db.execute<{ id: string; was_inserted: boolean }>(sql`
-          INSERT INTO contacts (org_id, company_id, name, email, phone, title, import_job_id)
-          VALUES (${job.orgId}, ${companyId}, ${contactName}, ${c.email},
-                  ${c.phone ?? null}, ${c.title ?? null}, ${job.id})
+        const newCustomerNo = await assignCustomerNo(job.orgId);
+        const result = await db.execute<{ id: string; was_inserted: boolean; customer_no: string | null }>(sql`
+          INSERT INTO contacts (org_id, company_id, customer_no, name, email, email_normalized, phone, phone_normalized, title, import_job_id)
+          VALUES (${job.orgId}, ${companyId}, ${newCustomerNo}, ${contactName}, ${c.email}, ${c.email},
+                  ${c.phone ?? null}, ${phoneNorm}, ${c.title ?? null}, ${job.id})
           ON CONFLICT (org_id, lower(email)) WHERE email IS NOT NULL
           DO UPDATE SET
             name = COALESCE(NULLIF(EXCLUDED.name, ''), contacts.name),
             phone = COALESCE(EXCLUDED.phone, contacts.phone),
+            phone_normalized = COALESCE(EXCLUDED.phone_normalized, contacts.phone_normalized),
             title = COALESCE(EXCLUDED.title, contacts.title),
             company_id = COALESCE(EXCLUDED.company_id, contacts.company_id),
             import_job_id = EXCLUDED.import_job_id,
             updated_at = NOW()
-          RETURNING id, (xmax = 0) AS was_inserted
+          RETURNING id, (xmax = 0) AS was_inserted, customer_no
         `);
         const row = result.rows[0];
         contactId = row.id;
         if (row.was_inserted) contactsCreated++;
         else contactsUpdated++;
+      } else if (phoneNorm) {
+        // Phone-only dedup path
+        const existing = await db
+          .select({ id: contactsTable.id })
+          .from(contactsTable)
+          .where(
+            and(
+              eq(contactsTable.orgId, job.orgId),
+              eq(contactsTable.isDuplicate, false),
+              eq(contactsTable.phoneNormalized, phoneNorm),
+            ),
+          )
+          .limit(1);
+        if (existing[0]) {
+          contactId = existing[0].id;
+          await db
+            .update(contactsTable)
+            .set({
+              name: c.name || undefined,
+              title: c.title || undefined,
+              companyId: companyId ?? undefined,
+              importJobId: job.id,
+            })
+            .where(eq(contactsTable.id, contactId));
+          contactsUpdated++;
+        } else {
+          const customerNo = await assignCustomerNo(job.orgId);
+          const [created] = await db
+            .insert(contactsTable)
+            .values({
+              orgId: job.orgId,
+              companyId,
+              customerNo,
+              name: c.name || "Unnamed Contact",
+              email: null,
+              phone: c.phone,
+              phoneNormalized: phoneNorm,
+              title: c.title,
+              importJobId: job.id,
+            })
+            .returning({ id: contactsTable.id });
+          contactId = created.id;
+          contactsCreated++;
+        }
       } else {
+        const customerNo = await assignCustomerNo(job.orgId);
         const [created] = await db
           .insert(contactsTable)
           .values({
             orgId: job.orgId,
             companyId,
+            customerNo,
             name: c.name || "Unnamed Contact",
             email: null,
             phone: c.phone,
+            phoneNormalized: phoneNorm,
             title: c.title,
             importJobId: job.id,
           })

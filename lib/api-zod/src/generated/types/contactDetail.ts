@@ -13,6 +13,8 @@ export interface ContactDetail {
   id: string;
   /** @nullable */
   companyId?: string | null;
+  /** @nullable */
+  customerNo?: string | null;
   company?: Company | null;
   name: string;
   /** @nullable */
@@ -24,6 +26,13 @@ export interface ContactDetail {
   tags?: string[];
   leads: Lead[];
   interactions: Interaction[];
+  isDuplicate?: boolean;
+  /** @nullable */
+  duplicateOf?: string | null;
+  /** @nullable */
+  mergedAt?: Date | null;
+  /** @nullable */
+  mergedReason?: string | null;
   createdAt: Date;
   updatedAt?: Date;
 }

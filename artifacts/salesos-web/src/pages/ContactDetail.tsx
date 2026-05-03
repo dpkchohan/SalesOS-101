@@ -2,6 +2,8 @@ import { Link, useParams } from "wouter";
 import {
   useGetContact,
   useUpdateContact,
+  useGetRelatedContacts,
+  getGetRelatedContactsQueryKey,
   getGetContactQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -67,7 +69,19 @@ export default function ContactDetail() {
           </Link>
       </div>
       <PageHeader
-        title={data.name}
+        title={
+          <span className="flex items-center gap-2 flex-wrap">
+            <span>{data.name}</span>
+            {data.customerNo && (
+              <span
+                className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-primary/10 text-primary"
+                data-testid="contact-cust-badge"
+              >
+                {data.customerNo}
+              </span>
+            )}
+          </span>
+        }
         subtitle={data.title ?? "Contact"}
         right={
           <button
@@ -129,6 +143,8 @@ export default function ContactDetail() {
               </div>
             )}
           </div>
+
+          <RelatedPanel id={id} />
 
           <div className="rounded-2xl bg-card border border-card-border p-5">
             <h2 className="text-[13px] font-bold uppercase tracking-wider text-muted-foreground mb-3">
@@ -248,6 +264,77 @@ export default function ContactDetail() {
           </motion.form>
         </div>
       )}
+    </div>
+  );
+}
+
+function RelatedPanel({ id }: { id: string }) {
+  const { data, isLoading } = useGetRelatedContacts(id, {
+    query: { enabled: !!id, queryKey: getGetRelatedContactsQueryKey(id) },
+  });
+  if (isLoading) return null;
+  if (!data) return null;
+  const total =
+    data.duplicates.length + data.sameCompany.length + data.sameDomain.length;
+  if (total === 0) return null;
+  return (
+    <div className="rounded-2xl bg-card border border-card-border p-5" data-testid="related-panel">
+      <h2 className="text-[13px] font-bold uppercase tracking-wider text-muted-foreground mb-3">
+        Related ({total})
+      </h2>
+      {data.duplicates.length > 0 && (
+        <RelatedSection label="Merged duplicates" rows={data.duplicates} testid="related-duplicates" muted />
+      )}
+      {data.sameCompany.length > 0 && (
+        <RelatedSection label="Same company" rows={data.sameCompany} testid="related-same-company" />
+      )}
+      {data.sameDomain.length > 0 && (
+        <RelatedSection label="Same email domain" rows={data.sameDomain} testid="related-same-domain" />
+      )}
+    </div>
+  );
+}
+
+function RelatedSection({
+  label,
+  rows,
+  testid,
+  muted,
+}: {
+  label: string;
+  rows: { id: string; name: string; customerNo?: string | null; email?: string | null }[];
+  testid: string;
+  muted?: boolean;
+}) {
+  return (
+    <div className="mt-3" data-testid={testid}>
+      <div className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
+        {label}
+      </div>
+      <div className="space-y-1.5">
+        {rows.slice(0, 6).map((c) => (
+          <Link
+            key={c.id}
+            to={`/contacts/${c.id}`}
+            className={cn(
+              "flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-md",
+              muted ? "bg-muted/30 hover:bg-muted/60" : "bg-muted/40 hover:bg-muted",
+            )}
+          >
+            <div className="min-w-0">
+              <div className="text-[12.5px] font-semibold truncate">{c.name}</div>
+              {c.email && (
+                <div className="text-[10.5px] text-muted-foreground truncate">{c.email}</div>
+              )}
+            </div>
+            {c.customerNo && (
+              <span className="text-[10px] font-mono text-muted-foreground flex-shrink-0">
+                {c.customerNo}
+              </span>
+            )}
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }

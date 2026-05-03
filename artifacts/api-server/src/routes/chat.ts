@@ -12,6 +12,7 @@ import {
 } from "@workspace/db";
 import { SendChatBody, SendChatResponse } from "@workspace/api-zod";
 import { requireAuth, type AuthenticatedRequest } from "../lib/auth";
+import { assignCustomerNo, findDuplicate, normalizeEmail, normalizePhone } from "../lib/dedup";
 import { claudeJson } from "../lib/claude";
 import { generateProposalHtml } from "../lib/proposalGen";
 import { sendProposalEmail } from "../lib/gmail";
@@ -139,6 +140,9 @@ router.post("/chat", requireAuth, async (req, res): Promise<void> => {
     taskId: null as string | null,
     interactionId: null as string | null,
     documentId: null as string | null,
+    duplicateDetected: null as boolean | null,
+    duplicateContact: null as Record<string, unknown> | null,
+    duplicateMatchedField: null as string | null,
   };
 
   try {
@@ -163,18 +167,47 @@ router.post("/chat", requireAuth, async (req, res): Promise<void> => {
         reply.leadId = l.id;
       }
     } else if (intent.intent === "create_contact" && intent.contact?.name) {
-      const [c] = await db
-        .insert(contactsTable)
-        .values({
-          orgId: r.orgId,
-          name: intent.contact.name,
-          email: intent.contact.email ?? null,
-          phone: intent.contact.phone ?? null,
-          title: intent.contact.title ?? null,
-          tags: [],
-        })
-        .returning();
-      reply.contactId = c.id;
+      const dup = await findDuplicate({
+        orgId: r.orgId,
+        email: intent.contact.email ?? null,
+        phone: intent.contact.phone ?? null,
+      });
+      if (dup) {
+        reply.duplicateDetected = true;
+        reply.duplicateMatchedField = dup.matchedField;
+        reply.duplicateContact = {
+          id: dup.contact.id,
+          customerNo: dup.contact.customerNo,
+          name: dup.contact.name,
+          email: dup.contact.email,
+          phone: dup.contact.phone,
+          companyId: dup.contact.companyId,
+          title: dup.contact.title,
+          tags: dup.contact.tags,
+          createdAt: dup.contact.createdAt,
+          updatedAt: dup.contact.updatedAt,
+        };
+        reply.contactId = dup.contact.id;
+        reply.message = `Looks like ${dup.contact.name} (${dup.contact.customerNo ?? "no CUST#"}) already exists with the same ${dup.matchedField}. Open them or force-create from the contact form.`;
+      } else {
+        const customerNo = await assignCustomerNo(r.orgId);
+        const [c] = await db
+          .insert(contactsTable)
+          .values({
+            orgId: r.orgId,
+            customerNo,
+            name: intent.contact.name,
+            email: intent.contact.email ?? null,
+            emailNormalized: normalizeEmail(intent.contact.email ?? null),
+            phone: intent.contact.phone ?? null,
+            phoneNormalized: normalizePhone(intent.contact.phone ?? null),
+            title: intent.contact.title ?? null,
+            tags: [],
+          })
+          .returning();
+        reply.contactId = c.id;
+        reply.message = `Added ${c.name} (${customerNo}).`;
+      }
     } else if (intent.intent === "create_task" && intent.task?.title) {
       let leadId: string | null = null;
       if (intent.contactName) {

@@ -17,4 +17,6 @@ export interface ContactInput {
   /** @nullable */
   title?: string | null;
   tags?: string[];
+  /** Skip duplicate detection and force-create the contact. */
+  force?: boolean;
 }

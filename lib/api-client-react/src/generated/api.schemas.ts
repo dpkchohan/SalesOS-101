@@ -179,6 +179,8 @@ export interface Contact {
   id: string;
   /** @nullable */
   companyId?: string | null;
+  /** @nullable */
+  customerNo?: string | null;
   name: string;
   /** @nullable */
   email?: string | null;
@@ -202,7 +204,25 @@ export interface ContactInput {
   /** @nullable */
   title?: string | null;
   tags?: string[];
+  /** Skip duplicate detection and force-create the contact. */
+  force?: boolean;
 }
+
+export type DuplicateDetectedReplyMatchedField =
+  (typeof DuplicateDetectedReplyMatchedField)[keyof typeof DuplicateDetectedReplyMatchedField];
+
+export const DuplicateDetectedReplyMatchedField = {
+  email: "email",
+  phone: "phone",
+} as const;
+
+export interface DuplicateDetectedReply {
+  duplicateDetected: boolean;
+  matchedField: DuplicateDetectedReplyMatchedField;
+  existing: Contact;
+}
+
+export type CreateContactReply = Contact | DuplicateDetectedReply;
 
 export interface Lead {
   id: string;
@@ -252,6 +272,8 @@ export interface ContactDetail {
   id: string;
   /** @nullable */
   companyId?: string | null;
+  /** @nullable */
+  customerNo?: string | null;
   company?: Company | null;
   name: string;
   /** @nullable */
@@ -263,6 +285,13 @@ export interface ContactDetail {
   tags?: string[];
   leads: Lead[];
   interactions: Interaction[];
+  isDuplicate?: boolean;
+  /** @nullable */
+  duplicateOf?: string | null;
+  /** @nullable */
+  mergedAt?: string | null;
+  /** @nullable */
+  mergedReason?: string | null;
   createdAt: string;
   updatedAt?: string;
 }
@@ -273,6 +302,8 @@ export interface ContactWithCompany {
   companyId?: string | null;
   /** @nullable */
   companyName?: string | null;
+  /** @nullable */
+  customerNo?: string | null;
   name: string;
   /** @nullable */
   email?: string | null;
@@ -290,6 +321,90 @@ export interface ContactsPage {
   total: number;
   page: number;
   limit: number;
+}
+
+export type DuplicateContactPrimary = {
+  id?: string;
+  /** @nullable */
+  customerNo?: string | null;
+  name?: string;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  phone?: string | null;
+} | null;
+
+export interface DuplicateContact {
+  id: string;
+  /** @nullable */
+  customerNo?: string | null;
+  name: string;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  title?: string | null;
+  /** @nullable */
+  mergedAt?: string | null;
+  /** @nullable */
+  mergedReason?: string | null;
+  createdAt: string;
+  primary?: DuplicateContactPrimary;
+}
+
+export interface DuplicatesResponse {
+  data: DuplicateContact[];
+}
+
+export interface RelatedContactsResponse {
+  duplicates: Contact[];
+  sameCompany: Contact[];
+  sameDomain: Contact[];
+}
+
+export interface MergeContactsInput {
+  primaryId: string;
+  duplicateId: string;
+  /** @nullable */
+  reason?: string | null;
+}
+
+export interface MergeContactsResult {
+  success: boolean;
+  primary: Contact;
+  duplicate: Contact;
+}
+
+export interface DeduplicateInput {
+  apply?: boolean;
+}
+
+export type DuplicateClusterField =
+  (typeof DuplicateClusterField)[keyof typeof DuplicateClusterField];
+
+export const DuplicateClusterField = {
+  email: "email",
+  phone: "phone",
+} as const;
+
+export interface DuplicateCluster {
+  field: DuplicateClusterField;
+  key: string;
+  ids: string[];
+}
+
+export interface DeduplicateResult {
+  clusters: DuplicateCluster[];
+  totalClusters: number;
+  mergedCount: number;
+  applied: boolean;
+}
+
+export interface BackfillContactsResult {
+  totalScanned: number;
+  customerNosAssigned: number;
+  normalized: number;
 }
 
 export type LeadWithContact = Lead & {
@@ -609,6 +724,18 @@ export interface ChatInput {
   text: string;
 }
 
+/**
+ * @nullable
+ */
+export type ChatReplyDuplicateMatchedField =
+  | (typeof ChatReplyDuplicateMatchedField)[keyof typeof ChatReplyDuplicateMatchedField]
+  | null;
+
+export const ChatReplyDuplicateMatchedField = {
+  email: "email",
+  phone: "phone",
+} as const;
+
 export interface ChatReply {
   success: boolean;
   message: string;
@@ -623,6 +750,14 @@ export interface ChatReply {
   interactionId?: string | null;
   /** @nullable */
   documentId?: string | null;
+  /**
+   * True when a chat create_contact intent was blocked because a duplicate exists.
+   * @nullable
+   */
+  duplicateDetected?: boolean | null;
+  duplicateContact?: Contact | null;
+  /** @nullable */
+  duplicateMatchedField?: ChatReplyDuplicateMatchedField;
 }
 
 export interface TranscribeInput {

@@ -177,6 +177,7 @@ export const ListContactsResponse = zod.object({
       id: zod.string(),
       companyId: zod.string().nullish(),
       companyName: zod.string().nullish(),
+      customerNo: zod.string().nullish(),
       name: zod.string(),
       email: zod.string().nullish(),
       phone: zod.string().nullish(),
@@ -198,6 +199,175 @@ export const CreateContactBody = zod.object({
   phone: zod.string().nullish(),
   title: zod.string().nullish(),
   tags: zod.array(zod.string()).optional(),
+  force: zod
+    .boolean()
+    .optional()
+    .describe("Skip duplicate detection and force-create the contact."),
+});
+
+export const CreateContactResponse = zod.object({
+  duplicateDetected: zod.literal(true),
+  matchedField: zod.enum(["email", "phone"]),
+  existing: zod.object({
+    id: zod.string(),
+    companyId: zod.string().nullish(),
+    customerNo: zod.string().nullish(),
+    name: zod.string(),
+    email: zod.string().nullish(),
+    phone: zod.string().nullish(),
+    title: zod.string().nullish(),
+    tags: zod.array(zod.string()).optional(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date().optional(),
+  }),
+});
+
+/**
+ * @summary Soft-deleted duplicate contacts
+ */
+export const ListDuplicateContactsResponse = zod.object({
+  data: zod.array(
+    zod.object({
+      id: zod.string(),
+      customerNo: zod.string().nullish(),
+      name: zod.string(),
+      email: zod.string().nullish(),
+      phone: zod.string().nullish(),
+      title: zod.string().nullish(),
+      mergedAt: zod.coerce.date().nullish(),
+      mergedReason: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
+      primary: zod
+        .union([
+          zod.object({
+            id: zod.string().optional(),
+            customerNo: zod.string().nullish(),
+            name: zod.string().optional(),
+            email: zod.string().nullish(),
+            phone: zod.string().nullish(),
+          }),
+          zod.null(),
+        ])
+        .optional(),
+    }),
+  ),
+});
+
+/**
+ * @summary Soft-merge a duplicate into a primary contact
+ */
+export const MergeContactsBody = zod.object({
+  primaryId: zod.string(),
+  duplicateId: zod.string(),
+  reason: zod.string().nullish(),
+});
+
+export const MergeContactsResponse = zod.object({
+  success: zod.boolean(),
+  primary: zod.object({
+    id: zod.string(),
+    companyId: zod.string().nullish(),
+    customerNo: zod.string().nullish(),
+    name: zod.string(),
+    email: zod.string().nullish(),
+    phone: zod.string().nullish(),
+    title: zod.string().nullish(),
+    tags: zod.array(zod.string()).optional(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date().optional(),
+  }),
+  duplicate: zod.object({
+    id: zod.string(),
+    companyId: zod.string().nullish(),
+    customerNo: zod.string().nullish(),
+    name: zod.string(),
+    email: zod.string().nullish(),
+    phone: zod.string().nullish(),
+    title: zod.string().nullish(),
+    tags: zod.array(zod.string()).optional(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date().optional(),
+  }),
+});
+
+/**
+ * @summary Find duplicate clusters; optionally auto-merge them
+ */
+export const deduplicateContactsBodyApplyDefault = false;
+
+export const DeduplicateContactsBody = zod.object({
+  apply: zod.boolean().default(deduplicateContactsBodyApplyDefault),
+});
+
+export const DeduplicateContactsResponse = zod.object({
+  clusters: zod.array(
+    zod.object({
+      field: zod.enum(["email", "phone"]),
+      key: zod.string(),
+      ids: zod.array(zod.string()),
+    }),
+  ),
+  totalClusters: zod.number(),
+  mergedCount: zod.number(),
+  applied: zod.boolean(),
+});
+
+/**
+ * @summary Assign per-org customer numbers and normalize email/phone for legacy rows
+ */
+export const BackfillContactsResponse = zod.object({
+  totalScanned: zod.number(),
+  customerNosAssigned: zod.number(),
+  normalized: zod.number(),
+});
+
+export const GetRelatedContactsParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetRelatedContactsResponse = zod.object({
+  duplicates: zod.array(
+    zod.object({
+      id: zod.string(),
+      companyId: zod.string().nullish(),
+      customerNo: zod.string().nullish(),
+      name: zod.string(),
+      email: zod.string().nullish(),
+      phone: zod.string().nullish(),
+      title: zod.string().nullish(),
+      tags: zod.array(zod.string()).optional(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date().optional(),
+    }),
+  ),
+  sameCompany: zod.array(
+    zod.object({
+      id: zod.string(),
+      companyId: zod.string().nullish(),
+      customerNo: zod.string().nullish(),
+      name: zod.string(),
+      email: zod.string().nullish(),
+      phone: zod.string().nullish(),
+      title: zod.string().nullish(),
+      tags: zod.array(zod.string()).optional(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date().optional(),
+    }),
+  ),
+  sameDomain: zod.array(
+    zod.object({
+      id: zod.string(),
+      companyId: zod.string().nullish(),
+      customerNo: zod.string().nullish(),
+      name: zod.string(),
+      email: zod.string().nullish(),
+      phone: zod.string().nullish(),
+      title: zod.string().nullish(),
+      tags: zod.array(zod.string()).optional(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date().optional(),
+    }),
+  ),
 });
 
 export const GetContactParams = zod.object({
@@ -207,6 +377,7 @@ export const GetContactParams = zod.object({
 export const GetContactResponse = zod.object({
   id: zod.string(),
   companyId: zod.string().nullish(),
+  customerNo: zod.string().nullish(),
   company: zod
     .union([
       zod.object({
@@ -271,6 +442,10 @@ export const GetContactResponse = zod.object({
       createdAt: zod.coerce.date(),
     }),
   ),
+  isDuplicate: zod.boolean().optional(),
+  duplicateOf: zod.string().nullish(),
+  mergedAt: zod.coerce.date().nullish(),
+  mergedReason: zod.string().nullish(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date().optional(),
 });
@@ -286,11 +461,16 @@ export const UpdateContactBody = zod.object({
   phone: zod.string().nullish(),
   title: zod.string().nullish(),
   tags: zod.array(zod.string()).optional(),
+  force: zod
+    .boolean()
+    .optional()
+    .describe("Skip duplicate detection and force-create the contact."),
 });
 
 export const UpdateContactResponse = zod.object({
   id: zod.string(),
   companyId: zod.string().nullish(),
+  customerNo: zod.string().nullish(),
   name: zod.string(),
   email: zod.string().nullish(),
   phone: zod.string().nullish(),
@@ -434,6 +614,7 @@ export const GetLeadResponse = zod.object({
   contact: zod.object({
     id: zod.string(),
     companyId: zod.string().nullish(),
+    customerNo: zod.string().nullish(),
     name: zod.string(),
     email: zod.string().nullish(),
     phone: zod.string().nullish(),
@@ -1154,6 +1335,32 @@ export const SendChatResponse = zod.object({
   taskId: zod.string().nullish(),
   interactionId: zod.string().nullish(),
   documentId: zod.string().nullish(),
+  duplicateDetected: zod
+    .boolean()
+    .nullish()
+    .describe(
+      "True when a chat create_contact intent was blocked because a duplicate exists.",
+    ),
+  duplicateContact: zod
+    .union([
+      zod.object({
+        id: zod.string(),
+        companyId: zod.string().nullish(),
+        customerNo: zod.string().nullish(),
+        name: zod.string(),
+        email: zod.string().nullish(),
+        phone: zod.string().nullish(),
+        title: zod.string().nullish(),
+        tags: zod.array(zod.string()).optional(),
+        createdAt: zod.coerce.date(),
+        updatedAt: zod.coerce.date().optional(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
+  duplicateMatchedField: zod
+    .union([zod.literal("email"), zod.literal("phone"), zod.literal(null)])
+    .nullish(),
 });
 
 /**

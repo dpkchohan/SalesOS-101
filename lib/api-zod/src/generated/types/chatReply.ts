@@ -5,6 +5,8 @@
  * SalesOS API — sales CRM with AI chat intent and red flag analysis
  * OpenAPI spec version: 0.1.0
  */
+import type { ChatReplyDuplicateMatchedField } from "./chatReplyDuplicateMatchedField";
+import type { Contact } from "./contact";
 
 export interface ChatReply {
   success: boolean;
@@ -20,4 +22,12 @@ export interface ChatReply {
   interactionId?: string | null;
   /** @nullable */
   documentId?: string | null;
+  /**
+   * True when a chat create_contact intent was blocked because a duplicate exists.
+   * @nullable
+   */
+  duplicateDetected?: boolean | null;
+  duplicateContact?: Contact | null;
+  /** @nullable */
+  duplicateMatchedField?: ChatReplyDuplicateMatchedField;
 }
