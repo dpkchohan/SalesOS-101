@@ -490,6 +490,14 @@ router.post("/contacts/merge", requireAuth, async (req, res): Promise<void> => {
       res.status(404).json({ error: "Contact(s) not found" });
       return;
     }
+    if (dup.isDuplicate) {
+      res.status(409).json({ error: "Duplicate contact is already merged" });
+      return;
+    }
+    if (primary.isDuplicate) {
+      res.status(409).json({ error: "Primary contact is itself a merged duplicate" });
+      return;
+    }
 
     // Reassign leads + interactions are reachable through leads, so leads update is enough.
     await db

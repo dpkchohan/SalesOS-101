@@ -11,7 +11,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Search, Briefcase, Mail, Phone, X, Users, Copy, Wand2 } from "lucide-react";
+import { Plus, Search, Briefcase, Mail, Phone, X, Users, Copy, Wand2, GitMerge, Check } from "lucide-react";
 import { PageHeader } from "@/components/AppLayout";
 import { ExportMenu } from "@/components/ExportMenu";
 import { initials, relativeTime } from "@/lib/format";
@@ -24,6 +24,8 @@ export default function Contacts() {
   const [page, setPage] = useState(1);
   const [showNew, setShowNew] = useState(false);
   const [tab, setTab] = useState<Tab>("all");
+  const [mergeFor, setMergeFor] = useState<{ id: string; name: string; customerNo?: string | null } | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const params = { search: search || undefined, page, limit: 25 };
   const { data, isLoading } = useListContacts(params, {
     query: { queryKey: getListContactsQueryKey(params), enabled: tab === "all" },
@@ -113,8 +115,9 @@ export default function Contacts() {
               exit={{ opacity: 0 }}
               transition={{ delay: Math.min(i * 0.02, 0.2) }}
             >
+              <div className="relative group">
               <Link to={`/contacts/${c.id}`}
-                  className="flex items-center gap-3 p-3 rounded-xl bg-card border border-card-border hover:border-primary/40 transition-colors"
+                  className="flex items-center gap-3 p-3 rounded-xl bg-card border border-card-border hover:border-primary/40 transition-colors pr-12"
                   data-testid={`contact-${c.id}`}
                 >
                   <div className="w-10 h-10 rounded-full bg-primary/15 text-primary grid place-items-center font-bold text-[13px] flex-shrink-0">
@@ -159,6 +162,20 @@ export default function Contacts() {
                     {relativeTime(c.createdAt)}
                   </div>
                 </Link>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setMergeFor({ id: c.id, name: c.name, customerNo: c.customerNo });
+                  }}
+                  title="Merge into another contact"
+                  data-testid={`button-merge-${c.id}`}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors md:opacity-0 md:group-hover:opacity-100"
+                >
+                  <GitMerge size={15} />
+                </button>
+              </div>
             </motion.div>
           ))}
         </AnimatePresence>
@@ -186,6 +203,171 @@ export default function Contacts() {
       </div>
       )}
       {showNew && <NewContactDialog onClose={() => setShowNew(false)} />}
+      {mergeFor && (
+        <MergeDialog
+          duplicate={mergeFor}
+          onClose={() => setMergeFor(null)}
+          onMerged={(primaryName) => {
+            setMergeFor(null);
+            setToast(`Merged "${mergeFor.name}" into "${primaryName}".`);
+            setTimeout(() => setToast(null), 4000);
+          }}
+        />
+      )}
+      {toast && (
+        <div
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-lg bg-foreground text-background text-[13px] font-medium shadow-lg flex items-center gap-2"
+          data-testid="merge-toast"
+        >
+          <Check size={14} /> {toast}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MergeDialog({
+  duplicate,
+  onClose,
+  onMerged,
+}: {
+  duplicate: { id: string; name: string; customerNo?: string | null };
+  onClose: () => void;
+  onMerged: (primaryName: string) => void;
+}) {
+  const qc = useQueryClient();
+  const merge = useMergeContacts();
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<{ id: string; name: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const params = { search: search || undefined, page: 1, limit: 10 };
+  const { data, isLoading } = useListContacts(params, {
+    query: { queryKey: getListContactsQueryKey(params) },
+  });
+  const candidates = (data?.data ?? []).filter((c) => c.id !== duplicate.id);
+
+  const doMerge = () => {
+    if (!selected) return;
+    setError(null);
+    merge.mutate(
+      { data: { primaryId: selected.id, duplicateId: duplicate.id, reason: "manual-merge" } },
+      {
+        onSuccess: () => {
+          qc.invalidateQueries({ queryKey: getListContactsQueryKey() });
+          qc.invalidateQueries({ queryKey: getListDuplicateContactsQueryKey() });
+          onMerged(selected.name);
+        },
+        onError: (e: unknown) => {
+          setError(e instanceof Error ? e.message : "Merge failed.");
+        },
+      },
+    );
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm grid place-items-end md:place-items-center p-0 md:p-4">
+      <motion.div
+        initial={{ y: 40, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        className="bg-card w-full md:max-w-md rounded-t-2xl md:rounded-2xl p-5 border border-card-border"
+        data-testid="merge-dialog"
+      >
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-[16px] font-bold tracking-tight">Merge contact</h2>
+          <button type="button" onClick={onClose} className="p-1 rounded-md hover:bg-muted">
+            <X size={16} />
+          </button>
+        </div>
+        <div className="text-[12.5px] text-muted-foreground mb-3">
+          Merging{" "}
+          <span className="font-semibold text-foreground">{duplicate.name}</span>
+          {duplicate.customerNo && (
+            <span className="ml-1 font-mono text-[10px] px-1 py-0.5 rounded bg-muted">
+              {duplicate.customerNo}
+            </span>
+          )}{" "}
+          into the contact you pick below. Leads and notes follow the primary; the
+          duplicate is hidden from your list.
+        </div>
+        <div className="relative mb-3">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="search"
+            autoFocus
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setSelected(null);
+            }}
+            placeholder="Search by name, email, or CUST-…"
+            data-testid="input-merge-search"
+            className="w-full bg-muted border border-card-border rounded-lg pl-9 pr-3 py-2 text-[13px] outline-none focus:border-primary"
+          />
+        </div>
+        <div className="max-h-64 overflow-y-auto space-y-1 mb-3" data-testid="merge-candidates">
+          {isLoading && (
+            <div className="text-[12px] text-muted-foreground p-2">Loading…</div>
+          )}
+          {!isLoading && candidates.length === 0 && (
+            <div className="text-[12px] text-muted-foreground p-2">
+              No other contacts match.
+            </div>
+          )}
+          {candidates.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => setSelected({ id: c.id, name: c.name })}
+              data-testid={`merge-candidate-${c.id}`}
+              className={cn(
+                "w-full flex items-center gap-2 p-2 rounded-md text-left text-[13px] transition-colors",
+                selected?.id === c.id
+                  ? "bg-primary/15 border border-primary/40"
+                  : "hover:bg-muted border border-transparent",
+              )}
+            >
+              <div className="w-7 h-7 rounded-full bg-primary/10 text-primary grid place-items-center font-bold text-[11px] flex-shrink-0">
+                {initials(c.name)}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-semibold truncate">{c.name}</span>
+                  {c.customerNo && (
+                    <span className="text-[10px] font-mono px-1 py-0.5 rounded bg-muted text-muted-foreground">
+                      {c.customerNo}
+                    </span>
+                  )}
+                </div>
+                {c.email && (
+                  <div className="text-[11px] text-muted-foreground truncate">{c.email}</div>
+                )}
+              </div>
+              {selected?.id === c.id && <Check size={14} className="text-primary" />}
+            </button>
+          ))}
+        </div>
+        {error && (
+          <div className="text-[12px] text-rose-600 mb-2" data-testid="merge-error">
+            {error}
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={doMerge}
+          disabled={!selected || merge.isPending}
+          data-testid="button-confirm-merge"
+          className={cn(
+            "w-full bg-primary text-primary-foreground font-semibold text-[13px] py-2.5 rounded-lg",
+            "hover:bg-primary/90 transition-colors disabled:opacity-50",
+          )}
+        >
+          {merge.isPending
+            ? "Merging…"
+            : selected
+              ? `Merge into ${selected.name}`
+              : "Pick a primary contact"}
+        </button>
+      </motion.div>
     </div>
   );
 }
