@@ -20,6 +20,8 @@ import {
   GetDocumentParams,
   GetDocumentResponse,
   GenerateProposalBody,
+  RegenerateProposalParams,
+  RegenerateProposalBody,
   SendDocumentEmailParams,
   SendDocumentEmailBody,
   SendDocumentEmailResponse,
@@ -156,6 +158,99 @@ router.post("/documents/generate-proposal", requireAuth, async (req, res): Promi
     .returning();
 
   res.status(201).json(row);
+});
+
+router.post("/documents/:id/regenerate-proposal", requireAuth, async (req, res): Promise<void> => {
+  const r = req as AuthenticatedRequest;
+  const params = RegenerateProposalParams.safeParse(req.params);
+  const body = RegenerateProposalBody.safeParse(req.body ?? {});
+  if (!params.success || !body.success) {
+    res.status(400).json({ error: "Invalid input" });
+    return;
+  }
+
+  const [doc] = await db
+    .select()
+    .from(documentsTable)
+    .where(and(eq(documentsTable.id, params.data.id), eq(documentsTable.orgId, r.orgId)));
+  if (!doc) {
+    res.status(404).json({ error: "Document not found" });
+    return;
+  }
+  if (doc.type !== "proposal") {
+    res.status(400).json({ error: "Only proposal documents can be regenerated" });
+    return;
+  }
+  if (doc.status !== "draft") {
+    res.status(400).json({ error: "Only draft proposals can be regenerated" });
+    return;
+  }
+  const notes = body.data.notes.trim();
+  if (!notes) {
+    res.status(400).json({ error: "Revision notes are required" });
+    return;
+  }
+
+  const [leadRow] = await db
+    .select({
+      lead: leadsTable,
+      contact: contactsTable,
+      company: companiesTable,
+    })
+    .from(leadsTable)
+    .leftJoin(
+      contactsTable,
+      and(eq(leadsTable.contactId, contactsTable.id), eq(contactsTable.orgId, r.orgId)),
+    )
+    .leftJoin(
+      companiesTable,
+      and(eq(contactsTable.companyId, companiesTable.id), eq(companiesTable.orgId, r.orgId)),
+    )
+    .where(and(eq(leadsTable.id, doc.leadId), eq(leadsTable.orgId, r.orgId)));
+
+  if (!leadRow || !leadRow.contact) {
+    res.status(404).json({ error: "Lead or contact not found" });
+    return;
+  }
+
+  const interactions = await db
+    .select()
+    .from(interactionsTable)
+    .where(and(eq(interactionsTable.leadId, leadRow.lead.id), eq(interactionsTable.orgId, r.orgId)))
+    .orderBy(desc(interactionsTable.date), desc(interactionsTable.createdAt))
+    .limit(15);
+
+  const [creds] = await db
+    .select()
+    .from(companyCredentialsTable)
+    .where(eq(companyCredentialsTable.orgId, r.orgId))
+    .limit(1);
+
+  let html: string;
+  try {
+    html = await generateProposalHtml({
+      branding: creds ?? null,
+      contact: leadRow.contact,
+      company: leadRow.company,
+      lead: leadRow.lead,
+      interactions,
+      extraContext: null,
+      regenerateInstruction: notes,
+      previousContent: doc.content,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Proposal regeneration failed");
+    res.status(500).json({ error: "Failed to regenerate proposal" });
+    return;
+  }
+
+  const [updated] = await db
+    .update(documentsTable)
+    .set({ content: html, status: "draft" })
+    .where(and(eq(documentsTable.id, doc.id), eq(documentsTable.orgId, r.orgId)))
+    .returning();
+
+  res.json(GetDocumentResponse.parse(updated));
 });
 
 router.get("/documents/:id", requireAuth, async (req, res): Promise<void> => {

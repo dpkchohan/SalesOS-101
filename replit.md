@@ -32,6 +32,7 @@ A mobile-first sales CRM built on the pnpm workspace monorepo. SalesOS gives sal
 - Chat: a `send_proposal` intent in `routes/chat.ts` resolves a contact by name, finds an open lead, generates the HTML proposal, and returns the new `documentId` on the chat reply so the UI can deep-link to the preview.
 - Settings page (`pages/Settings.tsx`) has Account and Company tabs. The Company tab is the branding form (logo file → base64 ≤ ~2 MB, three color pickers with hex inputs, contact + footer fields, sticky save).
 - Document detail page (`pages/DocumentDetail.tsx`, route `/documents/:id`) previews the proposal HTML in a sandboxed iframe via `srcdoc`, with Print/Save-PDF (`iframe.contentWindow.print()`), Mark sent, and Mark approved actions. The iframe uses `sandbox="allow-same-origin allow-modals"` so generated HTML cannot run scripts.
+- Draft proposals can be tweaked before sending: an **Edit** button opens an in-page HTML editor (textarea seeded from the current draft) that saves via `PUT /api/documents/:id`, and a **Regenerate from notes** panel calls `POST /api/documents/:id/regenerate-proposal { notes }` which re-runs Claude with the original lead context plus the rep's revision instructions and a stripped-text reference of the previous draft. Both surfaces are draft-only (server enforces `status === "draft"`).
 
 ## Import / Export
 

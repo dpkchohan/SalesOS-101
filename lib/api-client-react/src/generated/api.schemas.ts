@@ -525,6 +525,14 @@ export interface GenerateProposalInput {
   context?: string | null;
 }
 
+export interface RegenerateProposalInput {
+  /**
+   * Revision instructions from the sales rep (e.g. 'tighten pricing, add a security section')
+   * @minLength 1
+   */
+  notes: string;
+}
+
 export interface CompanyCredentials {
   /** @nullable */
   id?: string | null;

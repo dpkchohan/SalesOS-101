@@ -57,6 +57,7 @@ import type {
   Me,
   NotFoundResponse,
   Pipeline,
+  RegenerateProposalInput,
   SendDocumentEmailInput,
   SendDocumentEmailResult,
   SpeakInput,
@@ -2573,6 +2574,93 @@ export const useSendDocumentEmail = <
   TContext
 > => {
   return useMutation(getSendDocumentEmailMutationOptions(options));
+};
+
+/**
+ * @summary Re-run Claude on an existing proposal with revision notes from the sales rep
+ */
+export const getRegenerateProposalUrl = (id: string) => {
+  return `/api/documents/${id}/regenerate-proposal`;
+};
+
+export const regenerateProposal = async (
+  id: string,
+  regenerateProposalInput: RegenerateProposalInput,
+  options?: RequestInit,
+): Promise<Document> => {
+  return customFetch<Document>(getRegenerateProposalUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(regenerateProposalInput),
+  });
+};
+
+export const getRegenerateProposalMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof regenerateProposal>>,
+    TError,
+    { id: string; data: BodyType<RegenerateProposalInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof regenerateProposal>>,
+  TError,
+  { id: string; data: BodyType<RegenerateProposalInput> },
+  TContext
+> => {
+  const mutationKey = ["regenerateProposal"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof regenerateProposal>>,
+    { id: string; data: BodyType<RegenerateProposalInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return regenerateProposal(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RegenerateProposalMutationResult = NonNullable<
+  Awaited<ReturnType<typeof regenerateProposal>>
+>;
+export type RegenerateProposalMutationBody = BodyType<RegenerateProposalInput>;
+export type RegenerateProposalMutationError = ErrorType<void>;
+
+/**
+ * @summary Re-run Claude on an existing proposal with revision notes from the sales rep
+ */
+export const useRegenerateProposal = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof regenerateProposal>>,
+    TError,
+    { id: string; data: BodyType<RegenerateProposalInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof regenerateProposal>>,
+  TError,
+  { id: string; data: BodyType<RegenerateProposalInput> },
+  TContext
+> => {
+  return useMutation(getRegenerateProposalMutationOptions(options));
 };
 
 /**

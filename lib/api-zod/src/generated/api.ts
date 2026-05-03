@@ -835,6 +835,34 @@ export const SendDocumentEmailResponse = zod.object({
 });
 
 /**
+ * @summary Re-run Claude on an existing proposal with revision notes from the sales rep
+ */
+export const RegenerateProposalParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const RegenerateProposalBody = zod.object({
+  notes: zod
+    .string()
+    .min(1)
+    .describe(
+      "Revision instructions from the sales rep (e.g. 'tighten pricing, add a security section')",
+    ),
+});
+
+export const RegenerateProposalResponse = zod.object({
+  id: zod.string(),
+  leadId: zod.string(),
+  type: zod.enum(["proposal", "contract", "case_study"]),
+  title: zod.string(),
+  content: zod.string().nullish(),
+  format: zod.string(),
+  status: zod.enum(["draft", "sent", "approved"]),
+  sentAt: zod.coerce.date().nullish(),
+  createdAt: zod.coerce.date(),
+});
+
+/**
  * @summary Generate a branded HTML proposal via Claude using lead context + company branding
  */
 export const GenerateProposalBody = zod.object({

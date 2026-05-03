@@ -456,6 +456,29 @@ paths:
         "502":
           description: Gmail send failed (not connected or upstream error)
 
+  /documents/{id}/regenerate-proposal:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string } }
+    post:
+      operationId: regenerateProposal
+      tags: [documents]
+      summary: Re-run Claude on an existing proposal with revision notes from the sales rep
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegenerateProposalInput" }
+      responses:
+        "200":
+          description: Updated proposal document (status reset to draft)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Document" }
+        "400":
+          description: Invalid input or document is not a proposal
+        "404":
+          description: Document, lead, or contact not found
+
   /documents/generate-proposal:
     post:
       operationId: generateProposal
@@ -1214,6 +1237,12 @@ components:
         leadId: { type: string }
         contactId: { type: ["string", "null"] }
         context: { type: ["string", "null"], description: "Optional extra context (e.g. 'discussed pricing and timeline')" }
+
+    RegenerateProposalInput:
+      type: object
+      required: [notes]
+      properties:
+        notes: { type: string, minLength: 1, description: "Revision instructions from the sales rep (e.g. 'tighten pricing, add a security section')" }
 
     CompanyCredentials:
       type: object

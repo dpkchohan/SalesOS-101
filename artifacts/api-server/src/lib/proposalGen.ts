@@ -14,6 +14,8 @@ interface ProposalInput {
   lead: Lead;
   interactions: Interaction[];
   extraContext: string | null;
+  regenerateInstruction?: string | null;
+  previousContent?: string | null;
 }
 
 interface ProposalSection {
@@ -80,7 +82,7 @@ function summarizeInteractions(interactions: Interaction[]): string {
 }
 
 export async function generateProposalHtml(input: ProposalInput): Promise<string> {
-  const { branding, contact, company, lead, interactions, extraContext } = input;
+  const { branding, contact, company, lead, interactions, extraContext, regenerateInstruction, previousContent } = input;
 
   const senderName = branding?.companyName ?? "Our Team";
   const primary = branding?.primaryColor ?? "#F94D00";
@@ -98,13 +100,23 @@ export async function generateProposalHtml(input: ProposalInput): Promise<string
 Prospect: ${contact.name}${contact.title ? `, ${contact.title}` : ""}${
     company ? ` at ${company.name}` : ""
   }${contact.email ? ` (${contact.email})` : ""}.
-Lead: stage="${lead.stage}", title="${lead.title ?? "(untitled)"}", value=${
-    lead.value ?? "unknown"
-  }, closeDate=${lead.closeDate ?? "unknown"}.
+Lead: stage="${lead.stage}", value=${
+    lead.valueUsd != null ? `$${lead.valueUsd} ${lead.currency ?? "USD"}` : "unknown"
+  }, closeDate=${lead.closeDate ?? "unknown"}, source=${lead.source ?? "unknown"}.
 Sender: ${senderName}.
 Recent conversation:
 ${summarizeInteractions(interactions)}
 ${extraContext ? `\nExtra context from sales rep: ${extraContext}` : ""}
+${
+  regenerateInstruction
+    ? `\nREVISION REQUEST FROM SALES REP — apply these changes carefully while keeping the structure professional:\n${regenerateInstruction}`
+    : ""
+}
+${
+  previousContent && regenerateInstruction
+    ? `\nPrevious draft for reference (rewrite, do not just append):\n${previousContent.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").slice(0, 3000)}`
+    : ""
+}
 `.trim();
 
   let ai: ProposalAi;
