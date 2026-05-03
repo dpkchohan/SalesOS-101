@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useClerk, useUser } from "@clerk/react";
 import {
@@ -30,6 +31,28 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const [loc] = useLocation();
   const { user } = useUser();
   const { signOut } = useClerk();
+
+  // Stop stray file drops anywhere outside an explicit drop zone from
+  // navigating the browser away (which would lose all in-page state).
+  // Drop zones (e.g. Chat) keep working because they call preventDefault on
+  // their own drop event and read e.dataTransfer.files synchronously before
+  // these window-level listeners run; calling preventDefault again here is a
+  // no-op for them and stops the browser's "open file" default everywhere
+  // else.
+  useEffect(() => {
+    const onDragOver = (e: DragEvent) => {
+      if (e.dataTransfer?.types?.includes("Files")) e.preventDefault();
+    };
+    const onDrop = (e: DragEvent) => {
+      if (e.dataTransfer?.types?.includes("Files")) e.preventDefault();
+    };
+    window.addEventListener("dragover", onDragOver);
+    window.addEventListener("drop", onDrop);
+    return () => {
+      window.removeEventListener("dragover", onDragOver);
+      window.removeEventListener("drop", onDrop);
+    };
+  }, []);
 
   const isActive = (to: string) =>
     to === "/" ? loc === "/" : loc === to || loc.startsWith(to + "/");
