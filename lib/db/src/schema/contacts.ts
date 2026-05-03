@@ -1,4 +1,5 @@
-import { pgTable, text, timestamp, uuid, index } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, uuid, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { organizationsTable } from "./organizations";
 import { companiesTable } from "./companies";
 
@@ -28,6 +29,11 @@ export const contactsTable = pgTable(
     index("contacts_org_idx").on(t.orgId),
     index("contacts_email_idx").on(t.email),
     index("contacts_company_idx").on(t.companyId),
+    // Race-safe per-org dedupe: enforce one contact per (org, normalized email)
+    // when an email is provided. NULL emails are allowed to repeat.
+    uniqueIndex("contacts_org_email_unique")
+      .on(t.orgId, sql`lower(${t.email})`)
+      .where(sql`${t.email} is not null`),
   ],
 );
 

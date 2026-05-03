@@ -689,3 +689,13 @@ export type AiSmartImportPreviewBody = {
 export type AiSmartImportExecuteBody = {
   jobId: string;
 };
+
+export type AiSmartImportWorkerBody = {
+  jobId: string;
+  /** @minimum 0 */
+  batchIndex: number;
+};
+
+export type AiSmartImportWorker200 = {
+  ok?: boolean;
+};

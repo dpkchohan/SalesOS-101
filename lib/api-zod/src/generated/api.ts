@@ -1034,6 +1034,24 @@ export const AiSmartImportExecuteResponse = zod.object({
 });
 
 /**
+ * @summary Internal endpoint - process a single batch for an import job. Requires the X-Internal-Worker header to match INTERNAL_WORKER_KEY.
+ */
+export const AiSmartImportWorkerHeader = zod.object({
+  "X-Internal-Worker": zod.string(),
+});
+
+export const aiSmartImportWorkerBodyBatchIndexMin = 0;
+
+export const AiSmartImportWorkerBody = zod.object({
+  jobId: zod.string(),
+  batchIndex: zod.number().min(aiSmartImportWorkerBodyBatchIndexMin),
+});
+
+export const AiSmartImportWorkerResponse = zod.object({
+  ok: zod.boolean().optional(),
+});
+
+/**
  * @summary Poll the status of an import job
  */
 export const GetAiSmartImportJobParams = zod.object({

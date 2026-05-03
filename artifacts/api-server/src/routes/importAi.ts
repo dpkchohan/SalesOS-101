@@ -404,39 +404,37 @@ async function processBatch(
 
       let contactId: string | null = null;
       if (c.email) {
-        const existing = await db
-          .select({ id: contactsTable.id })
-          .from(contactsTable)
-          .where(
-            and(
-              eq(contactsTable.orgId, job.orgId),
-              sql`lower(${contactsTable.email}) = ${c.email}`,
-            ),
-          )
-          .limit(1);
-        if (existing[0]) {
-          contactId = existing[0].id;
-          await db
-            .update(contactsTable)
-            .set({
-              name: c.name || undefined,
-              phone: c.phone ?? undefined,
-              title: c.title ?? undefined,
-              companyId: companyId ?? undefined,
-            })
-            .where(eq(contactsTable.id, contactId));
-          contactsUpdated++;
-        }
-      }
-
-      if (!contactId) {
+        // Race-safe upsert keyed on the partial unique index
+        // (org_id, lower(email)) WHERE email IS NOT NULL.
+        // Drizzle's typed builder can't express expressional conflict targets,
+        // so we drop to raw SQL. xmax=0 lets us tell INSERT vs UPDATE.
+        const contactName = c.name || c.email || "Unnamed Contact";
+        const result = await db.execute<{ id: string; was_inserted: boolean }>(sql`
+          INSERT INTO contacts (org_id, company_id, name, email, phone, title, import_job_id)
+          VALUES (${job.orgId}, ${companyId}, ${contactName}, ${c.email},
+                  ${c.phone ?? null}, ${c.title ?? null}, ${job.id})
+          ON CONFLICT (org_id, lower(email)) WHERE email IS NOT NULL
+          DO UPDATE SET
+            name = COALESCE(NULLIF(EXCLUDED.name, ''), contacts.name),
+            phone = COALESCE(EXCLUDED.phone, contacts.phone),
+            title = COALESCE(EXCLUDED.title, contacts.title),
+            company_id = COALESCE(EXCLUDED.company_id, contacts.company_id),
+            import_job_id = EXCLUDED.import_job_id,
+            updated_at = NOW()
+          RETURNING id, (xmax = 0) AS was_inserted
+        `);
+        const row = result.rows[0];
+        contactId = row.id;
+        if (row.was_inserted) contactsCreated++;
+        else contactsUpdated++;
+      } else {
         const [created] = await db
           .insert(contactsTable)
           .values({
             orgId: job.orgId,
             companyId,
-            name: c.name || c.email || "Unnamed Contact",
-            email: c.email,
+            name: c.name || "Unnamed Contact",
+            email: null,
             phone: c.phone,
             title: c.title,
             importJobId: job.id,
@@ -465,6 +463,7 @@ async function processBatch(
               valueUsd: c.valueUsd ?? undefined,
               closeDate: c.closeDate ?? undefined,
               source: "ai-import",
+              importJobId: job.id,
             })
             .where(eq(leadsTable.id, existingLead[0].id));
         } else {

@@ -20,6 +20,8 @@ import type {
   AiSignal,
   AiSmartImportExecuteBody,
   AiSmartImportPreviewBody,
+  AiSmartImportWorker200,
+  AiSmartImportWorkerBody,
   CalendarStatus,
   ChatInput,
   ChatReply,
@@ -3070,6 +3072,92 @@ export const useAiSmartImportExecute = <
   TContext
 > => {
   return useMutation(getAiSmartImportExecuteMutationOptions(options));
+};
+
+/**
+ * @summary Internal endpoint - process a single batch for an import job. Requires the X-Internal-Worker header to match INTERNAL_WORKER_KEY.
+ */
+export const getAiSmartImportWorkerUrl = () => {
+  return `/api/import/ai-smart/worker`;
+};
+
+export const aiSmartImportWorker = async (
+  aiSmartImportWorkerBody: AiSmartImportWorkerBody,
+  options?: RequestInit,
+): Promise<AiSmartImportWorker200> => {
+  return customFetch<AiSmartImportWorker200>(getAiSmartImportWorkerUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(aiSmartImportWorkerBody),
+  });
+};
+
+export const getAiSmartImportWorkerMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof aiSmartImportWorker>>,
+    TError,
+    { data: BodyType<AiSmartImportWorkerBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof aiSmartImportWorker>>,
+  TError,
+  { data: BodyType<AiSmartImportWorkerBody> },
+  TContext
+> => {
+  const mutationKey = ["aiSmartImportWorker"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof aiSmartImportWorker>>,
+    { data: BodyType<AiSmartImportWorkerBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return aiSmartImportWorker(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AiSmartImportWorkerMutationResult = NonNullable<
+  Awaited<ReturnType<typeof aiSmartImportWorker>>
+>;
+export type AiSmartImportWorkerMutationBody = BodyType<AiSmartImportWorkerBody>;
+export type AiSmartImportWorkerMutationError = ErrorType<void>;
+
+/**
+ * @summary Internal endpoint - process a single batch for an import job. Requires the X-Internal-Worker header to match INTERNAL_WORKER_KEY.
+ */
+export const useAiSmartImportWorker = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof aiSmartImportWorker>>,
+    TError,
+    { data: BodyType<AiSmartImportWorkerBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof aiSmartImportWorker>>,
+  TError,
+  { data: BodyType<AiSmartImportWorkerBody> },
+  TContext
+> => {
+  return useMutation(getAiSmartImportWorkerMutationOptions(options));
 };
 
 /**
