@@ -14,6 +14,7 @@ import { SendChatBody, SendChatResponse } from "@workspace/api-zod";
 import { requireAuth, type AuthenticatedRequest } from "../lib/auth";
 import { claudeJson } from "../lib/claude";
 import { generateProposalHtml } from "../lib/proposalGen";
+import { sendProposalEmail } from "../lib/gmail";
 
 const router: IRouter = Router();
 
@@ -45,6 +46,7 @@ interface Intent {
   stage?: "new" | "interested" | "qualified" | "negotiating" | "won" | "lost";
   // send_proposal
   proposalContext?: string | null;
+  sendEmail?: boolean;
 }
 
 const SYSTEM = `You are SalesOS, an in-app assistant for a sales rep. Parse the user's message into a structured intent. Always reply with strict JSON, no prose outside JSON.
@@ -54,7 +56,7 @@ Intents:
 - "log_interaction": user wants to log a call/email/meeting/note. Example: "logged a call with John, he wants pricing by Friday"
 - "create_contact": user wants to add a new contact. Example: "add new contact Sarah Lee at Globex, sarah@globex.com"
 - "update_lead_stage": user wants to move a lead to a different stage. Stages: new, interested, qualified, negotiating, won, lost
-- "send_proposal": user wants to generate a proposal. Example: "send John Smith a proposal about pricing and timeline" → contactName="John Smith", proposalContext="pricing and timeline"
+- "send_proposal": user wants to generate a proposal. Example: "send John Smith a proposal about pricing and timeline" → contactName="John Smith", proposalContext="pricing and timeline". If the user explicitly asks to ALSO email it (e.g. "send AND email", "draft and email", "email it to them"), set sendEmail=true; otherwise omit sendEmail.
 - "search": user is looking for info about a contact or lead
 - "general": fallback for greetings and questions
 
@@ -67,7 +69,8 @@ Respond JSON shape:
   "interaction": { "type": "call|email|meeting|note", "gist": "...", "gains": [], "misses": [], "nextStep": "...", "sentiment": "positive|neutral|negative" },
   "contact": { "name": "...", "email": "...", "phone": "...", "title": "..." },
   "stage": "new|interested|qualified|negotiating|won|lost",
-  "proposalContext": "<short summary of what the proposal should cover, if intent is send_proposal>"
+  "proposalContext": "<short summary of what the proposal should cover, if intent is send_proposal>",
+  "sendEmail": false
 }
 Only include the fields relevant to the chosen intent.`;
 
@@ -253,7 +256,50 @@ router.post("/chat", requireAuth, async (req, res): Promise<void> => {
               })
               .returning();
             reply.documentId = doc.id;
-            reply.message = `Drafted "${title}". Open Documents to review or send.`;
+            if (intent.sendEmail) {
+              const recipient = (c.email ?? "").trim();
+              if (!recipient) {
+                reply.message = `Drafted "${title}", but ${c.name} has no email on file — open the document to send manually.`;
+              } else {
+                try {
+                  await sendProposalEmail({
+                    to: recipient,
+                    subject: title,
+                    html,
+                    fromName: creds?.companyName ?? null,
+                  });
+                  await db
+                    .update(documentsTable)
+                    .set({ status: "sent", sentAt: new Date() })
+                    .where(
+                      and(eq(documentsTable.id, doc.id), eq(documentsTable.orgId, r.orgId)),
+                    );
+                  const [logged] = await db
+                    .insert(interactionsTable)
+                    .values({
+                      orgId: r.orgId,
+                      leadId: l.id,
+                      createdBy: r.userId,
+                      type: "email",
+                      date: new Date().toISOString().slice(0, 10),
+                      gist: `Emailed "${title}" to ${recipient}`,
+                      gains: [],
+                      misses: [],
+                      actionItems: [],
+                      nextStep: null,
+                      sentiment: null,
+                    })
+                    .returning();
+                  reply.interactionId = logged.id;
+                  reply.message = `Drafted and emailed "${title}" to ${recipient}.`;
+                } catch (err) {
+                  req.log.error({ err }, "Chat send_proposal: gmail send failed");
+                  reply.message = `Drafted "${title}", but Gmail send failed. Open the document and try Send via Gmail.`;
+                }
+              }
+            } else {
+              reply.message = `Drafted "${title}". Open Documents to review or send.`;
+            }
           }
         }
       }

@@ -51,6 +51,8 @@ import type {
   Me,
   NotFoundResponse,
   Pipeline,
+  SendDocumentEmailInput,
+  SendDocumentEmailResult,
   SpeakInput,
   SpeakReply,
   Task,
@@ -2478,6 +2480,93 @@ export const useUpdateDocument = <
   TContext
 > => {
   return useMutation(getUpdateDocumentMutationOptions(options));
+};
+
+/**
+ * @summary Send a document (e.g. proposal) as an HTML email via the user's connected Gmail
+ */
+export const getSendDocumentEmailUrl = (id: string) => {
+  return `/api/documents/${id}/send-email`;
+};
+
+export const sendDocumentEmail = async (
+  id: string,
+  sendDocumentEmailInput?: SendDocumentEmailInput,
+  options?: RequestInit,
+): Promise<SendDocumentEmailResult> => {
+  return customFetch<SendDocumentEmailResult>(getSendDocumentEmailUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(sendDocumentEmailInput),
+  });
+};
+
+export const getSendDocumentEmailMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof sendDocumentEmail>>,
+    TError,
+    { id: string; data: BodyType<SendDocumentEmailInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof sendDocumentEmail>>,
+  TError,
+  { id: string; data: BodyType<SendDocumentEmailInput> },
+  TContext
+> => {
+  const mutationKey = ["sendDocumentEmail"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof sendDocumentEmail>>,
+    { id: string; data: BodyType<SendDocumentEmailInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return sendDocumentEmail(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SendDocumentEmailMutationResult = NonNullable<
+  Awaited<ReturnType<typeof sendDocumentEmail>>
+>;
+export type SendDocumentEmailMutationBody = BodyType<SendDocumentEmailInput>;
+export type SendDocumentEmailMutationError = ErrorType<void>;
+
+/**
+ * @summary Send a document (e.g. proposal) as an HTML email via the user's connected Gmail
+ */
+export const useSendDocumentEmail = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof sendDocumentEmail>>,
+    TError,
+    { id: string; data: BodyType<SendDocumentEmailInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof sendDocumentEmail>>,
+  TError,
+  { id: string; data: BodyType<SendDocumentEmailInput> },
+  TContext
+> => {
+  return useMutation(getSendDocumentEmailMutationOptions(options));
 };
 
 /**

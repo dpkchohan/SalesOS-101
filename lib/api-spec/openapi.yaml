@@ -430,6 +430,31 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Document" }
 
+  /documents/{id}/send-email:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string } }
+    post:
+      operationId: sendDocumentEmail
+      tags: [documents]
+      summary: Send a document (e.g. proposal) as an HTML email via the user's connected Gmail
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SendDocumentEmailInput" }
+      responses:
+        "200":
+          description: Email sent and document marked as sent
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SendDocumentEmailResult" }
+        "400":
+          description: Missing recipient email
+        "404":
+          description: Document not found
+        "502":
+          description: Gmail send failed (not connected or upstream error)
+
   /documents/generate-proposal:
     post:
       operationId: generateProposal
@@ -947,6 +972,25 @@ components:
         title: { type: string }
         content: { type: ["string", "null"] }
         status: { $ref: "#/components/schemas/DocumentStatus" }
+
+    SendDocumentEmailInput:
+      type: object
+      properties:
+        to:
+          type: ["string", "null"]
+          description: "Recipient email. If omitted, uses the lead's contact email."
+        subject:
+          type: ["string", "null"]
+          description: "Email subject. Defaults to the document title."
+
+    SendDocumentEmailResult:
+      type: object
+      required: [document, recipient, subject]
+      properties:
+        document: { $ref: "#/components/schemas/Document" }
+        recipient: { type: string }
+        subject: { type: string }
+        gmailMessageId: { type: ["string", "null"] }
 
     GenerateProposalInput:
       type: object

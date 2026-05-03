@@ -1,13 +1,14 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRoute, Link } from "wouter";
 import {
   useGetDocument,
   useUpdateDocument,
+  useSendDocumentEmail,
   getListDocumentsQueryKey,
   getGetDocumentQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Printer, Send, CheckCircle2, Loader2, FileText } from "lucide-react";
+import { ArrowLeft, Printer, Send, CheckCircle2, Loader2, FileText, Mail } from "lucide-react";
 import { PageHeader } from "@/components/AppLayout";
 import { relativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -19,8 +20,10 @@ export default function DocumentDetail() {
     query: { enabled: !!id, queryKey: getGetDocumentQueryKey(id ?? "") },
   });
   const update = useUpdateDocument();
+  const sendEmail = useSendDocumentEmail();
   const qc = useQueryClient();
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [emailFlash, setEmailFlash] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: getListDocumentsQueryKey() });
@@ -124,17 +127,54 @@ export default function DocumentDetail() {
             <Printer size={13} /> Print / Save PDF
           </button>
           {status === "draft" && (
-            <button
-              onClick={() =>
-                update.mutate({ id: doc.id, data: { status: "sent" } }, { onSettled: refresh })
-              }
-              disabled={update.isPending}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-[12.5px] font-semibold hover:bg-primary/90 disabled:opacity-60"
-              data-testid="button-mark-sent"
-            >
-              <Send size={13} /> Mark sent
-            </button>
+            <>
+              <button
+                onClick={() => {
+                  setEmailFlash(null);
+                  sendEmail.mutate(
+                    { id: doc.id, data: {} },
+                    {
+                      onSuccess: (res) => {
+                        setEmailFlash({
+                          kind: "ok",
+                          text: `Sent to ${res.recipient}`,
+                        });
+                        refresh();
+                      },
+                      onError: (err) => {
+                        const data = (err as unknown as { data?: { error?: string } })?.data;
+                        const msg = data?.error ?? "Couldn't send via Gmail. Try again.";
+                        setEmailFlash({ kind: "err", text: msg });
+                      },
+                    },
+                  );
+                }}
+                disabled={sendEmail.isPending || !doc.content}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-[12.5px] font-semibold hover:bg-primary/90 disabled:opacity-60"
+                data-testid="button-send-gmail"
+              >
+                {sendEmail.isPending ? (
+                  <Loader2 size={13} className="animate-spin" />
+                ) : (
+                  <Mail size={13} />
+                )}{" "}
+                Send via Gmail
+              </button>
+              <button
+                onClick={() =>
+                  update.mutate({ id: doc.id, data: { status: "sent" } }, { onSettled: refresh })
+                }
+                disabled={update.isPending}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-card border border-card-border text-[12.5px] font-semibold hover:border-primary/50 disabled:opacity-60"
+                data-testid="button-mark-sent"
+              >
+                <Send size={13} /> Mark sent
+              </button>
+            </>
           )}
+        </div>
+
+        <div className="flex gap-2 flex-wrap">
           {status === "sent" && (
             <button
               onClick={() =>
@@ -148,6 +188,20 @@ export default function DocumentDetail() {
             </button>
           )}
         </div>
+
+        {emailFlash && (
+          <div
+            className={cn(
+              "rounded-lg px-3 py-2 text-[12.5px] font-medium",
+              emailFlash.kind === "ok"
+                ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                : "bg-red-500/15 text-red-700 dark:text-red-300",
+            )}
+            data-testid="text-email-flash"
+          >
+            {emailFlash.text}
+          </div>
+        )}
 
         {doc.content ? (
           <div className="rounded-2xl bg-white border border-card-border overflow-hidden shadow-sm">

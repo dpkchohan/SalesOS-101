@@ -763,6 +763,41 @@ export const UpdateDocumentResponse = zod.object({
 });
 
 /**
+ * @summary Send a document (e.g. proposal) as an HTML email via the user's connected Gmail
+ */
+export const SendDocumentEmailParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const SendDocumentEmailBody = zod.object({
+  to: zod
+    .string()
+    .nullish()
+    .describe("Recipient email. If omitted, uses the lead's contact email."),
+  subject: zod
+    .string()
+    .nullish()
+    .describe("Email subject. Defaults to the document title."),
+});
+
+export const SendDocumentEmailResponse = zod.object({
+  document: zod.object({
+    id: zod.string(),
+    leadId: zod.string(),
+    type: zod.enum(["proposal", "contract", "case_study"]),
+    title: zod.string(),
+    content: zod.string().nullish(),
+    format: zod.string(),
+    status: zod.enum(["draft", "sent", "approved"]),
+    sentAt: zod.coerce.date().nullish(),
+    createdAt: zod.coerce.date(),
+  }),
+  recipient: zod.string(),
+  subject: zod.string(),
+  gmailMessageId: zod.string().nullish(),
+});
+
+/**
  * @summary Generate a branded HTML proposal via Claude using lead context + company branding
  */
 export const GenerateProposalBody = zod.object({

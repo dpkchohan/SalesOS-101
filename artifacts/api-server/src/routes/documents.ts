@@ -20,9 +20,13 @@ import {
   GetDocumentParams,
   GetDocumentResponse,
   GenerateProposalBody,
+  SendDocumentEmailParams,
+  SendDocumentEmailBody,
+  SendDocumentEmailResponse,
 } from "@workspace/api-zod";
 import { requireAuth, type AuthenticatedRequest } from "../lib/auth";
 import { generateProposalHtml } from "../lib/proposalGen";
+import { sendProposalEmail } from "../lib/gmail";
 
 const router: IRouter = Router();
 
@@ -196,6 +200,109 @@ router.put("/documents/:id", requireAuth, async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err }, "Failed to update document");
     res.status(500).json({ error: "Failed to update document" });
+  }
+});
+
+router.post("/documents/:id/send-email", requireAuth, async (req, res): Promise<void> => {
+  const r = req as AuthenticatedRequest;
+  const params = SendDocumentEmailParams.safeParse(req.params);
+  const body = SendDocumentEmailBody.safeParse(req.body ?? {});
+  if (!params.success || !body.success) {
+    res.status(400).json({ error: "Invalid input" });
+    return;
+  }
+  try {
+    const [doc] = await db
+      .select()
+      .from(documentsTable)
+      .where(and(eq(documentsTable.id, params.data.id), eq(documentsTable.orgId, r.orgId)));
+    if (!doc) {
+      res.status(404).json({ error: "Document not found" });
+      return;
+    }
+    if (!doc.content) {
+      res.status(400).json({ error: "Document has no content to send" });
+      return;
+    }
+
+    const [leadRow] = await db
+      .select({ lead: leadsTable, contact: contactsTable, company: companiesTable })
+      .from(leadsTable)
+      .leftJoin(
+        contactsTable,
+        and(eq(leadsTable.contactId, contactsTable.id), eq(contactsTable.orgId, r.orgId)),
+      )
+      .leftJoin(
+        companiesTable,
+        and(eq(contactsTable.companyId, companiesTable.id), eq(companiesTable.orgId, r.orgId)),
+      )
+      .where(and(eq(leadsTable.id, doc.leadId), eq(leadsTable.orgId, r.orgId)));
+
+    const recipient = (body.data.to ?? leadRow?.contact?.email ?? "").trim();
+    if (!recipient) {
+      res
+        .status(400)
+        .json({ error: "No recipient email — add an email to the contact or pass {to} in body" });
+      return;
+    }
+    const subject = (body.data.subject ?? doc.title).trim();
+
+    const [creds] = await db
+      .select()
+      .from(companyCredentialsTable)
+      .where(eq(companyCredentialsTable.orgId, r.orgId))
+      .limit(1);
+    const fromName = creds?.companyName ?? null;
+
+    let gmailMessageId: string | null = null;
+    try {
+      const sendRes = await sendProposalEmail({
+        to: recipient,
+        subject,
+        html: doc.content,
+        fromName,
+      });
+      gmailMessageId = sendRes.id;
+    } catch (err) {
+      req.log.error({ err }, "Gmail send failed");
+      res.status(502).json({
+        error:
+          "Couldn't send via Gmail. Reconnect your Gmail account in Replit integrations and try again.",
+      });
+      return;
+    }
+
+    const [updated] = await db
+      .update(documentsTable)
+      .set({ status: "sent", sentAt: new Date() })
+      .where(and(eq(documentsTable.id, doc.id), eq(documentsTable.orgId, r.orgId)))
+      .returning();
+
+    await db.insert(interactionsTable).values({
+      orgId: r.orgId,
+      leadId: doc.leadId,
+      createdBy: r.userId,
+      type: "email",
+      date: new Date().toISOString().slice(0, 10),
+      gist: `Emailed "${doc.title}" to ${recipient}`,
+      gains: [],
+      misses: [],
+      actionItems: [],
+      nextStep: null,
+      sentiment: null,
+    });
+
+    res.json(
+      SendDocumentEmailResponse.parse({
+        document: updated,
+        recipient,
+        subject,
+        gmailMessageId,
+      }),
+    );
+  } catch (err) {
+    req.log.error({ err }, "Failed to send document email");
+    res.status(500).json({ error: "Failed to send document email" });
   }
 });
 

@@ -401,6 +401,27 @@ export interface DocumentUpdate {
   status?: DocumentStatus;
 }
 
+export interface SendDocumentEmailInput {
+  /**
+   * Recipient email. If omitted, uses the lead's contact email.
+   * @nullable
+   */
+  to?: string | null;
+  /**
+   * Email subject. Defaults to the document title.
+   * @nullable
+   */
+  subject?: string | null;
+}
+
+export interface SendDocumentEmailResult {
+  document: Document;
+  recipient: string;
+  subject: string;
+  /** @nullable */
+  gmailMessageId?: string | null;
+}
+
 export interface GenerateProposalInput {
   leadId: string;
   /** @nullable */

@@ -50,6 +50,8 @@ export * from "./me";
 export * from "./notFoundResponse";
 export * from "./pipeline";
 export * from "./pipelineColumn";
+export * from "./sendDocumentEmailInput";
+export * from "./sendDocumentEmailResult";
 export * from "./signalSeverity";
 export * from "./speakInput";
 export * from "./speakReply";
