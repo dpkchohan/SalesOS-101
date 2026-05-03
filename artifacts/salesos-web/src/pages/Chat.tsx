@@ -315,21 +315,41 @@ export default function Chat() {
     msgId: string,
     attachmentId: string,
     action: "contact" | "lead",
-    contactIndex: number,
+    contactIndex: number | null,
     overrides?: Record<string, unknown>,
   ) => {
     try {
       const result = await apply.mutateAsync({
         id: attachmentId,
-        data: { action, contactIndex, ...(overrides ? { overrides } : {}) },
+        data: {
+          action,
+          ...(contactIndex != null ? { contactIndex } : {}),
+          ...(overrides ? { overrides } : {}),
+        },
       });
-      const note = result.results
-        .map((r) =>
-          action === "lead"
-            ? `${r.merged ? "Merged" : "Added"} ${r.contactName}${r.leadId ? " + lead" : ""}`
-            : `${r.merged ? "Merged" : "Added"} ${r.contactName}`,
-        )
-        .join(" · ");
+      let note: string;
+      if (contactIndex == null && result.results.length > 1) {
+        const added = result.results.filter((r) => !r.merged).length;
+        const merged = result.results.filter((r) => r.merged).length;
+        const leads = result.results.filter((r) => r.leadId).length;
+        const parts: string[] = [];
+        if (added) parts.push(`Added ${added}`);
+        if (merged) parts.push(`merged ${merged}`);
+        const head = parts.length ? parts.join(", ") : `Processed ${result.results.length}`;
+        const tail =
+          action === "lead" && leads
+            ? ` · ${leads} lead${leads === 1 ? "" : "s"}`
+            : "";
+        note = `${head} contact${result.results.length === 1 ? "" : "s"}${tail}`;
+      } else {
+        note = result.results
+          .map((r) =>
+            action === "lead"
+              ? `${r.merged ? "Merged" : "Added"} ${r.contactName}${r.leadId ? " + lead" : ""}`
+              : `${r.merged ? "Merged" : "Added"} ${r.contactName}`,
+          )
+          .join(" · ");
+      }
       setMessages((curr) =>
         curr.map((m) => (m.id === msgId ? { ...m, appliedNote: note } : m)),
       );
@@ -596,6 +616,9 @@ export default function Chat() {
                   applying={apply.isPending}
                   onApply={(action, idx, overrides) =>
                     applyExtraction(m.id, m.attachment!.id, action, idx, overrides)
+                  }
+                  onApplyAll={() =>
+                    applyExtraction(m.id, m.attachment!.id, "contact", null)
                   }
                 />
               ) : (
@@ -924,6 +947,7 @@ function AttachmentCard({
   appliedNote,
   applying,
   onApply,
+  onApplyAll,
 }: {
   msgId: string;
   attachment: ChatAttachment;
@@ -934,6 +958,7 @@ function AttachmentCard({
     contactIndex: number,
     overrides?: Record<string, unknown>,
   ) => void;
+  onApplyAll: () => void;
 }) {
   const status = attachment.extractionStatus;
   const data = attachment.extractedData;
@@ -1010,6 +1035,18 @@ function AttachmentCard({
             <div className="text-[12px] text-muted-foreground italic">
               No contacts detected in this {isImage ? "image" : "file"}.
             </div>
+          )}
+
+          {data.contacts.length >= 2 && (
+            <button
+              type="button"
+              onClick={onApplyAll}
+              disabled={applying || !!appliedNote}
+              className="inline-flex items-center gap-1.5 text-[12px] font-semibold px-3 py-1.5 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              data-testid="button-add-all-contacts"
+            >
+              <UserPlus size={13} /> Add all {data.contacts.length} to Contacts
+            </button>
           )}
 
           {data.contacts.map((c: ExtractedAttachmentContact, i: number) => {
