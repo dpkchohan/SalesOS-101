@@ -29,6 +29,7 @@ export const leadsTable = pgTable(
     currency: text("currency").notNull().default("USD"),
     closeDate: date("close_date"),
     source: text("source"),
+    importJobId: uuid("import_job_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()

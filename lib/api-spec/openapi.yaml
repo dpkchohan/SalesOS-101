@@ -21,6 +21,7 @@ tags:
   - name: chat
   - name: voice
   - name: branding
+  - name: importExport
 
 paths:
   /healthz:
@@ -513,6 +514,73 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/CompanyCredentials" }
 
+  # ---------- AI Smart Import ----------
+  /import/ai-smart/preview:
+    post:
+      operationId: aiSmartImportPreview
+      tags: [importExport]
+      summary: Upload a file (CSV/Excel/JSON) and get a Claude-powered preview analysis
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Preview job created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImportJob" }
+        "400":
+          description: Bad request
+        "413":
+          description: File too large
+
+  /import/ai-smart/execute:
+    post:
+      operationId: aiSmartImportExecute
+      tags: [importExport]
+      summary: Start processing a previously previewed import job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [jobId]
+              properties:
+                jobId: { type: string }
+      responses:
+        "200":
+          description: Job moved to processing
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImportJob" }
+        "404":
+          description: Job not found
+
+  /import/ai-smart/job/{id}:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string } }
+    get:
+      operationId: getAiSmartImportJob
+      tags: [importExport]
+      summary: Poll the status of an import job
+      responses:
+        "200":
+          description: Job status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImportJob" }
+        "404":
+          description: Job not found
+
   # ---------- Chat (Claude intent engine) ----------
   /chat:
     post:
@@ -579,6 +647,86 @@ components:
       required: [status]
       properties:
         status: { type: string }
+
+    ImportJob:
+      type: object
+      required:
+        [
+          id,
+          filename,
+          status,
+          totalRows,
+          processedRows,
+          contactsCreated,
+          contactsUpdated,
+          leadsCreated,
+          companiesCreated,
+          skipped,
+          totalBatches,
+          completedBatches,
+          errorLog,
+          createdAt,
+          updatedAt,
+        ]
+      properties:
+        id: { type: string }
+        filename: { type: string }
+        status:
+          type: string
+          enum: [preview, processing, completed, failed]
+        totalRows: { type: integer }
+        processedRows: { type: integer }
+        contactsCreated: { type: integer }
+        contactsUpdated: { type: integer }
+        leadsCreated: { type: integer }
+        companiesCreated: { type: integer }
+        skipped: { type: integer }
+        totalBatches: { type: integer }
+        completedBatches: { type: integer }
+        preview:
+          oneOf:
+            - { $ref: "#/components/schemas/ImportPreview" }
+            - { type: "null" }
+        errorLog:
+          type: array
+          items:
+            type: object
+            properties:
+              batch: { type: integer }
+              row: { type: integer }
+              reason: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        completedAt:
+          type: ["string", "null"]
+          format: date-time
+
+    ImportPreview:
+      type: object
+      properties:
+        detectedType: { type: string }
+        estimatedContacts: { type: integer }
+        estimatedLeads: { type: integer }
+        qualityScore: { type: integer }
+        issues:
+          type: array
+          items: { type: string }
+        sampleContacts:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              email: { type: ["string", "null"] }
+              phone: { type: ["string", "null"] }
+              title: { type: ["string", "null"] }
+              company: { type: ["string", "null"] }
+              stage: { type: ["string", "null"] }
+              valueUsd: { type: ["integer", "null"] }
+              closeDate: { type: ["string", "null"] }
+        columnMapping:
+          type: object
+          additionalProperties: { type: string }
 
     ErrorResponse:
       type: object

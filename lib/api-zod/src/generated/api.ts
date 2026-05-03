@@ -916,6 +916,183 @@ export const UpsertCompanyCredentialsResponse = zod.object({
 });
 
 /**
+ * @summary Upload a file (CSV/Excel/JSON) and get a Claude-powered preview analysis
+ */
+export const AiSmartImportPreviewBody = zod.object({
+  file: zod.instanceof(File),
+});
+
+export const AiSmartImportPreviewResponse = zod.object({
+  id: zod.string(),
+  filename: zod.string(),
+  status: zod.enum(["preview", "processing", "completed", "failed"]),
+  totalRows: zod.number(),
+  processedRows: zod.number(),
+  contactsCreated: zod.number(),
+  contactsUpdated: zod.number(),
+  leadsCreated: zod.number(),
+  companiesCreated: zod.number(),
+  skipped: zod.number(),
+  totalBatches: zod.number(),
+  completedBatches: zod.number(),
+  preview: zod
+    .union([
+      zod.object({
+        detectedType: zod.string().optional(),
+        estimatedContacts: zod.number().optional(),
+        estimatedLeads: zod.number().optional(),
+        qualityScore: zod.number().optional(),
+        issues: zod.array(zod.string()).optional(),
+        sampleContacts: zod
+          .array(
+            zod.object({
+              name: zod.string().optional(),
+              email: zod.string().nullish(),
+              phone: zod.string().nullish(),
+              title: zod.string().nullish(),
+              company: zod.string().nullish(),
+              stage: zod.string().nullish(),
+              valueUsd: zod.number().nullish(),
+              closeDate: zod.string().nullish(),
+            }),
+          )
+          .optional(),
+        columnMapping: zod.record(zod.string(), zod.string()).optional(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
+  errorLog: zod.array(
+    zod.object({
+      batch: zod.number().optional(),
+      row: zod.number().optional(),
+      reason: zod.string().optional(),
+    }),
+  ),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+  completedAt: zod.coerce.date().nullish(),
+});
+
+/**
+ * @summary Start processing a previously previewed import job
+ */
+export const AiSmartImportExecuteBody = zod.object({
+  jobId: zod.string(),
+});
+
+export const AiSmartImportExecuteResponse = zod.object({
+  id: zod.string(),
+  filename: zod.string(),
+  status: zod.enum(["preview", "processing", "completed", "failed"]),
+  totalRows: zod.number(),
+  processedRows: zod.number(),
+  contactsCreated: zod.number(),
+  contactsUpdated: zod.number(),
+  leadsCreated: zod.number(),
+  companiesCreated: zod.number(),
+  skipped: zod.number(),
+  totalBatches: zod.number(),
+  completedBatches: zod.number(),
+  preview: zod
+    .union([
+      zod.object({
+        detectedType: zod.string().optional(),
+        estimatedContacts: zod.number().optional(),
+        estimatedLeads: zod.number().optional(),
+        qualityScore: zod.number().optional(),
+        issues: zod.array(zod.string()).optional(),
+        sampleContacts: zod
+          .array(
+            zod.object({
+              name: zod.string().optional(),
+              email: zod.string().nullish(),
+              phone: zod.string().nullish(),
+              title: zod.string().nullish(),
+              company: zod.string().nullish(),
+              stage: zod.string().nullish(),
+              valueUsd: zod.number().nullish(),
+              closeDate: zod.string().nullish(),
+            }),
+          )
+          .optional(),
+        columnMapping: zod.record(zod.string(), zod.string()).optional(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
+  errorLog: zod.array(
+    zod.object({
+      batch: zod.number().optional(),
+      row: zod.number().optional(),
+      reason: zod.string().optional(),
+    }),
+  ),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+  completedAt: zod.coerce.date().nullish(),
+});
+
+/**
+ * @summary Poll the status of an import job
+ */
+export const GetAiSmartImportJobParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetAiSmartImportJobResponse = zod.object({
+  id: zod.string(),
+  filename: zod.string(),
+  status: zod.enum(["preview", "processing", "completed", "failed"]),
+  totalRows: zod.number(),
+  processedRows: zod.number(),
+  contactsCreated: zod.number(),
+  contactsUpdated: zod.number(),
+  leadsCreated: zod.number(),
+  companiesCreated: zod.number(),
+  skipped: zod.number(),
+  totalBatches: zod.number(),
+  completedBatches: zod.number(),
+  preview: zod
+    .union([
+      zod.object({
+        detectedType: zod.string().optional(),
+        estimatedContacts: zod.number().optional(),
+        estimatedLeads: zod.number().optional(),
+        qualityScore: zod.number().optional(),
+        issues: zod.array(zod.string()).optional(),
+        sampleContacts: zod
+          .array(
+            zod.object({
+              name: zod.string().optional(),
+              email: zod.string().nullish(),
+              phone: zod.string().nullish(),
+              title: zod.string().nullish(),
+              company: zod.string().nullish(),
+              stage: zod.string().nullish(),
+              valueUsd: zod.number().nullish(),
+              closeDate: zod.string().nullish(),
+            }),
+          )
+          .optional(),
+        columnMapping: zod.record(zod.string(), zod.string()).optional(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
+  errorLog: zod.array(
+    zod.object({
+      batch: zod.number().optional(),
+      row: zod.number().optional(),
+      reason: zod.string().optional(),
+    }),
+  ),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+  completedAt: zod.coerce.date().nullish(),
+});
+
+/**
  * @summary Send a natural-language command to Claude. Parses intent and executes.
  */
 export const SendChatBody = zod.object({

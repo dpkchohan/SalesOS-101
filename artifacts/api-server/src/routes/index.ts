@@ -12,6 +12,7 @@ import dashboardRouter from "./dashboard";
 import chatRouter from "./chat";
 import voiceRouter from "./voice";
 import importExportRouter from "./importExport";
+import importAiRouter from "./importAi";
 import companyCredentialsRouter from "./companyCredentials";
 import integrationsRouter from "./integrations";
 
@@ -30,6 +31,7 @@ router.use(dashboardRouter);
 router.use(chatRouter);
 router.use(voiceRouter);
 router.use(importExportRouter);
+router.use(importAiRouter);
 router.use(companyCredentialsRouter);
 router.use(integrationsRouter);
 

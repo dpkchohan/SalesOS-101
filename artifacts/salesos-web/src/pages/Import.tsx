@@ -156,6 +156,26 @@ export default function Import() {
       />
 
       <div className="px-4 md:px-8 max-w-4xl pb-12">
+        {step === "upload" && (
+          <a
+            href={`${basePath}/import-ai`}
+            className="mb-5 flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-primary/10 border border-primary/30 hover:bg-primary/15 transition-colors"
+            data-testid="link-ai-import"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-lg bg-primary/20 grid place-items-center flex-shrink-0">
+                <Sparkles size={16} className="text-primary" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[13px] font-semibold">Try AI Smart Import</div>
+                <div className="text-[11px] text-muted-foreground truncate">
+                  Skip column mapping — Claude reads any messy file and imports it.
+                </div>
+              </div>
+            </div>
+            <ArrowRight size={16} className="text-primary flex-shrink-0" />
+          </a>
+        )}
         <div className="flex items-center gap-2 mb-6 text-[11px] uppercase tracking-wider font-semibold">
           {(["upload", "mapping", "importing", "done"] as Step[]).map((s, i) => {
             const active = step === s;

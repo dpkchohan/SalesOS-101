@@ -18,6 +18,8 @@ import type {
 
 import type {
   AiSignal,
+  AiSmartImportExecuteBody,
+  AiSmartImportPreviewBody,
   CalendarStatus,
   ChatInput,
   ChatReply,
@@ -35,6 +37,7 @@ import type {
   DocumentUpdate,
   GenerateProposalInput,
   HealthStatus,
+  ImportJob,
   Interaction,
   InteractionInput,
   Lead,
@@ -2892,6 +2895,269 @@ export const useUpsertCompanyCredentials = <
 > => {
   return useMutation(getUpsertCompanyCredentialsMutationOptions(options));
 };
+
+/**
+ * @summary Upload a file (CSV/Excel/JSON) and get a Claude-powered preview analysis
+ */
+export const getAiSmartImportPreviewUrl = () => {
+  return `/api/import/ai-smart/preview`;
+};
+
+export const aiSmartImportPreview = async (
+  aiSmartImportPreviewBody: AiSmartImportPreviewBody,
+  options?: RequestInit,
+): Promise<ImportJob> => {
+  const formData = new FormData();
+  formData.append(`file`, aiSmartImportPreviewBody.file);
+
+  return customFetch<ImportJob>(getAiSmartImportPreviewUrl(), {
+    ...options,
+    method: "POST",
+    body: formData,
+  });
+};
+
+export const getAiSmartImportPreviewMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof aiSmartImportPreview>>,
+    TError,
+    { data: BodyType<AiSmartImportPreviewBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof aiSmartImportPreview>>,
+  TError,
+  { data: BodyType<AiSmartImportPreviewBody> },
+  TContext
+> => {
+  const mutationKey = ["aiSmartImportPreview"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof aiSmartImportPreview>>,
+    { data: BodyType<AiSmartImportPreviewBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return aiSmartImportPreview(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AiSmartImportPreviewMutationResult = NonNullable<
+  Awaited<ReturnType<typeof aiSmartImportPreview>>
+>;
+export type AiSmartImportPreviewMutationBody =
+  BodyType<AiSmartImportPreviewBody>;
+export type AiSmartImportPreviewMutationError = ErrorType<void>;
+
+/**
+ * @summary Upload a file (CSV/Excel/JSON) and get a Claude-powered preview analysis
+ */
+export const useAiSmartImportPreview = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof aiSmartImportPreview>>,
+    TError,
+    { data: BodyType<AiSmartImportPreviewBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof aiSmartImportPreview>>,
+  TError,
+  { data: BodyType<AiSmartImportPreviewBody> },
+  TContext
+> => {
+  return useMutation(getAiSmartImportPreviewMutationOptions(options));
+};
+
+/**
+ * @summary Start processing a previously previewed import job
+ */
+export const getAiSmartImportExecuteUrl = () => {
+  return `/api/import/ai-smart/execute`;
+};
+
+export const aiSmartImportExecute = async (
+  aiSmartImportExecuteBody: AiSmartImportExecuteBody,
+  options?: RequestInit,
+): Promise<ImportJob> => {
+  return customFetch<ImportJob>(getAiSmartImportExecuteUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(aiSmartImportExecuteBody),
+  });
+};
+
+export const getAiSmartImportExecuteMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof aiSmartImportExecute>>,
+    TError,
+    { data: BodyType<AiSmartImportExecuteBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof aiSmartImportExecute>>,
+  TError,
+  { data: BodyType<AiSmartImportExecuteBody> },
+  TContext
+> => {
+  const mutationKey = ["aiSmartImportExecute"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof aiSmartImportExecute>>,
+    { data: BodyType<AiSmartImportExecuteBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return aiSmartImportExecute(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AiSmartImportExecuteMutationResult = NonNullable<
+  Awaited<ReturnType<typeof aiSmartImportExecute>>
+>;
+export type AiSmartImportExecuteMutationBody =
+  BodyType<AiSmartImportExecuteBody>;
+export type AiSmartImportExecuteMutationError = ErrorType<void>;
+
+/**
+ * @summary Start processing a previously previewed import job
+ */
+export const useAiSmartImportExecute = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof aiSmartImportExecute>>,
+    TError,
+    { data: BodyType<AiSmartImportExecuteBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof aiSmartImportExecute>>,
+  TError,
+  { data: BodyType<AiSmartImportExecuteBody> },
+  TContext
+> => {
+  return useMutation(getAiSmartImportExecuteMutationOptions(options));
+};
+
+/**
+ * @summary Poll the status of an import job
+ */
+export const getGetAiSmartImportJobUrl = (id: string) => {
+  return `/api/import/ai-smart/job/${id}`;
+};
+
+export const getAiSmartImportJob = async (
+  id: string,
+  options?: RequestInit,
+): Promise<ImportJob> => {
+  return customFetch<ImportJob>(getGetAiSmartImportJobUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetAiSmartImportJobQueryKey = (id: string) => {
+  return [`/api/import/ai-smart/job/${id}`] as const;
+};
+
+export const getGetAiSmartImportJobQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAiSmartImportJob>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getAiSmartImportJob>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetAiSmartImportJobQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getAiSmartImportJob>>
+  > = ({ signal }) => getAiSmartImportJob(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAiSmartImportJob>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAiSmartImportJobQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAiSmartImportJob>>
+>;
+export type GetAiSmartImportJobQueryError = ErrorType<void>;
+
+/**
+ * @summary Poll the status of an import job
+ */
+
+export function useGetAiSmartImportJob<
+  TData = Awaited<ReturnType<typeof getAiSmartImportJob>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getAiSmartImportJob>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAiSmartImportJobQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Send a natural-language command to Claude. Parses intent and executes.

@@ -9,6 +9,73 @@ export interface HealthStatus {
   status: string;
 }
 
+export type ImportJobStatus =
+  (typeof ImportJobStatus)[keyof typeof ImportJobStatus];
+
+export const ImportJobStatus = {
+  preview: "preview",
+  processing: "processing",
+  completed: "completed",
+  failed: "failed",
+} as const;
+
+export type ImportJobErrorLogItem = {
+  batch?: number;
+  row?: number;
+  reason?: string;
+};
+
+export type ImportPreviewSampleContactsItem = {
+  name?: string;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  title?: string | null;
+  /** @nullable */
+  company?: string | null;
+  /** @nullable */
+  stage?: string | null;
+  /** @nullable */
+  valueUsd?: number | null;
+  /** @nullable */
+  closeDate?: string | null;
+};
+
+export type ImportPreviewColumnMapping = { [key: string]: string };
+
+export interface ImportPreview {
+  detectedType?: string;
+  estimatedContacts?: number;
+  estimatedLeads?: number;
+  qualityScore?: number;
+  issues?: string[];
+  sampleContacts?: ImportPreviewSampleContactsItem[];
+  columnMapping?: ImportPreviewColumnMapping;
+}
+
+export interface ImportJob {
+  id: string;
+  filename: string;
+  status: ImportJobStatus;
+  totalRows: number;
+  processedRows: number;
+  contactsCreated: number;
+  contactsUpdated: number;
+  leadsCreated: number;
+  companiesCreated: number;
+  skipped: number;
+  totalBatches: number;
+  completedBatches: number;
+  preview?: ImportPreview | null;
+  errorLog: ImportJobErrorLogItem[];
+  createdAt: string;
+  updatedAt: string;
+  /** @nullable */
+  completedAt?: string | null;
+}
+
 export interface ErrorResponse {
   error: string;
 }
@@ -613,4 +680,12 @@ export type ListSignalsParams = {
 
 export type ListDocumentsParams = {
   leadId?: string;
+};
+
+export type AiSmartImportPreviewBody = {
+  file: Blob;
+};
+
+export type AiSmartImportExecuteBody = {
+  jobId: string;
 };

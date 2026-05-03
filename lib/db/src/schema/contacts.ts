@@ -17,6 +17,7 @@ export const contactsTable = pgTable(
     phone: text("phone"),
     title: text("title"),
     tags: text("tags").array().notNull().default([]),
+    importJobId: uuid("import_job_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
