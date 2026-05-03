@@ -35,6 +35,7 @@ import {
   UserPlus,
   Briefcase,
   AlertTriangle,
+  Pencil,
 } from "lucide-react";
 import { PageHeader } from "@/components/AppLayout";
 import { cn } from "@/lib/utils";
@@ -315,11 +316,12 @@ export default function Chat() {
     attachmentId: string,
     action: "contact" | "lead",
     contactIndex: number,
+    overrides?: Record<string, unknown>,
   ) => {
     try {
       const result = await apply.mutateAsync({
         id: attachmentId,
-        data: { action, contactIndex },
+        data: { action, contactIndex, ...(overrides ? { overrides } : {}) },
       });
       const note = result.results
         .map((r) =>
@@ -592,7 +594,9 @@ export default function Chat() {
                   attachment={m.attachment}
                   appliedNote={m.appliedNote}
                   applying={apply.isPending}
-                  onApply={(action, idx) => applyExtraction(m.id, m.attachment!.id, action, idx)}
+                  onApply={(action, idx, overrides) =>
+                    applyExtraction(m.id, m.attachment!.id, action, idx, overrides)
+                  }
                 />
               ) : (
                 <div
@@ -850,6 +854,70 @@ export default function Chat() {
   );
 }
 
+interface ContactDraft {
+  name: string;
+  email: string;
+  phone: string;
+  title: string;
+  company: string;
+  notes: string;
+  stage: string;
+  valueUsd: string;
+  closeDate: string;
+}
+
+function buildDraft(
+  c: ExtractedAttachmentContact,
+  lead: ExtractedAttachmentLead | undefined,
+): ContactDraft {
+  return {
+    name: c.name ?? "",
+    email: c.email ?? "",
+    phone: c.phone ?? "",
+    title: c.title ?? "",
+    company: c.company ?? "",
+    notes: c.notes ?? "",
+    stage: lead?.stage ?? "",
+    valueUsd: lead?.valueUsd != null ? String(lead.valueUsd) : "",
+    closeDate: lead?.closeDate ?? "",
+  };
+}
+
+function diffOverrides(
+  draft: ContactDraft,
+  c: ExtractedAttachmentContact,
+  lead: ExtractedAttachmentLead | undefined,
+  action: "contact" | "lead",
+): Record<string, unknown> {
+  const overrides: Record<string, unknown> = {};
+  const set = (k: string, v: string, original: string | null | undefined) => {
+    const trimmed = v.trim();
+    const orig = (original ?? "").toString();
+    if (trimmed !== orig.trim()) overrides[k] = trimmed === "" ? null : trimmed;
+  };
+  set("name", draft.name, c.name);
+  set("email", draft.email, c.email);
+  set("phone", draft.phone, c.phone);
+  set("title", draft.title, c.title);
+  set("company", draft.company, c.company);
+  set("notes", draft.notes, c.notes);
+  if (action === "lead") {
+    set("stage", draft.stage, lead?.stage);
+    set("closeDate", draft.closeDate, lead?.closeDate);
+    const draftVal = draft.valueUsd.trim();
+    const origVal = lead?.valueUsd != null ? String(lead.valueUsd) : "";
+    if (draftVal !== origVal) {
+      if (draftVal === "") {
+        overrides.valueUsd = null;
+      } else {
+        const n = Number(draftVal.replace(/[^0-9.-]/g, ""));
+        if (Number.isFinite(n)) overrides.valueUsd = Math.round(n);
+      }
+    }
+  }
+  return overrides;
+}
+
 function AttachmentCard({
   msgId,
   attachment,
@@ -861,12 +929,44 @@ function AttachmentCard({
   attachment: ChatAttachment;
   appliedNote?: string;
   applying: boolean;
-  onApply: (action: "contact" | "lead", contactIndex: number) => void;
+  onApply: (
+    action: "contact" | "lead",
+    contactIndex: number,
+    overrides?: Record<string, unknown>,
+  ) => void;
 }) {
   const status = attachment.extractionStatus;
   const data = attachment.extractedData;
   const isImage = attachment.fileType === "image";
   const Icon = isImage ? ImageIcon : FileText;
+  const lowConfidence = !!data && data.confidence < 0.6;
+  const [editing, setEditing] = useState<Record<number, boolean>>({});
+  const [drafts, setDrafts] = useState<Record<number, ContactDraft>>({});
+
+  useEffect(() => {
+    if (status !== "done" || !data) return;
+    setDrafts((prev) => {
+      const next = { ...prev };
+      data.contacts.forEach((c, i) => {
+        if (!next[i]) next[i] = buildDraft(c, data.leads[i]);
+      });
+      return next;
+    });
+    if (lowConfidence) {
+      setEditing((prev) => {
+        if (Object.keys(prev).length > 0) return prev;
+        const next: Record<number, boolean> = {};
+        data.contacts.forEach((_, i) => {
+          next[i] = true;
+        });
+        return next;
+      });
+    }
+  }, [status, data, lowConfidence]);
+
+  const updateDraft = (idx: number, patch: Partial<ContactDraft>) => {
+    setDrafts((prev) => ({ ...prev, [idx]: { ...prev[idx], ...patch } }));
+  };
 
   return (
     <div
@@ -914,32 +1014,147 @@ function AttachmentCard({
 
           {data.contacts.map((c: ExtractedAttachmentContact, i: number) => {
             const lead = data.leads[i] as ExtractedAttachmentLead | undefined;
+            const isEditing = !!editing[i];
+            const draft = drafts[i] ?? buildDraft(c, lead);
+            const handleApply = (action: "contact" | "lead") => {
+              const overrides = isEditing
+                ? diffOverrides(draft, c, lead, action)
+                : {};
+              onApply(
+                action,
+                i,
+                Object.keys(overrides).length ? overrides : undefined,
+              );
+            };
             return (
               <div
                 key={i}
                 className="rounded-lg border border-card-border bg-muted/20 px-3 py-2.5 space-y-1"
                 data-testid={`extracted-contact-${i}`}
               >
-                <div className="text-[14px] font-bold">{c.name || "Unnamed"}</div>
-                {(c.title || c.company) && (
-                  <div className="text-[12px] text-muted-foreground">
-                    {[c.title, c.company].filter(Boolean).join(" · ")}
+                {!isEditing && (
+                  <>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="text-[14px] font-bold">{c.name || "Unnamed"}</div>
+                      <button
+                        type="button"
+                        onClick={() => setEditing((p) => ({ ...p, [i]: true }))}
+                        disabled={!!appliedNote}
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-primary transition-colors disabled:opacity-40"
+                        data-testid={`button-edit-contact-${i}`}
+                      >
+                        <Pencil size={11} /> Edit
+                      </button>
+                    </div>
+                    {(c.title || c.company) && (
+                      <div className="text-[12px] text-muted-foreground">
+                        {[c.title, c.company].filter(Boolean).join(" · ")}
+                      </div>
+                    )}
+                    <div className="text-[12px] text-muted-foreground space-y-0.5">
+                      {c.email && <div>{c.email}</div>}
+                      {c.phone && <div>{c.phone}</div>}
+                    </div>
+                    {lead && (lead.stage || lead.valueUsd != null) && (
+                      <div className="text-[11px] text-primary/80 font-medium">
+                        Lead: {lead.stage ?? "new"}
+                        {lead.valueUsd != null ? ` · $${lead.valueUsd.toLocaleString()}` : ""}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {isEditing && (
+                  <div className="space-y-2 pt-0.5" data-testid={`editor-contact-${i}`}>
+                    <div className="flex items-center justify-between">
+                      <div className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground">
+                        Edit before saving
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          updateDraft(i, buildDraft(c, lead));
+                          setEditing((p) => ({ ...p, [i]: false }));
+                        }}
+                        className="text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                        data-testid={`button-cancel-edit-${i}`}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <DraftField
+                        label="Name"
+                        value={draft.name}
+                        onChange={(v) => updateDraft(i, { name: v })}
+                        testId={`edit-name-${i}`}
+                      />
+                      <DraftField
+                        label="Email"
+                        type="email"
+                        value={draft.email}
+                        onChange={(v) => updateDraft(i, { email: v })}
+                        testId={`edit-email-${i}`}
+                      />
+                      <DraftField
+                        label="Phone"
+                        value={draft.phone}
+                        onChange={(v) => updateDraft(i, { phone: v })}
+                        testId={`edit-phone-${i}`}
+                      />
+                      <DraftField
+                        label="Title"
+                        value={draft.title}
+                        onChange={(v) => updateDraft(i, { title: v })}
+                        testId={`edit-title-${i}`}
+                      />
+                      <DraftField
+                        label="Company"
+                        value={draft.company}
+                        onChange={(v) => updateDraft(i, { company: v })}
+                        testId={`edit-company-${i}`}
+                      />
+                    </div>
+                    <DraftField
+                      label="Notes"
+                      value={draft.notes}
+                      onChange={(v) => updateDraft(i, { notes: v })}
+                      multiline
+                      testId={`edit-notes-${i}`}
+                    />
+                    <div className="grid grid-cols-3 gap-2 pt-1 border-t border-card-border/60">
+                      <DraftField
+                        label="Stage"
+                        value={draft.stage}
+                        onChange={(v) => updateDraft(i, { stage: v })}
+                        placeholder="new"
+                        testId={`edit-stage-${i}`}
+                      />
+                      <DraftField
+                        label="Value (USD)"
+                        value={draft.valueUsd}
+                        onChange={(v) => updateDraft(i, { valueUsd: v })}
+                        placeholder="0"
+                        testId={`edit-value-${i}`}
+                      />
+                      <DraftField
+                        label="Close Date"
+                        type="date"
+                        value={draft.closeDate}
+                        onChange={(v) => updateDraft(i, { closeDate: v })}
+                        testId={`edit-close-${i}`}
+                      />
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">
+                      Stage / Value / Close Date apply only when saving as a Lead.
+                    </div>
                   </div>
                 )}
-                <div className="text-[12px] text-muted-foreground space-y-0.5">
-                  {c.email && <div>{c.email}</div>}
-                  {c.phone && <div>{c.phone}</div>}
-                </div>
-                {lead && (lead.stage || lead.valueUsd != null) && (
-                  <div className="text-[11px] text-primary/80 font-medium">
-                    Lead: {lead.stage ?? "new"}
-                    {lead.valueUsd != null ? ` · $${lead.valueUsd.toLocaleString()}` : ""}
-                  </div>
-                )}
+
                 <div className="flex flex-wrap gap-2 pt-1.5">
                   <button
                     type="button"
-                    onClick={() => onApply("contact", i)}
+                    onClick={() => handleApply("contact")}
                     disabled={applying || !!appliedNote}
                     className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold px-2.5 py-1 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                     data-testid={`button-add-contact-${i}`}
@@ -948,7 +1163,7 @@ function AttachmentCard({
                   </button>
                   <button
                     type="button"
-                    onClick={() => onApply("lead", i)}
+                    onClick={() => handleApply("lead")}
                     disabled={applying || !!appliedNote}
                     className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold px-2.5 py-1 rounded-md border border-primary/40 text-primary hover:bg-primary/10 disabled:opacity-50"
                     data-testid={`button-add-lead-${i}`}
@@ -969,6 +1184,53 @@ function AttachmentCard({
         </div>
       )}
     </div>
+  );
+}
+
+function DraftField({
+  label,
+  value,
+  onChange,
+  type = "text",
+  multiline = false,
+  placeholder,
+  testId,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  type?: string;
+  multiline?: boolean;
+  placeholder?: string;
+  testId?: string;
+}) {
+  const cls =
+    "w-full bg-background border border-card-border rounded-md px-2 py-1 text-[12.5px] outline-none focus:border-primary";
+  return (
+    <label className="block">
+      <span className="block text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-0.5">
+        {label}
+      </span>
+      {multiline ? (
+        <textarea
+          rows={2}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className={cn(cls, "resize-none")}
+          data-testid={testId}
+        />
+      ) : (
+        <input
+          type={type}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className={cls}
+          data-testid={testId}
+        />
+      )}
+    </label>
   );
 }
 

@@ -86,12 +86,13 @@ const clerkAppearance = {
     headerTitle: "text-white font-bold tracking-tight text-[22px]",
     headerSubtitle: "text-white/60 text-[13px]",
     socialButtonsBlockButton:
-      "bg-white/5 hover:bg-white/10 border border-white/10 text-white",
-    socialButtonsBlockButtonText: "text-white font-medium",
-    formFieldLabel: "text-white/85 text-[12px] font-semibold uppercase tracking-wider",
-    formFieldInput: "bg-[hsl(244,47%,18%)] border-[hsl(244,47%,28%)] text-white",
+      "bg-white/5 hover:bg-white/10 border border-white/10 text-white !h-11 !min-h-11 !py-0 rounded-lg text-[13.5px]",
+    socialButtonsBlockButtonText: "text-white font-medium text-[13.5px]",
+    formFieldLabel: "text-white/85 text-[11px] font-semibold uppercase tracking-wider",
+    formFieldInput:
+      "bg-[hsl(244,47%,18%)] border-[hsl(244,47%,28%)] text-white !h-11 px-3 rounded-lg text-[14px]",
     formButtonPrimary:
-      "bg-primary text-primary-foreground hover:bg-primary/90 font-bold tracking-tight",
+      "bg-primary text-primary-foreground hover:bg-primary/90 font-semibold tracking-tight !h-11 !min-h-11 !py-0 rounded-lg text-[14px] normal-case shadow-none",
     footerActionLink: "text-primary font-semibold hover:underline",
     footerActionText: "text-white/60",
     footerAction: "bg-transparent",
