@@ -16,6 +16,7 @@ import {
   createCalendarEvent,
   updateCalendarEvent,
   deleteCalendarEvent,
+  CalendarEventGoneError,
   type CalendarEventInput,
 } from "../lib/gcal";
 import type { Logger } from "pino";
@@ -91,6 +92,16 @@ async function syncUpdateEvent(
       await updateCalendarEvent(row.calendarEventId, ev);
       return row.calendarEventId;
     } catch (err) {
+      if (err instanceof CalendarEventGoneError) {
+        log.info({ taskId: row.id }, "Calendar event gone; recreating");
+        try {
+          const { id } = await createCalendarEvent(ev);
+          return id;
+        } catch (err2) {
+          log.warn({ err: err2, taskId: row.id }, "Calendar event recreate skipped");
+          return null;
+        }
+      }
       log.warn({ err, taskId: row.id }, "Calendar event update skipped");
       return row.calendarEventId;
     }
@@ -232,21 +243,25 @@ router.delete("/tasks/:id", requireAuth, async (req, res): Promise<void> => {
     return;
   }
   try {
-    const [row] = await db
-      .delete(tasksTable)
+    const [existing] = await db
+      .select({ id: tasksTable.id, calendarEventId: tasksTable.calendarEventId })
+      .from(tasksTable)
       .where(and(eq(tasksTable.id, params.data.id), eq(tasksTable.orgId, r.orgId)))
-      .returning();
-    if (!row) {
+      .limit(1);
+    if (!existing) {
       res.status(404).json({ error: "Task not found" });
       return;
     }
-    if (row.calendarEventId) {
+    if (existing.calendarEventId) {
       try {
-        await deleteCalendarEvent(row.calendarEventId);
+        await deleteCalendarEvent(existing.calendarEventId);
       } catch (err) {
-        req.log.warn({ err, taskId: row.id }, "Calendar event delete skipped");
+        req.log.warn({ err, taskId: existing.id }, "Calendar event delete skipped");
       }
     }
+    await db
+      .delete(tasksTable)
+      .where(and(eq(tasksTable.id, params.data.id), eq(tasksTable.orgId, r.orgId)));
     res.sendStatus(204);
   } catch (err) {
     req.log.error({ err }, "Failed to delete task");

@@ -79,6 +79,13 @@ export async function createCalendarEvent(
   return { id: data.id, htmlLink: data.htmlLink ?? null };
 }
 
+export class CalendarEventGoneError extends Error {
+  constructor(eventId: string) {
+    super(`Calendar event ${eventId} no longer exists`);
+    this.name = "CalendarEventGoneError";
+  }
+}
+
 export async function updateCalendarEvent(
   eventId: string,
   input: CalendarEventInput,
@@ -93,6 +100,9 @@ export async function updateCalendarEvent(
       body: JSON.stringify(buildEventBody(input)),
     },
   );
+  if (res.status === 404 || res.status === 410) {
+    throw new CalendarEventGoneError(eventId);
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`Calendar update failed (${res.status}): ${text.slice(0, 500)}`);
