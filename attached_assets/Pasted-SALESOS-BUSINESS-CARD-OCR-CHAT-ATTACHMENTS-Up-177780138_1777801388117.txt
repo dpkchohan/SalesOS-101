@@ -1,0 +1,693 @@
+SALESOS - BUSINESS CARD OCR + CHAT ATTACHMENTS
+==============================================
+
+Upload business cards, documents, and files directly in chat.
+Claude extracts data (vision + document reading).
+Ultra-minimal, zero-learning-curve UI.
+
+Build time: 2-3 hours
+
+---
+
+## FEATURES
+
+### 1. BUSINESS CARD EXTRACTION (Vision)
+User: Takes photo of business card
+  ↓
+Uploads image in chat
+  ↓
+Claude reads image (vision API)
+  ↓
+Extracts: name, email, phone, company, title
+  ↓
+Adds to contacts automatically
+  ↓
+Chat shows: "✓ Added John Smith from Acme Corp"
+
+### 2. DOCUMENT ATTACHMENTS (Multiple Formats)
+User: Drag-drop PDF, PPT, Word, Excel, Text
+  ↓
+Claude reads document
+  ↓
+Claude summarizes or extracts data
+  ↓
+Chat shows summary + extracted data
+
+### 3. IMAGE ATTACHMENTS
+User: Upload JPG, PNG, WebP
+  ↓
+Claude analyzes image
+  ↓
+Describes content or extracts text
+  ↓
+Chat shows analysis
+
+### 4. MINIMAL UI
+No buttons. No complexity.
+Just: Chat input → attachment button (paperclip) → drag or click
+
+---
+
+## DATABASE SCHEMA
+
+New table: `chat_attachments`
+
+```sql
+CREATE TABLE chat_attachments (
+  id UUID PRIMARY KEY,
+  org_id UUID NOT NULL REFERENCES organizations(id),
+  message_id UUID REFERENCES messages(id),
+  file_name VARCHAR(255),
+  file_type VARCHAR(50), -- 'image', 'pdf', 'docx', 'pptx', 'xlsx', 'txt'
+  file_url VARCHAR(500), -- stored in cloud
+  file_size INT,
+  mime_type VARCHAR(100),
+  extracted_data JSONB, -- what Claude extracted
+  extraction_status VARCHAR(50), -- 'pending', 'processing', 'done', 'failed'
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+Add to messages table:
+- attachment_ids UUID[] (array of attachment IDs)
+- has_attachment BOOLEAN DEFAULT false
+```
+
+---
+
+## BACKEND - ATTACHMENT HANDLING
+
+### Endpoint 1: Upload Attachment
+
+```
+POST /api/attachments/upload
+
+Input:
+- multipart/form-data
+- file (image, PDF, Word, PPT, Excel, Text)
+- org_id (auto from auth)
+
+Validation:
+- Max 10MB per file
+- Allowed types: jpg, png, pdf, docx, xlsx, pptx, txt, webp
+- Reject: exe, sh, bat, etc.
+
+Process:
+1. Upload to cloud storage (Google Drive or AWS S3)
+2. Create attachment record in DB (status: pending)
+3. Return: { attachment_id, file_url, status: 'pending' }
+
+Response:
+{
+  "id": "att-123",
+  "file_name": "business_card.jpg",
+  "file_url": "https://...",
+  "status": "pending"
+}
+```
+
+### Endpoint 2: Trigger Extraction
+
+```
+POST /api/attachments/:id/extract
+
+Process (based on file type):
+
+1. IMAGE (JPG, PNG, WebP):
+   - Send to Claude vision API
+   - Prompt: "Extract all contact info from this business card:
+     name, email, phone, company, title, website, address"
+   - Claude returns structured JSON
+   - Check if contact already exists (by email)
+   - Auto-add to contacts if confirmed by user
+
+2. PDF:
+   - Extract text using pdfparse library
+   - Send to Claude: "Extract all contact/lead info from this PDF"
+   - Return: structured data
+
+3. DOCX (Word):
+   - Extract text using mammoth library
+   - Send to Claude: "Analyze this document. Extract any business cards, 
+     contact lists, or lead information"
+   - Return: structured data
+
+4. PPTX (PowerPoint):
+   - Extract text from slides
+   - Send to Claude: "Analyze these slides. Extract contact info, 
+     company names, deal info, pricing"
+   - Return: structured data
+
+5. XLSX (Excel):
+   - Parse as table/CSV
+   - Send to Claude: "Analyze this spreadsheet. Map columns intelligently.
+     Extract all contacts and leads"
+   - Return: structured data
+
+6. TXT (Plain Text):
+   - Read raw text
+   - Send to Claude: "Extract all contact/lead information from this text"
+   - Return: structured data
+
+Response to Chat:
+- Show what was extracted
+- Show confidence score
+- Show preview
+- Button: [Add to Contacts] [Add as Lead] [Dismiss]
+```
+
+### Claude Prompts (by file type)
+
+**Business Card Image:**
+```
+You are a business card reader. Extract the following from this image:
+- Full name (first + last)
+- Email address
+- Phone number
+- Company name
+- Job title
+- Website
+- Physical address
+- LinkedIn profile (if visible)
+
+Return valid JSON only (no markdown):
+{
+  "name": "John Smith",
+  "email": "john@acme.com",
+  "phone": "+1-212-555-0147",
+  "company": "Acme Corporation",
+  "title": "VP Sales",
+  "website": "https://acme.com",
+  "address": "123 Main St, New York, NY 10001",
+  "linkedin": "linkedin.com/in/johnsmith",
+  "confidence": 0.98
+}
+
+If you can't extract a field, leave it null. Be strict - only extract what you clearly see.
+```
+
+**PDF Document:**
+```
+Analyze this PDF document. Extract all business cards, contact lists, or lead information.
+
+Return JSON:
+{
+  "document_type": "invoice | contract | contact_list | proposal | other",
+  "contacts": [
+    { "name": "...", "email": "...", "phone": "...", "company": "..." }
+  ],
+  "leads": [
+    { "contact_name": "...", "company": "...", "stage": "...", "budget": ... }
+  ],
+  "summary": "One sentence describing the document",
+  "extraction_confidence": 0.95
+}
+```
+
+**Excel/CSV:**
+```
+Analyze this spreadsheet. Intelligently map columns. Extract all contacts and leads.
+
+Return JSON:
+{
+  "contacts": [...],
+  "leads": [...],
+  "column_mapping": { "A": "name", "B": "email", ... },
+  "data_quality": 0.92
+}
+```
+
+**PowerPoint:**
+```
+Analyze these slides. Extract contact info, company names, deal info, pricing, leads.
+
+Return JSON:
+{
+  "slide_count": 10,
+  "contacts": [...],
+  "leads": [...],
+  "key_info": "Summary of slides",
+  "leads_found": 5,
+  "confidence": 0.85
+}
+```
+
+---
+
+## FRONTEND - MINIMAL UI DESIGN
+
+### Chat Input Area
+
+```
+┌─────────────────────────────────────┐
+│                                     │
+│  Type message...     [📎] [🎤] [📤] │
+│                                     │
+└─────────────────────────────────────┘
+
+Icons:
+📎 = Attach file (paperclip)
+🎤 = Record voice
+📤 = Send message
+```
+
+**Behavior:**
+- Click 📎 → file picker OR drag-drop zone appears
+- User selects file
+- File shows as chip/badge in input: "business_card.jpg ✕" (with X to remove)
+- User types message (optional) + sends
+- Claude processes attachment + responds
+
+### Attachment in Chat
+
+**User Side:**
+```
+┌────────────────────────────────────┐
+│ Me (10:30 AM)                      │
+├────────────────────────────────────┤
+│ "Extract contact from this card"   │
+│                                    │
+│ [business_card.jpg] (preview)      │
+└────────────────────────────────────┘
+```
+
+Small preview thumbnail of image/document.
+
+**Assistant Side:**
+```
+┌────────────────────────────────────┐
+│ SalesOS (10:30 AM)                 │
+├────────────────────────────────────┤
+│ ✓ Found contact:                   │
+│                                    │
+│ Name: John Smith                   │
+│ Email: john@acme.com               │
+│ Phone: +1-212-555-0147             │
+│ Company: Acme Corporation           │
+│ Title: VP Sales                    │
+│ Confidence: 98%                    │
+│                                    │
+│ [Add to Contacts] [Add as Lead]    │
+│ [View Full] [Dismiss]              │
+└────────────────────────────────────┘
+```
+
+Clean, minimal. No clutter.
+
+### Attachment Processing State
+
+```
+While processing:
+
+┌────────────────────────────────────┐
+│ SalesOS (10:30 AM)                 │
+├────────────────────────────────────┤
+│ Analyzing business_card.jpg...     │
+│ 🔄 (spinner)                       │
+└────────────────────────────────────┘
+
+After done:
+┌────────────────────────────────────┐
+│ SalesOS (10:31 AM)                 │
+├────────────────────────────────────┤
+│ ✓ Extraction complete              │
+│ [show results]                     │
+└────────────────────────────────────┘
+```
+
+---
+
+## IMPLEMENTATION DETAILS
+
+### Phase 1: Database Schema (10 min)
+- Create chat_attachments table
+- Add attachment_ids to messages table
+
+### Phase 2: Backend File Upload (30 min)
+- POST /api/attachments/upload
+- File validation (size, type)
+- Cloud storage (Google Drive or S3)
+- Create DB record
+
+### Phase 3: Extraction Logic (1 hour)
+- POST /api/attachments/:id/extract
+- Handle each file type (image, PDF, Word, PPT, Excel, Text)
+- Send to Claude with appropriate prompt
+- Parse response + store extracted_data
+- Return structured result
+
+### Phase 4: Frontend Attachment UI (45 min)
+- Add attachment button (📎) to chat input
+- File picker OR drag-drop zone
+- Show attachment chip in input
+- Display attachment preview in chat
+- Show extraction results
+- Buttons: [Add to Contacts] [Add as Lead] [Dismiss]
+
+### Phase 5: Chat Integration (30 min)
+- Link attachments to messages
+- Show attachment preview in chat
+- Show extraction results below message
+- Handle errors gracefully
+
+### Phase 6: Auto-Add to Contacts (20 min)
+- After extraction, user clicks [Add to Contacts]
+- Check if contact exists (by email)
+- If exists: merge/update
+- If new: create
+- Show confirmation: "✓ John Smith added"
+
+---
+
+## SUPPORTED FILE TYPES
+
+| Type | Extension | Handler | Claude Task |
+|------|-----------|---------|-------------|
+| Image | .jpg, .png, .webp | Vision API | Extract contact from card |
+| PDF | .pdf | pdfparse | Extract text → Claude |
+| Word | .docx | mammoth | Extract text → Claude |
+| PowerPoint | .pptx | pptxparse | Extract text → Claude |
+| Excel | .xlsx, .xls | xlsx | Parse table → Claude |
+| Text | .txt | read file | Read → Claude |
+
+---
+
+## CLAUDE VISION API (Business Cards)
+
+```typescript
+// For image attachments (business cards)
+
+import Anthropic from "@anthropic-ai/sdk";
+import fs from "fs";
+
+const client = new Anthropic();
+
+const extractFromCard = async (imageUrl) => {
+  const response = await client.messages.create({
+    model: "claude-3-5-sonnet-20241022",
+    max_tokens: 1024,
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "image",
+            source: {
+              type: "url",
+              url: imageUrl
+            }
+          },
+          {
+            type: "text",
+            text: `You are a business card reader. Extract the following from this image:
+- Full name (first + last)
+- Email address
+- Phone number
+- Company name
+- Job title
+- Website
+- Physical address
+
+Return valid JSON only (no markdown):
+{
+  "name": "...",
+  "email": "...",
+  "phone": "...",
+  "company": "...",
+  "title": "...",
+  "website": "...",
+  "address": "...",
+  "confidence": 0.95
+}
+
+If you can't extract a field, set it to null.`
+          }
+        ]
+      }
+    ]
+  });
+
+  return JSON.parse(response.content[0].text);
+};
+```
+
+---
+
+## UX FLOW (STEP BY STEP)
+
+### Scenario: Upload Business Card
+
+1. **User opens Chat**
+   ```
+   Chat window visible
+   Input field at bottom: "Type message... [📎] [🎤] [📤]"
+   ```
+
+2. **User clicks 📎 (paperclip)**
+   ```
+   File picker opens
+   User selects business_card.jpg
+   ```
+
+3. **File appears in input**
+   ```
+   "Type message..." [business_card.jpg ✕] [📎] [🎤] [📤]
+   
+   (Small preview thumbnail of card)
+   ```
+
+4. **User types optional message**
+   ```
+   "Extract contact from this card"
+   [business_card.jpg ✕]
+   ```
+
+5. **User clicks 📤 (send)**
+   ```
+   Message + attachment sent
+   ```
+
+6. **Claude processes**
+   ```
+   Chat shows: "Analyzing business_card.jpg..."
+   (spinner)
+   ```
+
+7. **Results appear**
+   ```
+   ✓ Found contact:
+   
+   Name: John Smith
+   Email: john@acme.com
+   Phone: +1-212-555-0147
+   Company: Acme Corporation
+   Title: VP Sales
+   Confidence: 98%
+   
+   [Add to Contacts] [Add as Lead]
+   ```
+
+8. **User clicks [Add to Contacts]**
+   ```
+   ✓ John Smith added to contacts
+   
+   (Chat continues)
+   ```
+
+---
+
+## MINIMAL DESIGN PRINCIPLES
+
+1. **No learning curve**
+   - Paperclip icon = attach file (universal)
+   - Drag-drop works automatically
+   - Results show immediately
+
+2. **Zero complexity**
+   - No configuration needed
+   - No column mapping (Claude handles it)
+   - No "advanced options"
+
+3. **Visual simplicity**
+   - Clean white/gray interface
+   - Orange accent color (SalesOS brand)
+   - Minimal icons + text
+   - Large touch targets (44px+)
+
+4. **Instant feedback**
+   - File shows immediately
+   - Processing spinner shows progress
+   - Results appear instantly
+   - Errors show in plain English
+
+5. **Mobile-first**
+   - Works on small screens
+   - Attachment button always visible
+   - File picker supports mobile
+   - Share from Photos app (iOS)
+
+---
+
+## EDGE CASES HANDLED
+
+```
+✓ User uploads file with no extractable data
+  → Claude: "Could not find contact info in this image"
+  → Show error gracefully
+
+✓ User uploads huge PDF (20MB)
+  → Limit to 10MB
+  → Show: "File too large (max 10MB)"
+
+✓ User uploads unsupported format (.exe, .zip)
+  → Reject: "File type not supported"
+
+✓ User uploads business card, email already exists
+  → Merge: "John Smith already exists. Merge contact info?"
+  → Buttons: [Merge] [Create New]
+
+✓ Claude extraction confidence < 50%
+  → Show: "Low confidence. Please review:"
+  → Show all fields
+  → Allow user to edit before saving
+
+✓ Document has multiple contacts
+  → Claude extracts all
+  → Show list: "[1] John Smith [2] Sarah Jones [3] Mike Brown"
+  → User can add all or select specific ones
+```
+
+---
+
+## TESTING CHECKLIST
+
+```
+Business Card Image:
+[ ] Upload JPG of business card
+[ ] Claude extracts name, email, phone, company, title
+[ ] Shows confidence > 95%
+[ ] [Add to Contacts] button works
+[ ] Contact created in DB
+
+PDF Document:
+[ ] Upload PDF (invoice, contract, proposal)
+[ ] Claude extracts relevant data
+[ ] Shows summary + extracted contacts/leads
+[ ] Add to contacts/leads buttons work
+
+Excel File:
+[ ] Upload XLSX with contacts
+[ ] Claude maps columns intelligently
+[ ] Creates all contacts in DB
+[ ] Shows data quality score
+
+Multiple Attachments:
+[ ] User can attach multiple files in one message
+[ ] Each file processes independently
+[ ] Results show for each file
+
+Mobile Experience:
+[ ] Attachment button visible on mobile
+[ ] File picker works on iOS/Android
+[ ] Results readable on small screen
+[ ] [Add to Contacts] button easy to tap
+
+Error Handling:
+[ ] Upload file > 10MB → shows error
+[ ] Upload unsupported format → shows error
+[ ] Duplicate contact → shows merge option
+[ ] Low confidence extraction → shows warning
+```
+
+---
+
+## ARCHITECTURAL FLOW
+
+```
+User upload in Chat
+    ↓
+/api/attachments/upload (validate + store)
+    ↓
+Create chat_attachment record (status: pending)
+    ↓
+Show in chat: "business_card.jpg [processing]"
+    ↓
+/api/attachments/:id/extract (async job)
+    ↓
+Based on file type:
+  - Image → Claude vision
+  - PDF → parse text → Claude
+  - Excel → parse table → Claude
+  - Word/PPT → extract text → Claude
+    ↓
+Claude returns JSON
+    ↓
+Store in extracted_data field
+    ↓
+Update status: 'done'
+    ↓
+Send to frontend (via WebSocket or poll)
+    ↓
+Chat shows: "✓ Found contact: [data] [Add] [Dismiss]"
+    ↓
+User clicks [Add to Contacts]
+    ↓
+/api/contacts/create-from-attachment
+    ↓
+Contact added to DB
+    ↓
+Chat shows: "✓ John Smith added"
+```
+
+---
+
+## DEPLOYMENT
+
+Accessible in:
+- Chat window (📎 attachment button)
+- All users can upload files
+- Auto-extracted by Claude
+- Auto-added to contacts
+
+No new page needed. Everything in chat.
+
+---
+
+## FUTURE ENHANCEMENTS (Later)
+
+- Email signature extraction (from email forwards)
+- LinkedIn profile scraping (if user shares URL)
+- Batch import (upload 50 business cards at once)
+- Sync with Google Contacts (2-way)
+- Auto-classify documents (invoice, contract, proposal, etc.)
+
+---
+
+## READY TO BUILD?
+
+Tell Replit:
+
+"Build business card OCR + document attachments in chat following this spec.
+
+Features:
+- Upload images (JPG/PNG) → Claude extracts contact via vision API
+- Upload PDFs, Word, PPT, Excel, Text → Claude reads + extracts
+- Minimal UI: just paperclip icon (📎) in chat
+- Results show inline in chat
+- [Add to Contacts] button auto-creates contact
+- No learning curve, super simple
+
+File types: JPG, PNG, PDF, DOCX, PPTX, XLSX, TXT (max 10MB each)
+
+Test with:
+- Business card JPG → extracts name, email, phone, company, title
+- PDF invoice → extracts contact info
+- Excel contacts → maps columns, creates all contacts
+
+ETA: 2-3 hours"
+```
+
+---
+
+**ULTRA-MINIMAL. SUPER SIMPLE. ZERO LEARNING CURVE.**
+
+User just: Click paperclip → pick file → done. Claude handles the rest.
