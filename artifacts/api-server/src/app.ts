@@ -1,4 +1,6 @@
 import express, { type Express } from "express";
+import path from "path";
+import { existsSync } from "fs";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import { clerkMiddleware } from "@clerk/express";
@@ -68,5 +70,18 @@ app.use(
 );
 
 app.use("/api", router);
+
+// In production the web SPA is served by this same process so that
+// Autoscale only needs a single exposed port (8080).
+// The web build is produced as part of the API server's production build step.
+if (process.env.NODE_ENV === "production") {
+  const webRoot = path.resolve(process.cwd(), "artifacts/salesos-web/dist/public");
+  if (existsSync(webRoot)) {
+    app.use(express.static(webRoot));
+    app.get("*", (_req, res) => {
+      res.sendFile(path.join(webRoot, "index.html"));
+    });
+  }
+}
 
 export default app;

@@ -17,15 +17,6 @@ localPort = 22314
 [services.development]
 run = "pnpm --filter @workspace/salesos-web run dev"
 
-[services.production]
-build = [ "pnpm", "--filter", "@workspace/salesos-web", "run", "build" ]
-publicDir = "artifacts/salesos-web/dist/public"
-serve = "static"
-
-[[services.production.rewrites]]
-from = "/*"
-to = "/index.html"
-
 [services.env]
 PORT = "22314"
 BASE_PATH = "/"
