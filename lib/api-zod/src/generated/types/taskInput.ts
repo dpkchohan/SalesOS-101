@@ -17,7 +17,10 @@ export interface TaskInput {
   description?: string | null;
   /** @nullable */
   dueDate?: Date | null;
-  /** @nullable */
+  /**
+   * @nullable
+   * @pattern ^([01][0-9]|2[0-3]):[0-5][0-9]$
+   */
   dueTime?: string | null;
   priority?: TaskPriority;
 }

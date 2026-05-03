@@ -363,7 +363,10 @@ export interface TaskInput {
   description?: string | null;
   /** @nullable */
   dueDate?: string | null;
-  /** @nullable */
+  /**
+   * @nullable
+   * @pattern ^([01][0-9]|2[0-3]):[0-5][0-9]$
+   */
   dueTime?: string | null;
   priority?: TaskPriority;
 }
@@ -374,7 +377,10 @@ export interface TaskUpdate {
   description?: string | null;
   /** @nullable */
   dueDate?: string | null;
-  /** @nullable */
+  /**
+   * @nullable
+   * @pattern ^([01][0-9]|2[0-3]):[0-5][0-9]$
+   */
   dueTime?: string | null;
   completed?: boolean;
   priority?: TaskPriority;

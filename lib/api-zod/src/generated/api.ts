@@ -659,6 +659,9 @@ export const ListTasksResponseItem = zod.object({
 });
 export const ListTasksResponse = zod.array(ListTasksResponseItem);
 
+export const createTaskBodyDueTimeRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
 export const createTaskBodyPriorityDefault = `medium`;
 
 export const CreateTaskBody = zod.object({
@@ -667,7 +670,7 @@ export const CreateTaskBody = zod.object({
   title: zod.string(),
   description: zod.string().nullish(),
   dueDate: zod.coerce.date().nullish(),
-  dueTime: zod.string().nullish(),
+  dueTime: zod.string().regex(createTaskBodyDueTimeRegExp).nullish(),
   priority: zod
     .enum(["high", "medium", "low"])
     .default(createTaskBodyPriorityDefault),
@@ -677,11 +680,15 @@ export const UpdateTaskParams = zod.object({
   id: zod.coerce.string(),
 });
 
+export const updateTaskBodyDueTimeRegExp = new RegExp(
+  "^([01][0-9]|2[0-3]):[0-5][0-9]$",
+);
+
 export const UpdateTaskBody = zod.object({
   title: zod.string().optional(),
   description: zod.string().nullish(),
   dueDate: zod.coerce.date().nullish(),
-  dueTime: zod.string().nullish(),
+  dueTime: zod.string().regex(updateTaskBodyDueTimeRegExp).nullish(),
   completed: zod.boolean().optional(),
   priority: zod.enum(["high", "medium", "low"]).optional(),
   assignedTo: zod.string().nullish(),

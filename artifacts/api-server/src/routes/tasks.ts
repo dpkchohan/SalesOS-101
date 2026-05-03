@@ -74,8 +74,13 @@ async function syncUpdateEvent(
     if (row.calendarEventId) {
       try {
         await deleteCalendarEvent(row.calendarEventId);
+        return null;
       } catch (err) {
-        log.warn({ err, taskId: row.id }, "Calendar event delete skipped");
+        log.warn(
+          { err, taskId: row.id },
+          "Calendar event delete failed; keeping calendarEventId for retry",
+        );
+        return row.calendarEventId;
       }
     }
     return null;

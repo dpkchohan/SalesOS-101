@@ -38,9 +38,13 @@ function buildEventBody(input: CalendarEventInput): Record<string, unknown> {
     const [hh, mm] = input.time.split(":").map((n) => parseInt(n, 10));
     const dur = input.durationMinutes ?? 30;
     const totalEnd = hh * 60 + mm + dur;
-    const eh = Math.floor(totalEnd / 60) % 24;
-    const em = totalEnd % 60;
-    const endIso = `${input.date}T${String(eh).padStart(2, "0")}:${String(em).padStart(2, "0")}:00`;
+    const dayShift = Math.floor(totalEnd / (60 * 24));
+    const minutesInDay = totalEnd - dayShift * 60 * 24;
+    const eh = Math.floor(minutesInDay / 60);
+    const em = minutesInDay % 60;
+    let endDate = input.date;
+    for (let i = 0; i < dayShift; i++) endDate = nextDay(endDate);
+    const endIso = `${endDate}T${String(eh).padStart(2, "0")}:${String(em).padStart(2, "0")}:00`;
     return {
       summary: input.title,
       description: input.description ?? "",
