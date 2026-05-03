@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   useGetMe,
   useGetCompanyCredentials,
@@ -308,6 +308,13 @@ function CompanyTab() {
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [autoColorNote, setAutoColorNote] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const hasSavedColors = useMemo(
+    () =>
+      !!data?.primaryColor ||
+      !!data?.secondaryColor ||
+      !!data?.accentColor,
+    [data?.accentColor, data?.primaryColor, data?.secondaryColor],
+  );
 
   useEffect(() => {
     if (!data) return;
@@ -468,9 +475,13 @@ function CompanyTab() {
               {autoColorNote}
             </div>
           )}
+          {!autoColorNote && hasSavedColors && (
+            <div className="text-[11px] text-muted-foreground mt-1.5">
+              Brand colors are used in proposal specifications.
+            </div>
+          )}
           <div className="text-[11px] text-muted-foreground mt-1.5">
-            PNG/JPG/SVG, under 2MB. Used in proposal headers. Brand colors are auto-detected on
-            upload.
+            PNG/JPG/SVG, under 2MB. Used in proposal headers.
           </div>
         </Field>
       </SectionCard>
