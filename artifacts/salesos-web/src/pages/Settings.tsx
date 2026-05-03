@@ -3,6 +3,7 @@ import {
   useGetMe,
   useGetCompanyCredentials,
   useUpsertCompanyCredentials,
+  useGetCalendarStatus,
   getGetCompanyCredentialsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -13,6 +14,7 @@ import {
   Mail,
   User,
   ShieldCheck,
+  Calendar,
   Image as ImageIcon,
   Save,
   Loader2,
@@ -98,6 +100,7 @@ function AccountTab() {
           <Row icon={<ShieldCheck size={13} />} label="Role" value={data?.role ?? "—"} />
         </div>
       </div>
+      <CalendarStatusCard />
       <button
         onClick={() => signOut()}
         className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-card border border-card-border text-rose-600 dark:text-rose-400 font-semibold text-[14px] hover:bg-rose-500/5 transition-colors"
@@ -106,6 +109,56 @@ function AccountTab() {
         <LogOut size={15} /> Sign out
       </button>
       {isLoading && <div className="text-[12px] text-muted-foreground">Loading account…</div>}
+    </div>
+  );
+}
+
+function CalendarStatusCard() {
+  const { data, isLoading } = useGetCalendarStatus({
+    query: { staleTime: 60_000, refetchOnWindowFocus: false },
+  });
+  const connected = data?.connected === true;
+  return (
+    <div
+      className="rounded-2xl bg-card border border-card-border p-5"
+      data-testid="card-calendar-status"
+    >
+      <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground font-bold mb-3">
+        <Calendar size={14} /> Integrations
+      </div>
+      <div className="flex items-start gap-3">
+        <div
+          className={cn(
+            "w-10 h-10 rounded-xl grid place-items-center flex-shrink-0",
+            connected
+              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+              : "bg-muted text-muted-foreground",
+          )}
+        >
+          <Calendar size={18} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="font-semibold text-[14px]">Google Calendar</div>
+          <div className="text-[12px] text-muted-foreground mt-0.5">
+            {isLoading
+              ? "Checking…"
+              : connected
+                ? `Connected${data?.email ? ` as ${data.email}` : ""}. Tasks with a due date sync automatically.`
+                : "Not connected. Open the Replit Integrations panel to authorize Google Calendar."}
+          </div>
+        </div>
+        <span
+          className={cn(
+            "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider flex-shrink-0",
+            connected
+              ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+              : "bg-muted text-muted-foreground",
+          )}
+          data-testid="badge-calendar-status"
+        >
+          {isLoading ? "…" : connected ? "Connected" : "Off"}
+        </span>
+      </div>
     </div>
   );
 }

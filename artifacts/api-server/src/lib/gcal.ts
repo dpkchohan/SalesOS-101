@@ -1,7 +1,7 @@
 import { ReplitConnectors } from "@replit/connectors-sdk";
 
 const CALENDAR_ID = "primary";
-const PROXY_BASE = `/calendars/${CALENDAR_ID}/events`;
+const PROXY_BASE = `/calendar/v3/calendars/${CALENDAR_ID}/events`;
 
 export interface CalendarEventInput {
   title: string;
@@ -95,9 +95,11 @@ export async function checkCalendarConnection(): Promise<{
 }> {
   try {
     const connectors = new ReplitConnectors();
-    const res = await connectors.proxy("google-calendar", "/users/me/calendarList?maxResults=1", {
-      method: "GET",
-    });
+    const res = await connectors.proxy(
+      "google-calendar",
+      "/calendar/v3/users/me/calendarList?maxResults=1",
+      { method: "GET" },
+    );
     if (!res.ok) {
       return { connected: false, email: null, error: `HTTP ${res.status}` };
     }
