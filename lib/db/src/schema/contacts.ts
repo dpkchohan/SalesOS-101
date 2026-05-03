@@ -52,13 +52,13 @@ export const contactsTable = pgTable(
     // Race-safe per-org dedupe: enforce one contact per (org, normalized email)
     // when an email is provided. NULL emails are allowed to repeat.
     uniqueIndex("contacts_org_email_unique")
-      .on(t.orgId, sql`lower(${t.email})`)
+      .on(t.orgId.op("uuid_ops"), sql`lower(${t.email}) text_ops`)
       .where(sql`${t.email} is not null and ${t.isDuplicate} = false`),
     uniqueIndex("contacts_org_phone_unique")
-      .on(t.orgId, t.phoneNormalized)
+      .on(t.orgId.op("uuid_ops"), t.phoneNormalized.op("text_ops"))
       .where(sql`${t.phoneNormalized} is not null and ${t.isDuplicate} = false`),
     uniqueIndex("contacts_org_customer_no_unique")
-      .on(t.orgId, t.customerNo)
+      .on(t.orgId.op("uuid_ops"), t.customerNo.op("text_ops"))
       .where(sql`${t.customerNo} is not null`),
   ],
 );
