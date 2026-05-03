@@ -1,0 +1,563 @@
+SALESOS - DUPLICATE DETECTION + UNIQUE CUSTOMER ID
+==================================================
+
+Detect duplicate contacts (by email/phone).
+Assign unique customer number to each contact.
+Show duplicates to user, allow merge/keep.
+
+Build time: 1.5 hours
+
+---
+
+## DATABASE SCHEMA
+
+### Update contacts table
+
+Add columns:
+```sql
+ALTER TABLE contacts ADD COLUMN (
+  customer_no VARCHAR(20) UNIQUE, -- "CUST-000001", "CUST-000002", etc
+  is_duplicate BOOLEAN DEFAULT false, -- flagged as potential duplicate
+  duplicate_of UUID REFERENCES contacts(id), -- link to original if merged
+  merged_at TIMESTAMP, -- when merged
+  merged_reason VARCHAR(255) -- "Duplicate email: john@acme.com",
+  phone_normalized VARCHAR(20), -- standardized phone for matching
+  email_normalized VARCHAR(255), -- lowercase for matching
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Indexes for duplicate detection
+CREATE INDEX idx_contacts_email_normalized ON contacts(org_id, email_normalized);
+CREATE INDEX idx_contacts_phone_normalized ON contacts(org_id, phone_normalized);
+```
+
+---
+
+## CUSTOMER NUMBER GENERATION
+
+**Format:** CUST-XXXXXX (6 digits, auto-incrementing per org)
+
+Example:
+- CUST-000001 (first contact in org)
+- CUST-000002 (second contact)
+- CUST-000265 (265th contact)
+
+**Implementation:**
+
+```typescript
+// Generate unique customer number
+
+const generateCustomerNo = async (orgId: string) => {
+  const lastContact = await db
+    .select()
+    .from(contactsTable)
+    .where(eq(contactsTable.orgId, orgId))
+    .orderBy(desc(contactsTable.createdAt))
+    .limit(1);
+  
+  let nextNo = 1;
+  if (lastContact.length > 0 && lastContact[0].customerNo) {
+    const lastNo = parseInt(lastContact[0].customerNo.split('-')[1]);
+    nextNo = lastNo + 1;
+  }
+  
+  return `CUST-${String(nextNo).padStart(6, '0')}`;
+};
+
+// On contact creation:
+const customerNo = await generateCustomerNo(orgId);
+await db.insert(contactsTable).values({
+  ...contactData,
+  customerNo,
+  emailNormalized: contactData.email?.toLowerCase() || null,
+  phoneNormalized: normalizePhone(contactData.phone)
+});
+```
+
+**Normalize Functions:**
+
+```typescript
+// Normalize phone: remove dashes, spaces, parens
+const normalizePhone = (phone: string): string => {
+  if (!phone) return null;
+  return phone.replace(/[\s\-\(\)]/g, '');
+};
+
+// Email normalization: lowercase only
+const normalizeEmail = (email: string): string => {
+  if (!email) return null;
+  return email.toLowerCase().trim();
+};
+```
+
+---
+
+## DUPLICATE DETECTION
+
+### Algorithm
+
+On contact creation OR import:
+
+```
+1. If email provided:
+   - Normalize email (lowercase)
+   - Query: SELECT * FROM contacts WHERE email_normalized = normalized_email
+   - If match found: FLAG AS DUPLICATE
+
+2. If phone provided:
+   - Normalize phone (remove special chars)
+   - Query: SELECT * FROM contacts WHERE phone_normalized = normalized_phone
+   - If match found: FLAG AS DUPLICATE
+
+3. Mark contact:
+   - is_duplicate = true
+   - Store which existing contact it matches (duplicate_of)
+   - Store reason: "Duplicate email: john@acme.com" or "Duplicate phone: +1-212-555-0147"
+
+4. Show to user:
+   - Chat: "⚠️ Duplicate detected. John Smith (CUST-000001) has same email.
+            [Merge] [Keep Both] [Replace]"
+   - Or in UI: flag in contact list with badge "DUPLICATE"
+```
+
+**Backend Endpoint:**
+
+```
+POST /api/contacts/create (or /api/contacts/import)
+
+Input:
+{
+  name: "John Smith",
+  email: "john@acme.com",
+  phone: "+1-212-555-0147",
+  company: "Acme Corp"
+}
+
+Process:
+1. Normalize email + phone
+2. Check duplicates:
+   - duplicate_email = db.select where email_normalized = ?
+   - duplicate_phone = db.select where phone_normalized = ?
+3. If duplicate found:
+   - Return: { 
+       "duplicate_detected": true,
+       "existing_contact": { id, customerNo, name, email, phone },
+       "action_required": "merge | keep_both | replace"
+     }
+4. If no duplicate:
+   - Create contact
+   - Return: { success: true, customer_no: "CUST-000001" }
+```
+
+---
+
+## DUPLICATE MANAGEMENT UI
+
+### Option 1: In Chat
+
+When duplicate detected:
+
+```
+┌──────────────────────────────────────┐
+│ SalesOS (10:30 AM)                   │
+├──────────────────────────────────────┤
+│ ⚠️ Duplicate Contact Detected         │
+│                                      │
+│ Email match:                         │
+│ john@acme.com                        │
+│                                      │
+│ Existing contact:                    │
+│ John Smith (CUST-000001)             │
+│ Email: john@acme.com                 │
+│ Phone: +1-212-555-0147               │
+│ Company: Acme Corp                   │
+│                                      │
+│ New contact trying to add:           │
+│ John Smith                           │
+│ Email: john@acme.com                 │
+│ Phone: +1-212-555-0147               │
+│ Company: Acme Corporation            │
+│                                      │
+│ What would you like to do?           │
+│                                      │
+│ [Merge them] [Keep Both] [Replace]   │
+└──────────────────────────────────────┘
+```
+
+**Buttons:**
+- **[Merge]** - Combine both records, keep older one (CUST-000001)
+- **[Keep Both]** - Create separate contact (CUST-000002), flag as related
+- **[Replace]** - Delete old, use new
+
+---
+
+### Option 2: Contacts List View
+
+Add "Duplicates" tab:
+
+```
+Contacts
+├─ All Contacts (264)
+├─ Duplicates (8)
+└─ Recently Added (25)
+
+Duplicates tab shows:
+
+┌──────────────────────────────────────┐
+│ DUPLICATES (8)                       │
+├──────────────────────────────────────┤
+│ 🔴 John Smith (CUST-000001)          │
+│    ↔ John Smith (CUST-000265)        │
+│    Duplicate: Same email             │
+│    john@acme.com                     │
+│    [Review] [Merge]                  │
+│                                      │
+│ 🔴 Sarah Jones (CUST-000002)         │
+│    ↔ Sara Jones (CUST-000150)        │
+│    Duplicate: Same phone             │
+│    +1-415-555-0147                   │
+│    [Review] [Merge]                  │
+│                                      │
+│ [Merge All] [Review All]             │
+└──────────────────────────────────────┘
+```
+
+---
+
+### Option 3: Contacts Detail Page
+
+Add "Related Contacts" section:
+
+```
+Contact: John Smith (CUST-000001)
+Email: john@acme.com
+Phone: +1-212-555-0147
+
+⚠️ RELATED CONTACTS (Potential Duplicates)
+├─ John Smith (CUST-000265)
+│  Email: john@acme.com (MATCH)
+│  Phone: +1-212-555-0147 (MATCH)
+│  Status: Flagged as duplicate
+│  [Merge with this] [Ignore]
+│
+└─ J. Smith (CUST-000340)
+   Email: john.smith@acme.com (similar)
+   Phone: — (no phone)
+   Status: Possible duplicate
+   [Review] [Keep Separate]
+```
+
+---
+
+## MERGE FUNCTIONALITY
+
+**Endpoint: POST /api/contacts/merge**
+
+Input:
+```
+{
+  keep_id: "contact-001", // which contact to keep
+  merge_id: "contact-265", // which to merge into keep_id
+  merge_strategy: "keep_both_fields" // or "use_keep_only"
+}
+```
+
+Process:
+```
+1. Keep original contact (CUST-000001)
+2. Merge fields:
+   - For each field in merge_contact:
+     - If keep_contact.field is empty: use merge_contact.field
+     - If both have values: ask user which to keep
+3. Move all interactions from merge_contact to keep_contact
+4. Move all leads from merge_contact to keep_contact
+5. Mark merge_contact as deleted:
+   - is_duplicate = true
+   - duplicate_of = keep_contact.id
+   - merged_at = now()
+   - merged_reason = "Merged with CUST-000001"
+6. Keep customer number for keep_contact (CUST-000001)
+7. Mark old number as inactive
+
+Response:
+{
+  "success": true,
+  "kept_contact_id": "contact-001",
+  "kept_customer_no": "CUST-000001",
+  "merged_customer_no": "CUST-000265",
+  "interactions_moved": 12,
+  "leads_moved": 3
+}
+```
+
+---
+
+## DUPLICATE DETECTION ON IMPORT
+
+When importing CSV/Excel:
+
+**Step 1: Parse data**
+- Normalize all emails + phones
+- Check each row against existing contacts
+
+**Step 2: Flag duplicates**
+```
+Importing contacts:
+✓ Row 1: John Smith (NEW) → CUST-000266
+⚠️ Row 2: John S. (DUPLICATE email) → matches CUST-000001
+✓ Row 3: Sarah Jones (NEW) → CUST-000267
+⚠️ Row 4: Sara Jones (DUPLICATE phone) → matches CUST-000002
+
+Summary:
+2 new contacts to create
+2 potential duplicates found
+
+Show duplicates to user:
+[Merge with existing] [Create as new] [Skip this row]
+```
+
+**Step 3: User decision**
+- For each duplicate, user chooses action
+- Then proceed with import
+
+---
+
+## CUSTOMER ID DISPLAY
+
+### In Contacts List
+```
+┌──────────────────────────────────────┐
+│ CONTACTS (264)                       │
+├──────────────────────────────────────┤
+│ CUST-000001 │ John Smith             │
+│             │ john@acme.com          │
+│                                      │
+│ CUST-000002 │ Sarah Jones            │
+│             │ sarah@tcs.com          │
+│                                      │
+│ CUST-000003 │ Mike Brown             │
+│             │ mike@globalsolutions.io│
+└──────────────────────────────────────┘
+```
+
+### In Contact Detail
+```
+Name: John Smith
+Customer No: CUST-000001 (click to copy)
+Email: john@acme.com
+Phone: +1-212-555-0147
+Company: Acme Corp
+```
+
+### In Chat
+```
+Chat: "Add John Smith"
+Response: "✓ Added: John Smith (CUST-000001)"
+```
+
+### In Proposal
+```
+Proposal for: John Smith (CUST-000001)
+From: Acme Corp
+Date: March 27, 2026
+```
+
+### In Search Results
+```
+Search: "john@acme"
+Results:
+✓ John Smith (CUST-000001)
+✓ John Doe (CUST-000145)
+✓ Jonathan Smith (CUST-000267)
+```
+
+---
+
+## DUPLICATE DETECTION RULES
+
+### Email Match (HIGH CONFIDENCE)
+```
+john@acme.com = john@acme.com (after normalization)
+→ FLAG AS DUPLICATE: 100% confidence
+```
+
+### Phone Match (HIGH CONFIDENCE)
+```
++1-212-555-0147 = 2125550147 (after normalization)
+→ FLAG AS DUPLICATE: 100% confidence
+```
+
+### Fuzzy Match (MEDIUM CONFIDENCE) - Optional
+```
+(For future enhancement)
+"John Smith" ≈ "Jon Smith" → 85% confidence
+"Sarah Jones" ≈ "Sara Jones" → 90% confidence
+→ FLAG AS POSSIBLE DUPLICATE: Manual review recommended
+```
+
+---
+
+## API ENDPOINTS
+
+```
+POST /api/contacts
+- Create contact
+- Auto-detect duplicates
+- Return: { success, duplicate_detected?, existing_contact? }
+
+GET /api/contacts/duplicates
+- List all flagged duplicates in org
+- Return: [ { id, customerNo, email, phone, duplicate_of, reason } ]
+
+POST /api/contacts/merge
+- Merge two contacts
+- Keep one, merge other
+- Move interactions + leads
+- Return: { success, kept_id, merged_id }
+
+GET /api/contacts/:id/related
+- Get potential duplicate contacts
+- Return: [ { id, customerNo, email, phone, similarity_score } ]
+
+POST /api/contacts/deduplicate
+- Run bulk deduplication on org
+- Check all contacts for duplicates
+- Return: { duplicates_found, merged, remaining }
+```
+
+---
+
+## TESTING CHECKLIST
+
+```
+Customer Number Generation:
+[ ] Create first contact → gets CUST-000001
+[ ] Create second contact → gets CUST-000002
+[ ] Numbers are sequential
+[ ] Numbers are unique per org
+
+Duplicate Detection - Email:
+[ ] Add contact: john@acme.com
+[ ] Try to add again: john@acme.com (different name)
+[ ] System detects duplicate
+[ ] Shows existing contact (CUST-000001)
+[ ] Shows options: [Merge] [Keep Both] [Replace]
+
+Duplicate Detection - Phone:
+[ ] Add contact: +1-212-555-0147
+[ ] Try to add again: +1-212-555-0147 (different name)
+[ ] System detects duplicate
+[ ] Shows merge options
+
+Case Insensitive:
+[ ] Add contact: John@Acme.com
+[ ] Try to add: john@acme.com
+[ ] System detects as duplicate (normalized to lowercase)
+
+Phone Format Variations:
+[ ] Add: +1-212-555-0147
+[ ] Try to add: (212) 555-0147
+[ ] System detects as duplicate (both normalize to 2125550147)
+
+Merge Contacts:
+[ ] Merge contact A (CUST-000001) with B (CUST-000265)
+[ ] A keeps original customer number
+[ ] B marked as duplicate_of = A
+[ ] All interactions moved to A
+[ ] All leads moved to A
+[ ] B shows as merged in duplicate list
+
+Import with Duplicates:
+[ ] Import CSV with 50 contacts
+[ ] 5 are duplicates of existing
+[ ] System flags 5 duplicates
+[ ] Show: "5 duplicates detected"
+[ ] User chooses: merge/keep/skip for each
+[ ] Proceed with import
+
+Duplicates Tab:
+[ ] Go to Contacts → Duplicates tab
+[ ] See all 8 flagged duplicates
+[ ] Click on pair → shows details
+[ ] [Merge] button works
+[ ] Merged contacts disappear from duplicate list
+
+Search:
+[ ] Search "john@acme" → shows CUST-000001
+[ ] Search "CUST-000001" → shows exact contact
+[ ] Search "John Smith" → shows by name
+```
+
+---
+
+## BENEFITS
+
+✅ **No lost contacts** - Duplicates detected automatically
+✅ **Clean database** - 260 unique contacts, not 300+ with dupes
+✅ **Easy tracking** - CUST-000001 = always know which contact
+✅ **Merge capability** - Combine data from duplicate records
+✅ **History preserved** - Know when/why contacts were merged
+✅ **Import safety** - Catch duplicates before they enter DB
+✅ **Customer reference** - Use customer number in proposals, emails, calls
+
+---
+
+## EXAMPLE WORKFLOW
+
+```
+Day 1:
+- Import 264 contacts from HubSpot
+- System finds 8 duplicates
+- User merges them
+- Result: 256 unique contacts
+- Customer nos: CUST-000001 to CUST-000256
+
+Day 5:
+- User scans business card (John Smith)
+- Try to add manually
+- System: "⚠️ Duplicate detected. John Smith (CUST-000001) has same email."
+- User: [Merge]
+- Done. No duplicate created.
+
+Day 10:
+- Generate proposal for John Smith
+- Email shows: "Dear John (CUST-000001)"
+- John receives proposal
+- John replies to email
+- User logs interaction to CUST-000001
+- All history in one place
+```
+
+---
+
+## READY TO BUILD?
+
+Tell Replit:
+
+"Build duplicate contact detection + unique customer ID system.
+
+Features:
+- Assign unique customer number to each contact (CUST-000001, CUST-000002, etc)
+- Detect duplicates by email (case-insensitive) and phone (format-insensitive)
+- Flag duplicates when creating/importing
+- Show merge options to user: [Merge] [Keep Both] [Replace]
+- On merge: combine records, move interactions/leads, keep older customer number
+- Add 'Duplicates' tab in Contacts to show all flagged duplicates
+- Show customer number everywhere: list, detail, chat, proposals, search
+
+Test with:
+- Create contact → gets CUST-000001
+- Try to create duplicate email → detects, shows merge options
+- Try to create duplicate phone → detects, shows merge options
+- Merge two contacts → keep one, mark other as merged
+- Import 50 contacts with 5 duplicates → flag 5, user chooses action
+
+ETA: 1.5 hours"
+```
+
+---
+
+**CLEAN, PROFESSIONAL DUPLICATE HANDLING WITH UNIQUE IDs.**
+
+Every contact: CUST-XXXXXX. No confusion. Easy tracking.
