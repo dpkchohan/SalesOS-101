@@ -114,10 +114,17 @@ function AccountTab() {
 }
 
 function CalendarStatusCard() {
-  const { data, isLoading } = useGetCalendarStatus({
+  const { data, isLoading, refetch, isFetching } = useGetCalendarStatus({
     query: { staleTime: 60_000, refetchOnWindowFocus: false },
   });
   const connected = data?.connected === true;
+  const onConnect = () => {
+    window.open(
+      "https://replit.com/integrations/google-calendar",
+      "_blank",
+      "noopener,noreferrer",
+    );
+  };
   return (
     <div
       className="rounded-2xl bg-card border border-card-border p-5"
@@ -144,7 +151,7 @@ function CalendarStatusCard() {
               ? "Checking…"
               : connected
                 ? `Connected${data?.email ? ` as ${data.email}` : ""}. Tasks with a due date sync automatically.`
-                : "Not connected. Open the Replit Integrations panel to authorize Google Calendar."}
+                : "Authorize Google Calendar so SalesOS can keep your follow-ups in sync with your day."}
           </div>
         </div>
         <span
@@ -158,6 +165,28 @@ function CalendarStatusCard() {
         >
           {isLoading ? "…" : connected ? "Connected" : "Off"}
         </span>
+      </div>
+      <div className="flex gap-2 mt-3">
+        {!connected && (
+          <button
+            type="button"
+            onClick={onConnect}
+            disabled={isLoading}
+            className="px-3 py-1.5 text-[12px] font-semibold rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+            data-testid="button-connect-calendar"
+          >
+            Connect Google Calendar
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => refetch()}
+          disabled={isFetching}
+          className="px-3 py-1.5 text-[12px] font-semibold rounded-md bg-muted text-muted-foreground hover:bg-muted/70 disabled:opacity-60"
+          data-testid="button-refresh-calendar"
+        >
+          {isFetching ? "Checking…" : connected ? "Recheck status" : "I've authorized — recheck"}
+        </button>
       </div>
     </div>
   );
