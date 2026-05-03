@@ -71,6 +71,11 @@ app.use(
 
 app.use("/api", router);
 
+// Any unmatched /api/* request must return JSON 404, never the SPA shell.
+app.use("/api", (_req, res) => {
+  res.status(404).json({ error: "Not found" });
+});
+
 // In production the web SPA is served by this same process so that
 // Autoscale only needs a single exposed port (8080).
 // The web build is produced as part of the API server's production build step.
