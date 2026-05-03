@@ -4,7 +4,9 @@ import {
   useGetCompanyCredentials,
   useUpsertCompanyCredentials,
   useGetCalendarStatus,
+  useBackfillContacts,
   getGetCompanyCredentialsQueryKey,
+  getListContactsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useClerk, useUser } from "@clerk/react";
@@ -20,6 +22,8 @@ import {
   Loader2,
   Check,
   Palette,
+  Hash,
+  AlertCircle,
 } from "lucide-react";
 import { PageHeader } from "@/components/AppLayout";
 import { initials } from "@/lib/format";
@@ -101,6 +105,7 @@ function AccountTab() {
         </div>
       </div>
       <CalendarStatusCard />
+      <BackfillCard />
       <button
         onClick={() => signOut()}
         className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-card border border-card-border text-rose-600 dark:text-rose-400 font-semibold text-[14px] hover:bg-rose-500/5 transition-colors"
@@ -187,6 +192,70 @@ function CalendarStatusCard() {
         >
           {isFetching ? "Checking…" : connected ? "Recheck status" : "I've authorized — recheck"}
         </button>
+      </div>
+    </div>
+  );
+}
+
+function BackfillCard() {
+  const qc = useQueryClient();
+  const backfill = useBackfillContacts({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getListContactsQueryKey() });
+      },
+    },
+  });
+  const result = backfill.data;
+  const error = backfill.error;
+  return (
+    <div
+      className="rounded-2xl bg-card border border-card-border p-5"
+      data-testid="card-backfill-contacts"
+    >
+      <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground font-bold mb-3">
+        <Hash size={14} /> Customer numbers
+      </div>
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-xl grid place-items-center flex-shrink-0 bg-muted text-muted-foreground">
+          <Hash size={18} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="font-semibold text-[14px]">Backfill customer numbers</div>
+          <div className="text-[12px] text-muted-foreground mt-0.5">
+            Assign a CUST-#### number to every existing contact and normalize their email and phone so duplicate detection can catch them. Safe to run more than once.
+          </div>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 mt-3">
+        <button
+          type="button"
+          onClick={() => backfill.mutate()}
+          disabled={backfill.isPending}
+          className="px-3 py-1.5 text-[12px] font-semibold rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-60 inline-flex items-center gap-1.5"
+          data-testid="button-run-backfill"
+        >
+          {backfill.isPending && <Loader2 size={12} className="animate-spin" />}
+          {backfill.isPending ? "Running…" : result ? "Run again" : "Run backfill"}
+        </button>
+        {result && (
+          <span
+            className="text-[12px] text-emerald-700 dark:text-emerald-400 inline-flex items-center gap-1"
+            data-testid="text-backfill-result"
+          >
+            <Check size={13} />
+            Scanned {result.totalScanned} · Assigned {result.customerNosAssigned} · Normalized {result.normalized}
+          </span>
+        )}
+        {error && (
+          <span
+            className="text-[12px] text-rose-600 dark:text-rose-400 inline-flex items-center gap-1"
+            data-testid="text-backfill-error"
+          >
+            <AlertCircle size={13} />
+            Backfill failed. Try again.
+          </span>
+        )}
       </div>
     </div>
   );
