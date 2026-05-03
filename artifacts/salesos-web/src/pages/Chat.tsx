@@ -10,7 +10,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Mic, Volume2, VolumeX, Loader2, Sparkles, Square } from "lucide-react";
+import { Send, Mic, Volume2, VolumeX, Loader2, Sparkles, Square, Settings2 } from "lucide-react";
 import { PageHeader } from "@/components/AppLayout";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +29,33 @@ const SUGGESTIONS = [
   "Move Initech to qualified",
 ];
 
+const TTS_LANGUAGES: { code: string; label: string }[] = [
+  { code: "en-IN", label: "English (India)" },
+  { code: "hi-IN", label: "हिन्दी Hindi" },
+  { code: "ta-IN", label: "தமிழ் Tamil" },
+  { code: "te-IN", label: "తెలుగు Telugu" },
+  { code: "kn-IN", label: "ಕನ್ನಡ Kannada" },
+  { code: "ml-IN", label: "മലയാളം Malayalam" },
+  { code: "mr-IN", label: "मराठी Marathi" },
+  { code: "bn-IN", label: "বাংলা Bengali" },
+  { code: "gu-IN", label: "ગુજરાતી Gujarati" },
+  { code: "od-IN", label: "ଓଡ଼ିଆ Odia" },
+  { code: "pa-IN", label: "ਪੰਜਾਬੀ Punjabi" },
+];
+
+const TTS_SPEAKERS: { id: string; label: string; gender: "F" | "M" }[] = [
+  { id: "anushka", label: "Anushka", gender: "F" },
+  { id: "manisha", label: "Manisha", gender: "F" },
+  { id: "vidya", label: "Vidya", gender: "F" },
+  { id: "arya", label: "Arya", gender: "F" },
+  { id: "abhilash", label: "Abhilash", gender: "M" },
+  { id: "karun", label: "Karun", gender: "M" },
+  { id: "hitesh", label: "Hitesh", gender: "M" },
+];
+
+const DEFAULT_TTS_LANG = "en-IN";
+const DEFAULT_TTS_SPEAKER = "anushka";
+
 export default function Chat() {
   const [messages, setMessages] = useState<Msg[]>([
     {
@@ -44,6 +71,18 @@ export default function Chat() {
     if (typeof window === "undefined") return true;
     return localStorage.getItem("salesos.ttsEnabled") !== "false";
   });
+  const [ttsLang, setTtsLang] = useState<string>(() => {
+    if (typeof window === "undefined") return DEFAULT_TTS_LANG;
+    const saved = localStorage.getItem("salesos.ttsLang");
+    return TTS_LANGUAGES.some((l) => l.code === saved) ? saved! : DEFAULT_TTS_LANG;
+  });
+  const [ttsSpeaker, setTtsSpeaker] = useState<string>(() => {
+    if (typeof window === "undefined") return DEFAULT_TTS_SPEAKER;
+    const saved = localStorage.getItem("salesos.ttsSpeaker");
+    return TTS_SPEAKERS.some((s) => s.id === saved) ? saved! : DEFAULT_TTS_SPEAKER;
+  });
+  const [voiceMenuOpen, setVoiceMenuOpen] = useState(false);
+  const voiceMenuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     localStorage.setItem("salesos.ttsEnabled", ttsEnabled ? "true" : "false");
     if (!ttsEnabled) {
@@ -51,10 +90,41 @@ export default function Chat() {
       setTtsPlaying(false);
     }
   }, [ttsEnabled]);
+  useEffect(() => {
+    localStorage.setItem("salesos.ttsLang", ttsLang);
+  }, [ttsLang]);
+  useEffect(() => {
+    localStorage.setItem("salesos.ttsSpeaker", ttsSpeaker);
+  }, [ttsSpeaker]);
   const ttsEnabledRef = useRef(ttsEnabled);
+  const ttsLangRef = useRef(ttsLang);
+  const ttsSpeakerRef = useRef(ttsSpeaker);
   useEffect(() => {
     ttsEnabledRef.current = ttsEnabled;
   }, [ttsEnabled]);
+  useEffect(() => {
+    ttsLangRef.current = ttsLang;
+  }, [ttsLang]);
+  useEffect(() => {
+    ttsSpeakerRef.current = ttsSpeaker;
+  }, [ttsSpeaker]);
+  useEffect(() => {
+    if (!voiceMenuOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (voiceMenuRef.current && !voiceMenuRef.current.contains(e.target as Node)) {
+        setVoiceMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setVoiceMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [voiceMenuOpen]);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -76,15 +146,15 @@ export default function Chat() {
     };
   }, []);
 
-  const playTts = (text: string) => {
+  const playTts = (text: string, opts?: { force?: boolean }) => {
     if (!text.trim()) return;
-    if (!ttsEnabledRef.current) return;
+    if (!opts?.force && !ttsEnabledRef.current) return;
     speak.mutate(
-      { data: { text, languageCode: "en-IN", speaker: "anushka" } },
+      { data: { text, languageCode: ttsLangRef.current, speaker: ttsSpeakerRef.current } },
       {
         onSuccess: (resp) => {
           if (!resp.audioBase64) return;
-          if (!ttsEnabledRef.current) return;
+          if (!opts?.force && !ttsEnabledRef.current) return;
           try {
             const blob = b64ToBlob(resp.audioBase64, resp.mimeType ?? "audio/wav");
             const url = URL.createObjectURL(blob);
@@ -191,22 +261,108 @@ export default function Chat() {
         title="Chat"
         subtitle="Type or speak — Claude handles intent"
         right={
-          <button
-            type="button"
-            onClick={() => setTtsEnabled((v) => !v)}
-            className={cn(
-              "flex items-center gap-1.5 text-[12px] font-semibold px-3 py-1.5 rounded-lg border border-card-border transition-colors",
-              ttsEnabled
-                ? "hover:bg-muted text-foreground"
-                : "bg-muted/60 text-muted-foreground hover:bg-muted",
+          <div ref={voiceMenuRef} className="flex items-center gap-1.5 relative">
+            <button
+              type="button"
+              onClick={() => setVoiceMenuOpen((v) => !v)}
+              className={cn(
+                "flex items-center gap-1.5 text-[12px] font-semibold px-3 py-1.5 rounded-lg border border-card-border transition-colors hover:bg-muted text-foreground",
+                voiceMenuOpen && "bg-muted",
+              )}
+              data-testid="button-voice-settings"
+              title="Voice language & speaker"
+              aria-expanded={voiceMenuOpen}
+            >
+              <Settings2 size={13} />
+              <span className="hidden sm:inline">
+                {TTS_LANGUAGES.find((l) => l.code === ttsLang)?.label.split(" ")[0] ?? ttsLang}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setTtsEnabled((v) => !v)}
+              className={cn(
+                "flex items-center gap-1.5 text-[12px] font-semibold px-3 py-1.5 rounded-lg border border-card-border transition-colors",
+                ttsEnabled
+                  ? "hover:bg-muted text-foreground"
+                  : "bg-muted/60 text-muted-foreground hover:bg-muted",
+              )}
+              data-testid="button-tts-toggle"
+              title={ttsEnabled ? "Mute agent voice" : "Unmute agent voice"}
+              aria-pressed={!ttsEnabled}
+            >
+              {ttsEnabled ? <Volume2 size={13} /> : <VolumeX size={13} />}
+              {ttsEnabled ? "Mute" : "Muted"}
+            </button>
+            {voiceMenuOpen && (
+              <>
+                <div
+                  className="absolute right-0 top-full mt-2 w-72 z-50 rounded-xl border border-card-border bg-card shadow-xl p-3 space-y-3"
+                  data-testid="panel-voice-settings"
+                >
+                  <div>
+                    <label
+                      htmlFor="tts-language-select"
+                      className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1"
+                    >
+                      Language
+                    </label>
+                    <select
+                      id="tts-language-select"
+                      value={ttsLang}
+                      onChange={(e) => setTtsLang(e.target.value)}
+                      className="w-full bg-background border border-card-border rounded-lg px-2 py-1.5 text-[13px] outline-none focus:border-primary"
+                      data-testid="select-tts-language"
+                    >
+                      {TTS_LANGUAGES.map((l) => (
+                        <option key={l.code} value={l.code}>
+                          {l.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="tts-speaker-select"
+                      className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1"
+                    >
+                      Speaker
+                    </label>
+                    <select
+                      id="tts-speaker-select"
+                      value={ttsSpeaker}
+                      onChange={(e) => setTtsSpeaker(e.target.value)}
+                      className="w-full bg-background border border-card-border rounded-lg px-2 py-1.5 text-[13px] outline-none focus:border-primary"
+                      data-testid="select-tts-speaker"
+                    >
+                      {TTS_SPEAKERS.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.label} ({s.gender === "F" ? "Female" : "Male"})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const greet =
+                        ttsLang === "en-IN"
+                          ? "Hi, this is your sales assistant."
+                          : ttsLang === "hi-IN"
+                            ? "नमस्ते, मैं आपका सेल्स असिस्टेंट हूँ।"
+                            : "Namaste.";
+                      playTts(greet, { force: true });
+                    }}
+                    className="w-full text-[12px] font-semibold px-3 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+                    disabled={speak.isPending}
+                    data-testid="button-tts-preview"
+                  >
+                    {speak.isPending ? "Loading…" : "Preview voice"}
+                  </button>
+                </div>
+              </>
             )}
-            data-testid="button-tts-toggle"
-            title={ttsEnabled ? "Mute agent voice" : "Unmute agent voice"}
-            aria-pressed={!ttsEnabled}
-          >
-            {ttsEnabled ? <Volume2 size={13} /> : <VolumeX size={13} />}
-            {ttsEnabled ? "Mute" : "Muted"}
-          </button>
+          </div>
         }
       />
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 md:px-8 py-2 space-y-3">
