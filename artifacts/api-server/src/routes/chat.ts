@@ -23,6 +23,7 @@ interface Intent {
     | "create_task"
     | "log_interaction"
     | "create_contact"
+    | "create_lead"
     | "update_lead_stage"
     | "send_proposal"
     | "search"
@@ -42,6 +43,14 @@ interface Intent {
   };
   // create_contact
   contact?: { name: string; email?: string | null; phone?: string | null; title?: string | null };
+  // create_lead
+  lead?: {
+    stage?: "new" | "interested" | "qualified" | "negotiating" | "won" | "lost";
+    valueUsd?: number | null;
+    currency?: string | null;
+    closeDate?: string | null;
+    source?: string | null;
+  };
   // update_lead_stage
   stage?: "new" | "interested" | "qualified" | "negotiating" | "won" | "lost";
   // send_proposal
@@ -55,6 +64,7 @@ Intents:
 - "create_task": user wants a to-do or scheduled meeting. Examples: "remind me to follow up with Acme tomorrow", "schedule a follow-up with John next Tuesday at 2pm" (set dueTime="14:00"). When a clock time is mentioned, fill task.dueTime as 24h "HH:MM"; otherwise omit.
 - "log_interaction": user wants to log a call/email/meeting/note. Example: "logged a call with John, he wants pricing by Friday"
 - "create_contact": user wants to add a new contact. Example: "add new contact Sarah Lee at Globex, sarah@globex.com"
+- "create_lead": user wants to create a new lead/deal for a contact. Example: "create a lead for Acme, $5000 deal in negotiation" → contactName="Acme contact", lead.valueUsd=5000, lead.stage="negotiating". Also use this when user says "add deal", "open a deal", "new opportunity".
 - "update_lead_stage": user wants to move a lead to a different stage. Stages: new, interested, qualified, negotiating, won, lost
 - "send_proposal": user wants to generate a proposal. Example: "send John Smith a proposal about pricing and timeline" → contactName="John Smith", proposalContext="pricing and timeline". If the user explicitly asks to ALSO email it (e.g. "send AND email", "draft and email", "email it to them"), set sendEmail=true; otherwise omit sendEmail.
 - "search": user is looking for info about a contact or lead
@@ -65,9 +75,10 @@ Respond JSON shape:
   "intent": "...",
   "reply": "<one short, friendly confirmation or answer>",
   "task": { "title": "...", "dueDate": "YYYY-MM-DD or null", "dueTime": "HH:MM 24h or null", "priority": "low|medium|high" },
-  "contactName": "<contact to attach the task/interaction/stage update to, if mentioned>",
+  "contactName": "<contact to attach the task/interaction/stage update/lead to, if mentioned>",
   "interaction": { "type": "call|email|meeting|note", "gist": "...", "gains": [], "misses": [], "nextStep": "...", "sentiment": "positive|neutral|negative" },
   "contact": { "name": "...", "email": "...", "phone": "...", "title": "..." },
+  "lead": { "stage": "new|interested|qualified|negotiating|won|lost", "valueUsd": number or null, "currency": "USD", "closeDate": "YYYY-MM-DD or null", "source": "string or null" },
   "stage": "new|interested|qualified|negotiating|won|lost",
   "proposalContext": "<short summary of what the proposal should cover, if intent is send_proposal>",
   "sendEmail": false
@@ -131,7 +142,27 @@ router.post("/chat", requireAuth, async (req, res): Promise<void> => {
   };
 
   try {
-    if (intent.intent === "create_contact" && intent.contact?.name) {
+    if (intent.intent === "create_lead" && intent.contactName) {
+      const c = await findContactByName(r.orgId, intent.contactName);
+      if (!c) {
+        reply.message = `Couldn't find contact "${intent.contactName}". Add them first, then create the lead.`;
+      } else {
+        reply.contactId = c.id;
+        const [l] = await db
+          .insert(leadsTable)
+          .values({
+            orgId: r.orgId,
+            contactId: c.id,
+            stage: intent.lead?.stage ?? "new",
+            valueUsd: intent.lead?.valueUsd ?? null,
+            currency: intent.lead?.currency ?? "USD",
+            closeDate: intent.lead?.closeDate ?? null,
+            source: intent.lead?.source ?? null,
+          })
+          .returning();
+        reply.leadId = l.id;
+      }
+    } else if (intent.intent === "create_contact" && intent.contact?.name) {
       const [c] = await db
         .insert(contactsTable)
         .values({
