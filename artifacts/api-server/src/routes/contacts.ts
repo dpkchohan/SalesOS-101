@@ -107,7 +107,13 @@ router.get("/contacts", requireAuth, async (req, res): Promise<void> => {
         updatedAt: contactsTable.updatedAt,
       })
       .from(contactsTable)
-      .leftJoin(companiesTable, eq(contactsTable.companyId, companiesTable.id))
+      .leftJoin(
+        companiesTable,
+        and(
+          eq(contactsTable.companyId, companiesTable.id),
+          eq(companiesTable.orgId, r.orgId),
+        ),
+      )
       .where(where)
       .orderBy(desc(contactsTable.createdAt))
       .limit(limit)
@@ -194,6 +200,19 @@ router.post("/contacts", requireAuth, async (req, res): Promise<void> => {
     const { tags, ...rest } = body.data;
     const emailNorm = normalizeEmail(rest.email);
     const phoneNorm = normalizePhone(rest.phone);
+
+    if (rest.companyId) {
+      const [own] = await db
+        .select({ id: companiesTable.id })
+        .from(companiesTable)
+        .where(
+          and(eq(companiesTable.id, rest.companyId), eq(companiesTable.orgId, r.orgId)),
+        );
+      if (!own) {
+        res.status(400).json({ error: "Invalid companyId" });
+        return;
+      }
+    }
 
     const existingDup = await findDuplicate({
       orgId: r.orgId,
@@ -302,7 +321,12 @@ router.get("/contacts/:id", requireAuth, async (req, res): Promise<void> => {
     }
     let company = null;
     if (row.companyId) {
-      const [c] = await db.select().from(companiesTable).where(eq(companiesTable.id, row.companyId));
+      const [c] = await db
+        .select()
+        .from(companiesTable)
+        .where(
+          and(eq(companiesTable.id, row.companyId), eq(companiesTable.orgId, r.orgId)),
+        );
       company = c ?? null;
     }
     const leads = await db.select().from(leadsTable).where(eq(leadsTable.contactId, row.id));
@@ -421,6 +445,18 @@ router.put("/contacts/:id", requireAuth, async (req, res): Promise<void> => {
   }
   try {
     const { tags, ...rest } = body.data;
+    if (rest.companyId) {
+      const [own] = await db
+        .select({ id: companiesTable.id })
+        .from(companiesTable)
+        .where(
+          and(eq(companiesTable.id, rest.companyId), eq(companiesTable.orgId, r.orgId)),
+        );
+      if (!own) {
+        res.status(400).json({ error: "Invalid companyId" });
+        return;
+      }
+    }
     const update: Record<string, unknown> = { ...rest };
     if (rest.email !== undefined) update.emailNormalized = normalizeEmail(rest.email);
     if (rest.phone !== undefined) update.phoneNormalized = normalizePhone(rest.phone);
