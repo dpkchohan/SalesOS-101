@@ -18,6 +18,7 @@ import type {
 
 import type {
   AiSignal,
+  CalendarStatus,
   ChatInput,
   ChatReply,
   Company,
@@ -2654,6 +2655,81 @@ export const useGenerateProposal = <
 > => {
   return useMutation(getGenerateProposalMutationOptions(options));
 };
+
+/**
+ * @summary Check whether the user's Google Calendar is connected and reachable
+ */
+export const getGetCalendarStatusUrl = () => {
+  return `/api/integrations/calendar-status`;
+};
+
+export const getCalendarStatus = async (
+  options?: RequestInit,
+): Promise<CalendarStatus> => {
+  return customFetch<CalendarStatus>(getGetCalendarStatusUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetCalendarStatusQueryKey = () => {
+  return [`/api/integrations/calendar-status`] as const;
+};
+
+export const getGetCalendarStatusQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCalendarStatus>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getCalendarStatus>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetCalendarStatusQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getCalendarStatus>>
+  > = ({ signal }) => getCalendarStatus({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getCalendarStatus>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetCalendarStatusQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getCalendarStatus>>
+>;
+export type GetCalendarStatusQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Check whether the user's Google Calendar is connected and reachable
+ */
+
+export function useGetCalendarStatus<
+  TData = Awaited<ReturnType<typeof getCalendarStatus>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getCalendarStatus>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetCalendarStatusQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Get the org's company branding profile (returns nulls if not set)

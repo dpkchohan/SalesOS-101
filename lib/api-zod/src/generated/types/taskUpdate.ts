@@ -13,6 +13,8 @@ export interface TaskUpdate {
   description?: string | null;
   /** @nullable */
   dueDate?: Date | null;
+  /** @nullable */
+  dueTime?: string | null;
   completed?: boolean;
   priority?: TaskPriority;
   /** @nullable */

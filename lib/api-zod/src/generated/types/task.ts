@@ -20,8 +20,15 @@ export interface Task {
   description?: string | null;
   /** @nullable */
   dueDate?: Date | null;
+  /**
+   * HH:mm 24h local time, when set the task is rendered as a timed calendar event
+   * @nullable
+   */
+  dueTime?: string | null;
   /** @nullable */
   completedAt?: Date | null;
   priority: TaskPriority;
+  /** @nullable */
+  calendarEventId?: string | null;
   createdAt: Date;
 }

@@ -274,9 +274,16 @@ export interface Task {
   description?: string | null;
   /** @nullable */
   dueDate?: string | null;
+  /**
+   * HH:mm 24h local time, when set the task is rendered as a timed calendar event
+   * @nullable
+   */
+  dueTime?: string | null;
   /** @nullable */
   completedAt?: string | null;
   priority: TaskPriority;
+  /** @nullable */
+  calendarEventId?: string | null;
   createdAt: string;
 }
 
@@ -356,6 +363,8 @@ export interface TaskInput {
   description?: string | null;
   /** @nullable */
   dueDate?: string | null;
+  /** @nullable */
+  dueTime?: string | null;
   priority?: TaskPriority;
 }
 
@@ -365,6 +374,8 @@ export interface TaskUpdate {
   description?: string | null;
   /** @nullable */
   dueDate?: string | null;
+  /** @nullable */
+  dueTime?: string | null;
   completed?: boolean;
   priority?: TaskPriority;
   /** @nullable */
@@ -399,6 +410,14 @@ export interface DocumentUpdate {
   /** @nullable */
   content?: string | null;
   status?: DocumentStatus;
+}
+
+export interface CalendarStatus {
+  connected: boolean;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  error?: string | null;
 }
 
 export interface SendDocumentEmailInput {

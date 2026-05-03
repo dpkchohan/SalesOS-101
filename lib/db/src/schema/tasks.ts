@@ -26,8 +26,10 @@ export const tasksTable = pgTable(
     title: text("title").notNull(),
     description: text("description"),
     dueDate: date("due_date"),
+    dueTime: text("due_time"),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     priority: text("priority").notNull().default("medium"),
+    calendarEventId: text("calendar_event_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

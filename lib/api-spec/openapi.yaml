@@ -472,6 +472,19 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Document" }
 
+  # ---------- Integrations status ----------
+  /integrations/calendar-status:
+    get:
+      operationId: getCalendarStatus
+      tags: [branding]
+      summary: Check whether the user's Google Calendar is connected and reachable
+      responses:
+        "200":
+          description: Calendar connection status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CalendarStatus" }
+
   # ---------- Company Credentials / Branding ----------
   /company-credentials:
     get:
@@ -896,10 +909,14 @@ components:
         dueDate:
           type: ["string", "null"]
           format: date
+        dueTime:
+          type: ["string", "null"]
+          description: "HH:mm 24h local time, when set the task is rendered as a timed calendar event"
         completedAt:
           type: ["string", "null"]
           format: date-time
         priority: { $ref: "#/components/schemas/TaskPriority" }
+        calendarEventId: { type: ["string", "null"] }
         createdAt: { type: string, format: date-time }
 
     TaskInput:
@@ -913,6 +930,7 @@ components:
         dueDate:
           type: ["string", "null"]
           format: date
+        dueTime: { type: ["string", "null"] }
         priority: { $ref: "#/components/schemas/TaskPriority", default: medium }
 
     TaskUpdate:
@@ -923,6 +941,7 @@ components:
         dueDate:
           type: ["string", "null"]
           format: date
+        dueTime: { type: ["string", "null"] }
         completed: { type: boolean }
         priority: { $ref: "#/components/schemas/TaskPriority" }
         assignedTo: { type: ["string", "null"] }
@@ -972,6 +991,14 @@ components:
         title: { type: string }
         content: { type: ["string", "null"] }
         status: { $ref: "#/components/schemas/DocumentStatus" }
+
+    CalendarStatus:
+      type: object
+      required: [connected]
+      properties:
+        connected: { type: boolean }
+        email: { type: ["string", "null"] }
+        error: { type: ["string", "null"] }
 
     SendDocumentEmailInput:
       type: object

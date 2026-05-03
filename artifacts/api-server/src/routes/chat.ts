@@ -29,7 +29,7 @@ interface Intent {
     | "general";
   reply: string;
   // create_task
-  task?: { title: string; dueDate?: string | null; priority?: "high" | "medium" | "low" };
+  task?: { title: string; dueDate?: string | null; dueTime?: string | null; priority?: "high" | "medium" | "low" };
   contactName?: string;
   // log_interaction
   interaction?: {
@@ -52,7 +52,7 @@ interface Intent {
 const SYSTEM = `You are SalesOS, an in-app assistant for a sales rep. Parse the user's message into a structured intent. Always reply with strict JSON, no prose outside JSON.
 
 Intents:
-- "create_task": user wants a to-do. Example: "remind me to follow up with Acme tomorrow"
+- "create_task": user wants a to-do or scheduled meeting. Examples: "remind me to follow up with Acme tomorrow", "schedule a follow-up with John next Tuesday at 2pm" (set dueTime="14:00"). When a clock time is mentioned, fill task.dueTime as 24h "HH:MM"; otherwise omit.
 - "log_interaction": user wants to log a call/email/meeting/note. Example: "logged a call with John, he wants pricing by Friday"
 - "create_contact": user wants to add a new contact. Example: "add new contact Sarah Lee at Globex, sarah@globex.com"
 - "update_lead_stage": user wants to move a lead to a different stage. Stages: new, interested, qualified, negotiating, won, lost
@@ -64,7 +64,7 @@ Respond JSON shape:
 {
   "intent": "...",
   "reply": "<one short, friendly confirmation or answer>",
-  "task": { "title": "...", "dueDate": "YYYY-MM-DD or null", "priority": "low|medium|high" },
+  "task": { "title": "...", "dueDate": "YYYY-MM-DD or null", "dueTime": "HH:MM 24h or null", "priority": "low|medium|high" },
   "contactName": "<contact to attach the task/interaction/stage update to, if mentioned>",
   "interaction": { "type": "call|email|meeting|note", "gist": "...", "gains": [], "misses": [], "nextStep": "...", "sentiment": "positive|neutral|negative" },
   "contact": { "name": "...", "email": "...", "phone": "...", "title": "..." },
@@ -161,9 +161,27 @@ router.post("/chat", requireAuth, async (req, res): Promise<void> => {
           leadId,
           title: intent.task.title,
           dueDate: intent.task.dueDate ?? null,
+          dueTime: intent.task.dueTime ?? null,
           priority: intent.task.priority ?? "medium",
         })
         .returning();
+      if (t.dueDate) {
+        try {
+          const { createCalendarEvent } = await import("../lib/gcal");
+          const { id: eventId } = await createCalendarEvent({
+            title: t.title,
+            description: t.description,
+            date: t.dueDate,
+            time: t.dueTime,
+          });
+          await db
+            .update(tasksTable)
+            .set({ calendarEventId: eventId })
+            .where(eq(tasksTable.id, t.id));
+        } catch (err) {
+          req.log.warn({ err, taskId: t.id }, "Calendar event create skipped (chat)");
+        }
+      }
       reply.taskId = t.id;
       reply.leadId = leadId;
     } else if (intent.intent === "log_interaction" && intent.interaction?.gist) {

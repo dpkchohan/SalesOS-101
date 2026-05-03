@@ -13,6 +13,7 @@ import chatRouter from "./chat";
 import voiceRouter from "./voice";
 import importExportRouter from "./importExport";
 import companyCredentialsRouter from "./companyCredentials";
+import integrationsRouter from "./integrations";
 
 const router: IRouter = Router();
 
@@ -30,5 +31,6 @@ router.use(chatRouter);
 router.use(voiceRouter);
 router.use(importExportRouter);
 router.use(companyCredentialsRouter);
+router.use(integrationsRouter);
 
 export default router;

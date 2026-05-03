@@ -66,8 +66,15 @@ export const GetDashboardSummaryResponse = zod.object({
       title: zod.string(),
       description: zod.string().nullish(),
       dueDate: zod.coerce.date().nullish(),
+      dueTime: zod
+        .string()
+        .nullish()
+        .describe(
+          "HH:mm 24h local time, when set the task is rendered as a timed calendar event",
+        ),
       completedAt: zod.coerce.date().nullish(),
       priority: zod.enum(["high", "medium", "low"]),
+      calendarEventId: zod.string().nullish(),
       createdAt: zod.coerce.date(),
     }),
   ),
@@ -482,8 +489,15 @@ export const GetLeadResponse = zod.object({
       title: zod.string(),
       description: zod.string().nullish(),
       dueDate: zod.coerce.date().nullish(),
+      dueTime: zod
+        .string()
+        .nullish()
+        .describe(
+          "HH:mm 24h local time, when set the task is rendered as a timed calendar event",
+        ),
       completedAt: zod.coerce.date().nullish(),
       priority: zod.enum(["high", "medium", "low"]),
+      calendarEventId: zod.string().nullish(),
       createdAt: zod.coerce.date(),
     }),
   ),
@@ -632,8 +646,15 @@ export const ListTasksResponseItem = zod.object({
   title: zod.string(),
   description: zod.string().nullish(),
   dueDate: zod.coerce.date().nullish(),
+  dueTime: zod
+    .string()
+    .nullish()
+    .describe(
+      "HH:mm 24h local time, when set the task is rendered as a timed calendar event",
+    ),
   completedAt: zod.coerce.date().nullish(),
   priority: zod.enum(["high", "medium", "low"]),
+  calendarEventId: zod.string().nullish(),
   createdAt: zod.coerce.date(),
 });
 export const ListTasksResponse = zod.array(ListTasksResponseItem);
@@ -646,6 +667,7 @@ export const CreateTaskBody = zod.object({
   title: zod.string(),
   description: zod.string().nullish(),
   dueDate: zod.coerce.date().nullish(),
+  dueTime: zod.string().nullish(),
   priority: zod
     .enum(["high", "medium", "low"])
     .default(createTaskBodyPriorityDefault),
@@ -659,6 +681,7 @@ export const UpdateTaskBody = zod.object({
   title: zod.string().optional(),
   description: zod.string().nullish(),
   dueDate: zod.coerce.date().nullish(),
+  dueTime: zod.string().nullish(),
   completed: zod.boolean().optional(),
   priority: zod.enum(["high", "medium", "low"]).optional(),
   assignedTo: zod.string().nullish(),
@@ -672,8 +695,15 @@ export const UpdateTaskResponse = zod.object({
   title: zod.string(),
   description: zod.string().nullish(),
   dueDate: zod.coerce.date().nullish(),
+  dueTime: zod
+    .string()
+    .nullish()
+    .describe(
+      "HH:mm 24h local time, when set the task is rendered as a timed calendar event",
+    ),
   completedAt: zod.coerce.date().nullish(),
   priority: zod.enum(["high", "medium", "low"]),
+  calendarEventId: zod.string().nullish(),
   createdAt: zod.coerce.date(),
 });
 
@@ -807,6 +837,15 @@ export const GenerateProposalBody = zod.object({
     .string()
     .nullish()
     .describe("Optional extra context (e.g. 'discussed pricing and timeline')"),
+});
+
+/**
+ * @summary Check whether the user's Google Calendar is connected and reachable
+ */
+export const GetCalendarStatusResponse = zod.object({
+  connected: zod.boolean(),
+  email: zod.string().nullish(),
+  error: zod.string().nullish(),
 });
 
 /**

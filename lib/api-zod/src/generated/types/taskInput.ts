@@ -17,5 +17,7 @@ export interface TaskInput {
   description?: string | null;
   /** @nullable */
   dueDate?: Date | null;
+  /** @nullable */
+  dueTime?: string | null;
   priority?: TaskPriority;
 }
