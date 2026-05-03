@@ -1,0 +1,546 @@
+SALESOS - AI-POWERED SMART IMPORT WITH BATCH PROCESSING
+=======================================================
+
+Intelligent data import using Claude as a middle agent.
+Handles messy data, inconsistent columns, deduplication.
+Splits large imports into worker batches.
+
+Build time: 2-3 hours
+
+---
+
+## PROBLEM SOLVED
+
+Current import: Rigid column matching → rejects half the data
+New import: AI analyzes raw data → intelligently extracts → dedupes → 99% success rate
+
+Example:
+- HubSpot exports with mixed column names
+- Excel has "First Name" + "Last Name" or just "Name"
+- Some rows missing email, some have duplicates
+- Some have company, some don't
+
+Old system: Rejects all bad rows ❌
+New system: Claude figures it out, normalizes, inserts all ✅
+
+---
+
+## ARCHITECTURE
+
+### PHASE 1: FILE UPLOAD & PARSING
+=====================================
+
+Endpoint: POST /api/import/ai-smart/preview
+
+Input:
+- multipart form-data
+- file: any file (CSV, Excel, JSON, TXT)
+- org_id: auto from auth
+
+Process:
+1. Read file bytes
+2. Detect format (CSV → parse with csv-parser, Excel → xlsx, JSON → parse)
+3. Extract first 10 rows (preview)
+4. Send to Claude for analysis:
+
+Claude prompt:
+```
+Analyze this raw data from a file. Extract all contacts and leads.
+
+Data:
+[raw_rows_json]
+
+Return JSON with:
+{
+  "analysis": "I found names in column A, emails in column B, companies in column D. 
+              Some rows have 'First Name'/'Last Name', others just 'Name'. 
+              Phone format is mixed: +1-xxx, (xxx) xxx-xxxx, etc.",
+  "contacts": [
+    { name: "...", email: "...", phone: "...", company: "...", title: "..." }
+  ],
+  "leads": [
+    { contact_name: "...", company: "...", stage: "...", budget: ... }
+  ],
+  "data_quality": 0.95,
+  "issues": [
+    "Row 2: No email (skipped)",
+    "Row 5: Duplicate of row 1 (deduped)",
+    "Row 8: Phone format non-standard (normalized)"
+  ],
+  "row_count": 10,
+  "estimated_valid_contacts": 9,
+  "estimated_valid_leads": 3
+}
+```
+
+Return to frontend:
+```
+{
+  "preview": {
+    "total_rows": 264,
+    "estimated_contacts": 250,
+    "estimated_leads": 45,
+    "data_quality": 0.95,
+    "issues": [...],
+    "sample_contacts": [
+      { name: "John Smith", email: "john@acme.com", company: "Acme Corp" },
+      { name: "Sarah Jones", email: "sarah@tcs.com", company: "TCS Digital" }
+    ]
+  },
+  "ready_to_import": true
+}
+```
+
+Response to user:
+```
+Preview:
+✓ 264 total rows
+✓ 250 contacts found
+✓ 45 leads found
+✓ Data quality: 95%
+
+Issues:
+⚠️ 5 rows missing email (will be marked as notes)
+⚠️ 8 duplicate emails detected (will dedupe)
+⚠️ 2 phone numbers invalid format (will skip phone)
+
+Continue with import? [Yes] [No]
+```
+
+---
+
+### PHASE 2: BATCH PROCESSING & WORKER TASKS
+=============================================
+
+If user clicks "Yes":
+
+Endpoint: POST /api/import/ai-smart/execute
+
+Input:
+```
+{
+  file_id: "upload-123",
+  org_id: "org-456",
+  confirmed: true
+}
+```
+
+Logic:
+
+1. Check file size:
+   - Small (< 1MB): Process as 1 batch
+   - Medium (1-10MB): Split into 2-3 batches (500 rows per batch)
+   - Large (> 10MB): Split into N batches
+
+2. Create import job:
+   ```
+   INSERT INTO import_jobs (id, org_id, file_id, status, total_rows, batches)
+   VALUES (job-123, org-456, upload-123, 'processing', 264, 1)
+   ```
+
+3. For each batch:
+   - Create worker task: `POST /api/import/ai-smart/worker`
+   - Worker processes batch with Claude
+   - Worker inserts into DB
+   - Update import_jobs: progress, status
+
+4. Aggregate results when all batches done
+
+**Worker Endpoint:**
+
+```
+POST /api/import/ai-smart/worker
+
+Input:
+{
+  job_id: "job-123",
+  batch_number: 1,
+  batch_size: 200,
+  file_id: "upload-123",
+  rows: [...]
+}
+
+Process:
+1. Send rows to Claude
+2. Claude extracts/normalizes
+3. Dedupe by email (case-insensitive)
+4. Create contacts in DB:
+   - Check: SELECT * FROM contacts WHERE lower(email) = lower(?)
+   - If exists: update (merge)
+   - If new: insert
+5. Create leads if status present
+6. Log warnings
+7. Return: { imported: 200, leads: 35, warnings: [...] }
+
+Update job progress:
+UPDATE import_jobs
+SET batch_{n}_status = 'done', batch_{n}_count = 200
+WHERE id = job-123
+
+When all batches done:
+UPDATE import_jobs
+SET status = 'completed', ended_at = now()
+WHERE id = job-123
+```
+
+---
+
+### PHASE 3: DATABASE SCHEMA
+============================
+
+New table: `import_jobs`
+
+```sql
+CREATE TABLE import_jobs (
+  id UUID PRIMARY KEY,
+  org_id UUID NOT NULL REFERENCES organizations(id),
+  file_id VARCHAR(255),
+  file_name VARCHAR(255),
+  status VARCHAR(50), -- 'preview', 'processing', 'completed', 'failed'
+  total_rows INT,
+  total_batches INT,
+  imported_contacts INT DEFAULT 0,
+  imported_leads INT DEFAULT 0,
+  errors INT DEFAULT 0,
+  data_quality DECIMAL(3,2), -- 0.95
+  preview_data JSONB, -- full preview from Claude
+  batch_results JSONB, -- array of batch results
+  error_log JSONB, -- array of errors
+  started_at TIMESTAMP,
+  ended_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+Add to existing tables:
+
+contacts table:
+- Add column: import_job_id UUID (link back to import job)
+- Add column: data_quality DECIMAL(3,2) (per-contact confidence)
+
+leads table:
+- Add column: import_job_id UUID
+```
+
+---
+
+### PHASE 4: FRONTEND - IMPORT WIZARD
+====================================
+
+New page: `/import-ai` (replaces current /import for phase 1)
+
+**Step 1: File Upload**
+```
+┌─────────────────────────┐
+│ Upload Data File        │
+├─────────────────────────┤
+│ Supported:              │
+│ • CSV (.csv)            │
+│ • Excel (.xlsx, .xls)   │
+│ • JSON (.json)          │
+│                         │
+│ [Drag file here]        │
+│ or [Choose File]        │
+│                         │
+│ File size: [0 / 50MB]   │
+│                         │
+│ [Next]                  │
+└─────────────────────────┘
+```
+
+**Step 2: AI Analysis Preview**
+```
+┌─────────────────────────┐
+│ Analyzing...            │
+│ 🔄 Claude is parsing    │
+│    your data            │
+│                         │
+│ Found:                  │
+│ • 264 rows              │
+│ • 250 contacts          │
+│ • 45 leads              │
+│ • Quality: 95%          │
+│                         │
+│ Issues:                 │
+│ ⚠️ 5 no email           │
+│ ⚠️ 8 duplicates         │
+│ ⚠️ 2 bad phone          │
+│                         │
+│ [Back] [Confirm Import] │
+└─────────────────────────┘
+```
+
+**Step 3: Processing**
+```
+┌──────────────────────────┐
+│ Importing...             │
+│ Batch 1 of 1             │
+│                          │
+│ ████████░░ 85%           │
+│                          │
+│ Contacts: 200 / 250      │
+│ Leads: 35 / 45           │
+│                          │
+│ Processing... (do not    │
+│ close this page)         │
+└──────────────────────────┘
+```
+
+**Step 4: Results**
+```
+┌──────────────────────────┐
+│ Import Complete! ✓       │
+├──────────────────────────┤
+│ Summary:                 │
+│ ✓ 250 contacts imported  │
+│ ✓ 45 leads created       │
+│ ✓ Data quality: 95%      │
+│                          │
+│ Issues found:            │
+│ ⚠️ 5 rows skipped        │
+│   (no email, added as    │
+│    notes)                │
+│ ⚠️ 8 duplicates merged   │
+│ ⚠️ 2 phone formats       │
+│   normalized             │
+│                          │
+│ [View Issues] [Continue] │
+└──────────────────────────┘
+```
+
+Frontend logic:
+
+```typescript
+// src/pages/ImportAI.tsx
+
+const [step, setStep] = useState('upload'); // upload → preview → processing → done
+
+// Step 1: Upload
+const handleFileSelect = async (file) => {
+  setStep('preview');
+  const res = await fetch('/api/import/ai-smart/preview', {
+    method: 'POST',
+    body: formData // file + org_id
+  });
+  const preview = await res.json();
+  setPreview(preview);
+};
+
+// Step 2: Show preview
+// User sees data quality, issues, sample contacts
+// Clicks "Confirm Import"
+
+// Step 3: Start processing
+const handleConfirm = async () => {
+  setStep('processing');
+  const res = await fetch('/api/import/ai-smart/execute', {
+    method: 'POST',
+    body: JSON.stringify({ file_id, org_id, confirmed: true })
+  });
+  const job = await res.json();
+  
+  // Poll for progress
+  const pollProgress = setInterval(() => {
+    fetch(`/api/import/ai-smart/job/${job.id}`)
+      .then(r => r.json())
+      .then(data => {
+        setProgress(data);
+        if (data.status === 'completed') {
+          clearInterval(pollProgress);
+          setStep('done');
+        }
+      });
+  }, 1000); // Check every 1 second
+};
+
+// Step 4: Show results
+// Display summary, issues, import count
+// Button: "Go to Contacts" or "Import Another File"
+```
+
+---
+
+### PHASE 5: CLAUDE PROMPT ENGINEERING
+======================================
+
+**Main extraction prompt:**
+
+```
+You are a data import assistant. Your job is to analyze raw data and extract contacts and leads.
+
+Raw data:
+[raw_data_json_or_csv]
+
+Rules:
+1. Extract ALL contacts, even if some fields missing
+2. Normalize field names (First Name + Last Name → name)
+3. Standardize phone format (remove dashes, keep digits + country code)
+4. Standardize email (lowercase, trim)
+5. Detect duplicates by email (case-insensitive)
+6. Handle multi-line addresses
+7. Detect company from text
+8. Detect contact title from "Job Title" or similar
+9. Map lead status: "In Progress" → "negotiating", "New" → "new", etc.
+10. Extract budget/deal amount as integer
+
+Return JSON:
+{
+  "contacts": [
+    {
+      "name": "John Smith",
+      "email": "john@acme.com",
+      "phone": "+1-212-555-0147",
+      "company": "Acme Corp",
+      "title": "VP Sales",
+      "confidence": 0.99
+    }
+  ],
+  "leads": [
+    {
+      "contact_email": "john@acme.com",
+      "company": "Acme Corp",
+      "stage": "negotiating",
+      "value_usd": 50000,
+      "close_date": "2026-04-15",
+      "confidence": 0.92
+    }
+  ],
+  "deduplication": [
+    { "email": "john@acme.com", "kept_index": 0, "removed_indices": [5, 12] }
+  ],
+  "issues": [
+    "Row 2: No email address (marked as note only)",
+    "Row 5: Duplicate of row 1 (kept first, removed second)",
+    "Row 8: Phone format non-standard, best guess: +1-555-0123",
+    "Row 15: Budget field ambiguous, extracted as 50000"
+  ],
+  "data_quality": 0.95,
+  "total_rows_analyzed": 264,
+  "valid_contacts": 250,
+  "valid_leads": 45
+}
+```
+
+---
+
+## BUILD ORDER
+
+**Phase 1: File parsing + Claude analysis** (1 hour)
+- POST /api/import/ai-smart/preview
+- Read file, send to Claude, return preview
+- Frontend Step 1-2
+
+**Phase 2: Worker + batch processing** (45 min)
+- POST /api/import/ai-smart/execute
+- POST /api/import/ai-smart/worker
+- Batch splitting, job tracking
+- Progress polling
+
+**Phase 3: Database schema** (15 min)
+- Create import_jobs table
+- Add columns to contacts/leads
+
+**Phase 4: Frontend wizard** (45 min)
+- Upload form
+- Preview display
+- Progress bar
+- Results summary
+
+**Phase 5: Testing** (30 min)
+- Upload messy CSV
+- Verify Claude analysis
+- Verify batching
+- Verify all data imported
+- Verify progress updates
+
+Total: 3 hours
+
+---
+
+## TEST FLOW
+
+1. Go to /import-ai
+2. Upload HubSpot CSV (messy, mixed columns)
+3. See preview:
+   - ✓ 264 rows found
+   - ✓ 250 contacts + 45 leads extracted
+   - ✓ 95% data quality
+   - ⚠️ 5 missing email, 8 duplicates
+
+4. Click "Confirm Import"
+5. See progress bar:
+   - Processing... 50% → 100%
+   - Real-time: "Imported 100 / 250 contacts"
+
+6. Done:
+   - ✓ 250 contacts in DB
+   - ✓ 45 leads in DB
+   - ✓ All warnings logged
+   - ⚠️ 5 records as notes (no email)
+
+7. Go to Contacts:
+   - All 250 contacts visible
+   - Can search, filter, view
+
+---
+
+## ADVANTAGES OVER OLD IMPORT
+
+Old system:
+❌ Rigid column matching
+❌ Rejects bad rows
+❌ User has to map columns manually
+❌ 50% data loss
+
+New system:
+✅ AI analyzes raw data
+✅ Intelligent extraction
+✅ Handles inconsistencies
+✅ Deduplicates automatically
+✅ Batch processes large files
+✅ Shows data quality score
+✅ 99% data retention
+✅ User sees what's happening
+
+---
+
+## DEPLOYMENT
+
+This replaces the old /import page.
+
+Revert old import or keep both as option:
+- /import (old rigid version)
+- /import-ai (new smart version)
+
+Recommend users to use /import-ai from now on.
+
+---
+
+## EDGE CASES HANDLED
+
+```
+✓ Messy column names (First Name / first_name / fname)
+✓ Missing fields (email optional, name required)
+✓ Duplicate emails (dedupe, keep first, log duplicates)
+✓ Inconsistent phone formats (normalize to +1-XXX)
+✓ Large files (batch into 500-row chunks)
+✓ Invalid data (skip bad rows, log reasons)
+✓ Excel with multiple sheets (process first sheet, warn about others)
+✓ Unicode/special characters (handle properly, no corruption)
+✓ Mixed case emails (dedupe case-insensitive)
+```
+
+---
+
+## READY TO BUILD?
+
+Give this document to Replit.
+
+Tell it:
+
+"Build AI-powered smart import following this spec. Claude analyzes raw data, intelligently extracts contacts/leads, handles batching for large files. Replace current rigid import with this. Test end-to-end with messy HubSpot data. ETA: 2-3 hours."
+
+---
+
+**This solves your exact problem: Half the data getting rejected = SOLVED.**
+
+Claude becomes the smart middle agent that figures out what's what, dedupes, normalizes, and gets 99% of data in.
