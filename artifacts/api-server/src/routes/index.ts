@@ -15,6 +15,7 @@ import importExportRouter from "./importExport";
 import importAiRouter from "./importAi";
 import companyCredentialsRouter from "./companyCredentials";
 import integrationsRouter from "./integrations";
+import attachmentsRouter from "./attachments";
 
 const router: IRouter = Router();
 
@@ -34,5 +35,6 @@ router.use(importExportRouter);
 router.use(importAiRouter);
 router.use(companyCredentialsRouter);
 router.use(integrationsRouter);
+router.use(attachmentsRouter);
 
 export default router;

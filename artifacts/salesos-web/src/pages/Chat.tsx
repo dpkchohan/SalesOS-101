@@ -3,14 +3,38 @@ import {
   useSendChat,
   useTranscribeAudio,
   useSpeakText,
+  useUploadChatAttachment,
+  useExtractChatAttachment,
+  useApplyChatAttachment,
+  getChatAttachment as fetchChatAttachment,
   getGetDashboardSummaryQueryKey,
   getListTasksQueryKey,
   getListContactsQueryKey,
   getGetPipelineQueryKey,
+  type ChatAttachment,
+  type ExtractedAttachmentContact,
+  type ExtractedAttachmentLead,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Mic, Volume2, VolumeX, Loader2, Sparkles, Square, Settings2 } from "lucide-react";
+import {
+  Send,
+  Mic,
+  Volume2,
+  VolumeX,
+  Loader2,
+  Sparkles,
+  Square,
+  Settings2,
+  Paperclip,
+  FileText,
+  Image as ImageIcon,
+  X,
+  CheckCircle2,
+  UserPlus,
+  Briefcase,
+  AlertTriangle,
+} from "lucide-react";
 import { PageHeader } from "@/components/AppLayout";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +44,8 @@ interface Msg {
   text: string;
   intent?: string;
   audioUrl?: string;
+  attachment?: ChatAttachment;
+  appliedNote?: string;
 }
 
 const SUGGESTIONS = [
@@ -133,7 +159,19 @@ export default function Chat() {
   const send = useSendChat();
   const transcribe = useTranscribeAudio();
   const speak = useSpeakText();
+  const upload = useUploadChatAttachment();
+  const extract = useExtractChatAttachment();
+  const apply = useApplyChatAttachment();
   const qc = useQueryClient();
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const dragCount = useRef(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [pollingIds, setPollingIds] = useState<Set<string>>(new Set());
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  const ACCEPTED = ".jpg,.jpeg,.png,.webp,.gif,.pdf,.docx,.pptx,.xlsx,.xls,.csv,.txt,image/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,text/plain";
+  const MAX_BYTES = 10 * 1024 * 1024;
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -183,8 +221,128 @@ export default function Chat() {
     );
   };
 
+  // Poll attachments until extraction completes or fails
+  useEffect(() => {
+    if (pollingIds.size === 0) return;
+    let cancelled = false;
+    const tick = async () => {
+      for (const id of Array.from(pollingIds)) {
+        try {
+          const fresh = await fetchChatAttachment(id);
+          if (cancelled) return;
+          setMessages((curr) =>
+            curr.map((m) => (m.attachment?.id === id ? { ...m, attachment: fresh } : m)),
+          );
+          if (fresh.extractionStatus === "done" || fresh.extractionStatus === "failed") {
+            setPollingIds((prev) => {
+              const next = new Set(prev);
+              next.delete(id);
+              return next;
+            });
+          }
+        } catch {
+          /* keep polling */
+        }
+      }
+    };
+    void tick();
+    const t = setInterval(tick, 1500);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [pollingIds]);
+
+  const pickFile = (f: File) => {
+    setUploadError(null);
+    if (f.size > MAX_BYTES) {
+      setUploadError("File too large. Max 10 MB.");
+      return;
+    }
+    setPendingFile(f);
+  };
+
+  const sendAttachment = async () => {
+    if (!pendingFile) return;
+    const file = pendingFile;
+    setPendingFile(null);
+    setUploadError(null);
+    const userMsgId = crypto.randomUUID();
+    setMessages((m) => [
+      ...m,
+      { id: userMsgId, role: "user", text: `📎 ${file.name}` },
+    ]);
+    try {
+      const att = await upload.mutateAsync({ data: { file } });
+      const assistantId = crypto.randomUUID();
+      setMessages((m) => [
+        ...m,
+        {
+          id: assistantId,
+          role: "assistant",
+          text: "",
+          attachment: att,
+        },
+      ]);
+      setPollingIds((prev) => new Set(prev).add(att.id));
+      // Kick extraction (non-blocking)
+      extract.mutate({ id: att.id });
+    } catch (err) {
+      setMessages((m) => [
+        ...m,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          text: err instanceof Error ? `Upload failed: ${err.message}` : "Upload failed.",
+        },
+      ]);
+    }
+  };
+
+  const applyExtraction = async (
+    msgId: string,
+    attachmentId: string,
+    action: "contact" | "lead",
+    contactIndex: number,
+  ) => {
+    try {
+      const result = await apply.mutateAsync({
+        id: attachmentId,
+        data: { action, contactIndex },
+      });
+      const note = result.results
+        .map((r) =>
+          action === "lead"
+            ? `${r.merged ? "Merged" : "Added"} ${r.contactName}${r.leadId ? " + lead" : ""}`
+            : `${r.merged ? "Merged" : "Added"} ${r.contactName}`,
+        )
+        .join(" · ");
+      setMessages((curr) =>
+        curr.map((m) => (m.id === msgId ? { ...m, appliedNote: note } : m)),
+      );
+      qc.invalidateQueries({ queryKey: getListContactsQueryKey() });
+      qc.invalidateQueries({ queryKey: getGetPipelineQueryKey() });
+      qc.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() });
+    } catch (err) {
+      setMessages((curr) =>
+        curr.map((m) =>
+          m.id === msgId
+            ? {
+                ...m,
+                appliedNote:
+                  err instanceof Error ? `Failed: ${err.message}` : "Could not apply.",
+              }
+            : m,
+        ),
+      );
+    }
+  };
+
   const sendText = (text: string) => {
-    if (!text.trim()) return;
+    if (!text.trim()) {
+      if (pendingFile) void sendAttachment();
+      return;
+    }
     setInput("");
     const userMsg: Msg = { id: crypto.randomUUID(), role: "user", text };
     setMessages((m) => [...m, userMsg]);
@@ -256,7 +414,30 @@ export default function Chat() {
   const speakReply = (msg: Msg) => playTts(msg.text);
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-57px)] md:h-[100dvh]">
+    <div
+      className={cn(
+        "flex flex-col h-[calc(100dvh-57px)] md:h-[100dvh] relative",
+        dragOver && "ring-2 ring-primary ring-inset",
+      )}
+      onDragEnter={(e) => {
+        e.preventDefault();
+        dragCount.current++;
+        setDragOver(true);
+      }}
+      onDragLeave={(e) => {
+        e.preventDefault();
+        dragCount.current--;
+        if (dragCount.current <= 0) setDragOver(false);
+      }}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => {
+        e.preventDefault();
+        dragCount.current = 0;
+        setDragOver(false);
+        const f = e.dataTransfer.files?.[0];
+        if (f) pickFile(f);
+      }}
+    >
       <PageHeader
         title="Chat"
         subtitle="Type or speak — Claude handles intent"
@@ -374,31 +555,41 @@ export default function Chat() {
               animate={{ opacity: 1, y: 0 }}
               className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}
             >
-              <div
-                className={cn(
-                  "max-w-[88%] md:max-w-[65%] px-4 py-2.5 rounded-2xl text-[14px] leading-snug",
-                  m.role === "user"
-                    ? "bg-primary text-primary-foreground rounded-br-md"
-                    : "bg-card border border-card-border rounded-bl-md",
-                )}
-                data-testid={`msg-${m.role}`}
-              >
-                {m.role === "assistant" && m.intent && m.intent !== "general" && (
-                  <div className="text-[10px] uppercase tracking-wider font-bold text-primary flex items-center gap-1 mb-1">
-                    <Sparkles size={10} /> {m.intent.replace(/_/g, " ")}
-                  </div>
-                )}
-                {m.text}
-                {m.role === "assistant" && m.id !== "intro" && (
-                  <button
-                    onClick={() => speakReply(m)}
-                    className="ml-2 inline-flex items-center justify-center text-muted-foreground hover:text-primary transition-colors align-middle"
-                    title="Play audio"
-                  >
-                    <Volume2 size={12} />
-                  </button>
-                )}
-              </div>
+              {m.attachment ? (
+                <AttachmentCard
+                  msgId={m.id}
+                  attachment={m.attachment}
+                  appliedNote={m.appliedNote}
+                  applying={apply.isPending}
+                  onApply={(action, idx) => applyExtraction(m.id, m.attachment!.id, action, idx)}
+                />
+              ) : (
+                <div
+                  className={cn(
+                    "max-w-[88%] md:max-w-[65%] px-4 py-2.5 rounded-2xl text-[14px] leading-snug",
+                    m.role === "user"
+                      ? "bg-primary text-primary-foreground rounded-br-md"
+                      : "bg-card border border-card-border rounded-bl-md",
+                  )}
+                  data-testid={`msg-${m.role}`}
+                >
+                  {m.role === "assistant" && m.intent && m.intent !== "general" && (
+                    <div className="text-[10px] uppercase tracking-wider font-bold text-primary flex items-center gap-1 mb-1">
+                      <Sparkles size={10} /> {m.intent.replace(/_/g, " ")}
+                    </div>
+                  )}
+                  {m.text}
+                  {m.role === "assistant" && m.id !== "intro" && m.text && (
+                    <button
+                      onClick={() => speakReply(m)}
+                      className="ml-2 inline-flex items-center justify-center text-muted-foreground hover:text-primary transition-colors align-middle"
+                      title="Play audio"
+                    >
+                      <Volume2 size={12} />
+                    </button>
+                  )}
+                </div>
+              )}
             </motion.div>
           ))}
         </AnimatePresence>
@@ -441,13 +632,81 @@ export default function Chat() {
           </div>
         )}
       </div>
+      {dragOver && (
+        <div className="absolute inset-0 z-20 grid place-items-center bg-primary/10 backdrop-blur-sm pointer-events-none">
+          <div className="text-[15px] font-bold text-primary flex items-center gap-2">
+            <Paperclip size={16} /> Drop file to attach (max 10 MB)
+          </div>
+        </div>
+      )}
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          sendText(input);
+          if (pendingFile && !input.trim()) {
+            void sendAttachment();
+          } else {
+            sendText(input);
+          }
         }}
-        className="border-t border-border px-3 md:px-8 py-3 flex items-end gap-2 bg-background"
+        className="border-t border-border px-3 md:px-8 py-3 flex flex-col gap-2 bg-background"
       >
+        {(pendingFile || uploadError) && (
+          <div className="flex items-center gap-2 flex-wrap">
+            {pendingFile && (
+              <div
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/30 text-[12px] font-semibold text-primary"
+                data-testid="chip-pending-file"
+              >
+                {pendingFile.type.startsWith("image/") ? (
+                  <ImageIcon size={12} />
+                ) : (
+                  <FileText size={12} />
+                )}
+                <span className="max-w-[200px] truncate">{pendingFile.name}</span>
+                <span className="text-[10px] text-primary/70 tabular-nums">
+                  {(pendingFile.size / 1024).toFixed(0)} KB
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPendingFile(null)}
+                  className="hover:text-rose-400 transition-colors"
+                  aria-label="Remove file"
+                  data-testid="button-remove-pending-file"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            )}
+            {uploadError && (
+              <div className="text-[12px] text-rose-400 flex items-center gap-1">
+                <AlertTriangle size={12} /> {uploadError}
+              </div>
+            )}
+          </div>
+        )}
+        <div className="flex items-end gap-2">
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="w-11 h-11 rounded-full grid place-items-center bg-muted text-muted-foreground hover:bg-muted/80 transition-all flex-shrink-0"
+          data-testid="button-attach"
+          aria-label="Attach file"
+          title="Attach business card or document (max 10 MB)"
+        >
+          <Paperclip size={18} />
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          accept={ACCEPTED}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) pickFile(f);
+            e.target.value = "";
+          }}
+          data-testid="input-attach"
+        />
         <button
           type="button"
           onMouseDown={startRecord}
@@ -501,13 +760,136 @@ export default function Chat() {
         </div>
         <button
           type="submit"
-          disabled={!input.trim() || send.isPending}
+          disabled={(!input.trim() && !pendingFile) || send.isPending || upload.isPending}
           className="w-11 h-11 rounded-full bg-primary text-primary-foreground grid place-items-center hover:bg-primary/90 disabled:opacity-40 transition-colors flex-shrink-0"
           data-testid="button-send"
         >
-          <Send size={16} />
+          {upload.isPending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
         </button>
+        </div>
       </form>
+    </div>
+  );
+}
+
+function AttachmentCard({
+  msgId,
+  attachment,
+  appliedNote,
+  applying,
+  onApply,
+}: {
+  msgId: string;
+  attachment: ChatAttachment;
+  appliedNote?: string;
+  applying: boolean;
+  onApply: (action: "contact" | "lead", contactIndex: number) => void;
+}) {
+  const status = attachment.extractionStatus;
+  const data = attachment.extractedData;
+  const isImage = attachment.fileType === "image";
+  const Icon = isImage ? ImageIcon : FileText;
+
+  return (
+    <div
+      className="max-w-[88%] md:max-w-[70%] rounded-2xl bg-card border border-card-border rounded-bl-md overflow-hidden"
+      data-testid={`attachment-card-${msgId}`}
+    >
+      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-card-border bg-muted/20">
+        <Icon size={14} className="text-primary flex-shrink-0" />
+        <span className="text-[12.5px] font-semibold truncate">{attachment.fileName}</span>
+        <span className="ml-auto text-[10px] uppercase tracking-wider text-muted-foreground tabular-nums">
+          {(attachment.fileSize / 1024).toFixed(0)} KB
+        </span>
+      </div>
+
+      {(status === "pending" || status === "running") && (
+        <div className="px-4 py-4 flex items-center gap-2 text-[13px] text-muted-foreground">
+          <Loader2 size={14} className="animate-spin text-primary" />
+          <span>Reading {isImage ? "card" : "document"} with AI…</span>
+        </div>
+      )}
+
+      {status === "failed" && (
+        <div className="px-4 py-4 text-[13px] text-rose-300 flex items-start gap-2">
+          <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
+          <div>{attachment.error ?? "Extraction failed."}</div>
+        </div>
+      )}
+
+      {status === "done" && data && (
+        <div className="px-4 py-3 space-y-3">
+          {data.summary && (
+            <div className="text-[13px] text-foreground leading-snug">{data.summary}</div>
+          )}
+          <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
+            <Sparkles size={11} className="text-primary" />
+            <span className="text-primary">{data.kind}</span>
+            <span>· confidence {Math.round(data.confidence * 100)}%</span>
+          </div>
+
+          {data.contacts.length === 0 && (
+            <div className="text-[12px] text-muted-foreground italic">
+              No contacts detected in this {isImage ? "image" : "file"}.
+            </div>
+          )}
+
+          {data.contacts.map((c: ExtractedAttachmentContact, i: number) => {
+            const lead = data.leads[i] as ExtractedAttachmentLead | undefined;
+            return (
+              <div
+                key={i}
+                className="rounded-lg border border-card-border bg-muted/20 px-3 py-2.5 space-y-1"
+                data-testid={`extracted-contact-${i}`}
+              >
+                <div className="text-[14px] font-bold">{c.name || "Unnamed"}</div>
+                {(c.title || c.company) && (
+                  <div className="text-[12px] text-muted-foreground">
+                    {[c.title, c.company].filter(Boolean).join(" · ")}
+                  </div>
+                )}
+                <div className="text-[12px] text-muted-foreground space-y-0.5">
+                  {c.email && <div>{c.email}</div>}
+                  {c.phone && <div>{c.phone}</div>}
+                </div>
+                {lead && (lead.stage || lead.valueUsd != null) && (
+                  <div className="text-[11px] text-primary/80 font-medium">
+                    Lead: {lead.stage ?? "new"}
+                    {lead.valueUsd != null ? ` · $${lead.valueUsd.toLocaleString()}` : ""}
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2 pt-1.5">
+                  <button
+                    type="button"
+                    onClick={() => onApply("contact", i)}
+                    disabled={applying || !!appliedNote}
+                    className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold px-2.5 py-1 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                    data-testid={`button-add-contact-${i}`}
+                  >
+                    <UserPlus size={12} /> Add to Contacts
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onApply("lead", i)}
+                    disabled={applying || !!appliedNote}
+                    className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold px-2.5 py-1 rounded-md border border-primary/40 text-primary hover:bg-primary/10 disabled:opacity-50"
+                    data-testid={`button-add-lead-${i}`}
+                  >
+                    <Briefcase size={12} /> Add as Lead
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+
+          {appliedNote && (
+            <div className="flex items-center gap-1.5 text-[12px] text-emerald-400" data-testid="applied-note">
+              <CheckCircle2 size={13} />
+              <span>{appliedNote}</span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

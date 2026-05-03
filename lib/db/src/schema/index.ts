@@ -9,3 +9,4 @@ export * from "./aiSignals";
 export * from "./documents";
 export * from "./companyCredentials";
 export * from "./importJobs";
+export * from "./chatAttachments";

@@ -650,6 +650,139 @@ export interface SpeakReply {
   mimeType: string;
 }
 
+export interface ExtractedAttachmentContact {
+  name: string;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  title?: string | null;
+  /** @nullable */
+  company?: string | null;
+  /** @nullable */
+  notes?: string | null;
+}
+
+export interface ExtractedAttachmentLead {
+  contactName: string;
+  /** @nullable */
+  stage?: string | null;
+  /** @nullable */
+  valueUsd?: number | null;
+  /** @nullable */
+  closeDate?: string | null;
+  /** @nullable */
+  source?: string | null;
+}
+
+export type ExtractedAttachmentDataKind =
+  (typeof ExtractedAttachmentDataKind)[keyof typeof ExtractedAttachmentDataKind];
+
+export const ExtractedAttachmentDataKind = {
+  card: "card",
+  document: "document",
+  spreadsheet: "spreadsheet",
+} as const;
+
+export interface ExtractedAttachmentData {
+  kind: ExtractedAttachmentDataKind;
+  confidence: number;
+  /** @nullable */
+  summary?: string | null;
+  contacts: ExtractedAttachmentContact[];
+  leads: ExtractedAttachmentLead[];
+  /** @nullable */
+  rawTextPreview?: string | null;
+}
+
+export type ChatAttachmentFileType =
+  (typeof ChatAttachmentFileType)[keyof typeof ChatAttachmentFileType];
+
+export const ChatAttachmentFileType = {
+  image: "image",
+  pdf: "pdf",
+  docx: "docx",
+  pptx: "pptx",
+  xlsx: "xlsx",
+  txt: "txt",
+} as const;
+
+export type ChatAttachmentExtractionStatus =
+  (typeof ChatAttachmentExtractionStatus)[keyof typeof ChatAttachmentExtractionStatus];
+
+export const ChatAttachmentExtractionStatus = {
+  pending: "pending",
+  running: "running",
+  done: "done",
+  failed: "failed",
+} as const;
+
+export interface ChatAttachment {
+  id: string;
+  fileName: string;
+  fileType: ChatAttachmentFileType;
+  mimeType: string;
+  fileSize: number;
+  storageKey: string;
+  extractionStatus: ChatAttachmentExtractionStatus;
+  extractedData?: ExtractedAttachmentData | null;
+  /** @nullable */
+  error?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApplyAttachmentOverrides {
+  /** @nullable */
+  name?: string | null;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  title?: string | null;
+  /** @nullable */
+  company?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  /** @nullable */
+  stage?: string | null;
+  /** @nullable */
+  valueUsd?: number | null;
+  /** @nullable */
+  closeDate?: string | null;
+}
+
+export type ApplyAttachmentInputAction =
+  (typeof ApplyAttachmentInputAction)[keyof typeof ApplyAttachmentInputAction];
+
+export const ApplyAttachmentInputAction = {
+  contact: "contact",
+  lead: "lead",
+} as const;
+
+export interface ApplyAttachmentInput {
+  action: ApplyAttachmentInputAction;
+  /** @nullable */
+  contactIndex?: number | null;
+  overrides?: ApplyAttachmentOverrides;
+}
+
+export interface ApplyAttachmentResultEntry {
+  contactId: string;
+  contactName: string;
+  /** @nullable */
+  leadId?: string | null;
+  merged: boolean;
+  /** @nullable */
+  email?: string | null;
+}
+
+export interface ApplyAttachmentResult {
+  results: ApplyAttachmentResultEntry[];
+}
+
 /**
  * Not found
  */
@@ -706,4 +839,8 @@ export type AiSmartImportWorkerBody = {
 
 export type AiSmartImportWorker200 = {
   ok?: boolean;
+};
+
+export type UploadChatAttachmentBody = {
+  file: Blob;
 };

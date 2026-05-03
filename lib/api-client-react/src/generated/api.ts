@@ -22,7 +22,10 @@ import type {
   AiSmartImportPreviewBody,
   AiSmartImportWorker200,
   AiSmartImportWorkerBody,
+  ApplyAttachmentInput,
+  ApplyAttachmentResult,
   CalendarStatus,
+  ChatAttachment,
   ChatInput,
   ChatReply,
   Company,
@@ -67,6 +70,7 @@ import type {
   TaskUpdate,
   TranscribeInput,
   TranscribeReply,
+  UploadChatAttachmentBody,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -3591,4 +3595,351 @@ export const useSpeakText = <
   TContext
 > => {
   return useMutation(getSpeakTextMutationOptions(options));
+};
+
+/**
+ * @summary Upload a chat attachment (image / document / spreadsheet) for AI extraction
+ */
+export const getUploadChatAttachmentUrl = () => {
+  return `/api/attachments/upload`;
+};
+
+export const uploadChatAttachment = async (
+  uploadChatAttachmentBody: UploadChatAttachmentBody,
+  options?: RequestInit,
+): Promise<ChatAttachment> => {
+  const formData = new FormData();
+  formData.append(`file`, uploadChatAttachmentBody.file);
+
+  return customFetch<ChatAttachment>(getUploadChatAttachmentUrl(), {
+    ...options,
+    method: "POST",
+    body: formData,
+  });
+};
+
+export const getUploadChatAttachmentMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof uploadChatAttachment>>,
+    TError,
+    { data: BodyType<UploadChatAttachmentBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof uploadChatAttachment>>,
+  TError,
+  { data: BodyType<UploadChatAttachmentBody> },
+  TContext
+> => {
+  const mutationKey = ["uploadChatAttachment"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof uploadChatAttachment>>,
+    { data: BodyType<UploadChatAttachmentBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return uploadChatAttachment(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UploadChatAttachmentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof uploadChatAttachment>>
+>;
+export type UploadChatAttachmentMutationBody =
+  BodyType<UploadChatAttachmentBody>;
+export type UploadChatAttachmentMutationError = ErrorType<void>;
+
+/**
+ * @summary Upload a chat attachment (image / document / spreadsheet) for AI extraction
+ */
+export const useUploadChatAttachment = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof uploadChatAttachment>>,
+    TError,
+    { data: BodyType<UploadChatAttachmentBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof uploadChatAttachment>>,
+  TError,
+  { data: BodyType<UploadChatAttachmentBody> },
+  TContext
+> => {
+  return useMutation(getUploadChatAttachmentMutationOptions(options));
+};
+
+/**
+ * @summary Get the latest status + extracted data for an attachment (used for polling)
+ */
+export const getGetChatAttachmentUrl = (id: string) => {
+  return `/api/attachments/${id}`;
+};
+
+export const getChatAttachment = async (
+  id: string,
+  options?: RequestInit,
+): Promise<ChatAttachment> => {
+  return customFetch<ChatAttachment>(getGetChatAttachmentUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetChatAttachmentQueryKey = (id: string) => {
+  return [`/api/attachments/${id}`] as const;
+};
+
+export const getGetChatAttachmentQueryOptions = <
+  TData = Awaited<ReturnType<typeof getChatAttachment>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getChatAttachment>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetChatAttachmentQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getChatAttachment>>
+  > = ({ signal }) => getChatAttachment(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getChatAttachment>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetChatAttachmentQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getChatAttachment>>
+>;
+export type GetChatAttachmentQueryError = ErrorType<void>;
+
+/**
+ * @summary Get the latest status + extracted data for an attachment (used for polling)
+ */
+
+export function useGetChatAttachment<
+  TData = Awaited<ReturnType<typeof getChatAttachment>>,
+  TError = ErrorType<void>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getChatAttachment>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetChatAttachmentQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Kick off Claude-powered extraction. Returns immediately; poll GET /attachments/{id}.
+ */
+export const getExtractChatAttachmentUrl = (id: string) => {
+  return `/api/attachments/${id}/extract`;
+};
+
+export const extractChatAttachment = async (
+  id: string,
+  options?: RequestInit,
+): Promise<ChatAttachment> => {
+  return customFetch<ChatAttachment>(getExtractChatAttachmentUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getExtractChatAttachmentMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof extractChatAttachment>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof extractChatAttachment>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["extractChatAttachment"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof extractChatAttachment>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return extractChatAttachment(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ExtractChatAttachmentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof extractChatAttachment>>
+>;
+
+export type ExtractChatAttachmentMutationError = ErrorType<void>;
+
+/**
+ * @summary Kick off Claude-powered extraction. Returns immediately; poll GET /attachments/{id}.
+ */
+export const useExtractChatAttachment = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof extractChatAttachment>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof extractChatAttachment>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getExtractChatAttachmentMutationOptions(options));
+};
+
+/**
+ * @summary Create or merge contacts (and optionally leads) from an extracted attachment
+ */
+export const getApplyChatAttachmentUrl = (id: string) => {
+  return `/api/attachments/${id}/apply`;
+};
+
+export const applyChatAttachment = async (
+  id: string,
+  applyAttachmentInput: ApplyAttachmentInput,
+  options?: RequestInit,
+): Promise<ApplyAttachmentResult> => {
+  return customFetch<ApplyAttachmentResult>(getApplyChatAttachmentUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(applyAttachmentInput),
+  });
+};
+
+export const getApplyChatAttachmentMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof applyChatAttachment>>,
+    TError,
+    { id: string; data: BodyType<ApplyAttachmentInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof applyChatAttachment>>,
+  TError,
+  { id: string; data: BodyType<ApplyAttachmentInput> },
+  TContext
+> => {
+  const mutationKey = ["applyChatAttachment"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof applyChatAttachment>>,
+    { id: string; data: BodyType<ApplyAttachmentInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return applyChatAttachment(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ApplyChatAttachmentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof applyChatAttachment>>
+>;
+export type ApplyChatAttachmentMutationBody = BodyType<ApplyAttachmentInput>;
+export type ApplyChatAttachmentMutationError = ErrorType<void>;
+
+/**
+ * @summary Create or merge contacts (and optionally leads) from an extracted attachment
+ */
+export const useApplyChatAttachment = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof applyChatAttachment>>,
+    TError,
+    { id: string; data: BodyType<ApplyAttachmentInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof applyChatAttachment>>,
+  TError,
+  { id: string; data: BodyType<ApplyAttachmentInput> },
+  TContext
+> => {
+  return useMutation(getApplyChatAttachmentMutationOptions(options));
 };

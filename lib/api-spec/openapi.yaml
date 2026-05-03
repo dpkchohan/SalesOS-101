@@ -22,6 +22,7 @@ tags:
   - name: voice
   - name: branding
   - name: importExport
+  - name: attachments
 
 paths:
   /healthz:
@@ -691,6 +692,89 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SpeakReply" }
+
+  # ---------- Chat attachments ----------
+  /attachments/upload:
+    post:
+      operationId: uploadChatAttachment
+      tags: [attachments]
+      summary: Upload a chat attachment (image / document / spreadsheet) for AI extraction
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Attachment created (extraction pending)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChatAttachment" }
+        "400":
+          description: Unsupported file type or missing file
+        "413":
+          description: File too large (max 10 MB)
+
+  /attachments/{id}:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string } }
+    get:
+      operationId: getChatAttachment
+      tags: [attachments]
+      summary: Get the latest status + extracted data for an attachment (used for polling)
+      responses:
+        "200":
+          description: Attachment
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChatAttachment" }
+        "404":
+          description: Not found
+
+  /attachments/{id}/extract:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string } }
+    post:
+      operationId: extractChatAttachment
+      tags: [attachments]
+      summary: Kick off Claude-powered extraction. Returns immediately; poll GET /attachments/{id}.
+      responses:
+        "200":
+          description: Extraction started
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChatAttachment" }
+        "404":
+          description: Not found
+
+  /attachments/{id}/apply:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string } }
+    post:
+      operationId: applyChatAttachment
+      tags: [attachments]
+      summary: Create or merge contacts (and optionally leads) from an extracted attachment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ApplyAttachmentInput" }
+      responses:
+        "200":
+          description: Contacts created or merged
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApplyAttachmentResult" }
+        "400":
+          description: Attachment not ready or invalid request
+        "404":
+          description: Not found
 
 components:
   responses:
@@ -1363,3 +1447,116 @@ components:
       properties:
         audioBase64: { type: string }
         mimeType: { type: string }
+
+    ExtractedAttachmentContact:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        email: { type: ["string", "null"] }
+        phone: { type: ["string", "null"] }
+        title: { type: ["string", "null"] }
+        company: { type: ["string", "null"] }
+        notes: { type: ["string", "null"] }
+
+    ExtractedAttachmentLead:
+      type: object
+      required: [contactName]
+      properties:
+        contactName: { type: string }
+        stage: { type: ["string", "null"] }
+        valueUsd: { type: ["integer", "null"] }
+        closeDate: { type: ["string", "null"] }
+        source: { type: ["string", "null"] }
+
+    ExtractedAttachmentData:
+      type: object
+      required: [kind, confidence, contacts, leads]
+      properties:
+        kind:
+          type: string
+          enum: [card, document, spreadsheet]
+        confidence: { type: number }
+        summary: { type: ["string", "null"] }
+        contacts:
+          type: array
+          items: { $ref: "#/components/schemas/ExtractedAttachmentContact" }
+        leads:
+          type: array
+          items: { $ref: "#/components/schemas/ExtractedAttachmentLead" }
+        rawTextPreview: { type: ["string", "null"] }
+
+    ChatAttachment:
+      type: object
+      required:
+        [
+          id,
+          fileName,
+          fileType,
+          mimeType,
+          fileSize,
+          storageKey,
+          extractionStatus,
+          createdAt,
+          updatedAt,
+        ]
+      properties:
+        id: { type: string }
+        fileName: { type: string }
+        fileType:
+          type: string
+          enum: [image, pdf, docx, pptx, xlsx, txt]
+        mimeType: { type: string }
+        fileSize: { type: integer }
+        storageKey: { type: string }
+        extractionStatus:
+          type: string
+          enum: [pending, running, done, failed]
+        extractedData:
+          oneOf:
+            - { $ref: "#/components/schemas/ExtractedAttachmentData" }
+            - { type: "null" }
+        error: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    ApplyAttachmentOverrides:
+      type: object
+      properties:
+        name: { type: ["string", "null"] }
+        email: { type: ["string", "null"] }
+        phone: { type: ["string", "null"] }
+        title: { type: ["string", "null"] }
+        company: { type: ["string", "null"] }
+        notes: { type: ["string", "null"] }
+        stage: { type: ["string", "null"] }
+        valueUsd: { type: ["integer", "null"] }
+        closeDate: { type: ["string", "null"] }
+
+    ApplyAttachmentInput:
+      type: object
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [contact, lead]
+        contactIndex: { type: ["integer", "null"] }
+        overrides: { $ref: "#/components/schemas/ApplyAttachmentOverrides" }
+
+    ApplyAttachmentResultEntry:
+      type: object
+      required: [contactId, contactName, merged]
+      properties:
+        contactId: { type: string }
+        contactName: { type: string }
+        leadId: { type: ["string", "null"] }
+        merged: { type: boolean }
+        email: { type: ["string", "null"] }
+
+    ApplyAttachmentResult:
+      type: object
+      required: [results]
+      properties:
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/ApplyAttachmentResultEntry" }

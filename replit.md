@@ -35,6 +35,23 @@ A mobile-first sales CRM built on the pnpm workspace monorepo. SalesOS gives sal
 - Draft proposals can be tweaked before sending: an **Edit** button opens an in-page HTML editor (textarea seeded from the current draft) that saves via `PUT /api/documents/:id`, and a **Regenerate from notes** panel calls `POST /api/documents/:id/regenerate-proposal { notes }` which re-runs Claude with the original lead context plus the rep's revision instructions and a stripped-text reference of the previous draft. Both surfaces are draft-only (server enforces `status === "draft"`).
 - Chat voice playback (`pages/Chat.tsx`) has a header-level voice settings popover with selectors for **language** (11 Sarvam-supported Indic codes incl. en-IN/hi-IN/ta-IN/te-IN/kn-IN/ml-IN/mr-IN/bn-IN/gu-IN/od-IN/pa-IN) and **speaker** (anushka, manisha, vidya, arya, abhilash, karun, hitesh). Selections persist to `localStorage` keys `salesos.ttsLang` and `salesos.ttsSpeaker`, and are forwarded to `POST /api/voice/speak`. A "Preview voice" button samples the chosen combination. The popover dismisses on outside click or Escape.
 
+## Chat attachments (cards & docs)
+
+- `chat_attachments` table stores org-scoped uploads (file metadata, storage key, extraction status, extracted JSON, error). Files live in Replit App Storage under `<PRIVATE_OBJECT_DIR>/chat-attachments/<orgId>/<uuid>-<safeName>`.
+- `lib/attachmentExtract.ts` classifies the upload (image / pdf / docx / pptx / xlsx | csv | txt — max 10 MB) and runs the right extractor:
+  - Images → Claude vision (`claudeJsonWithImage`) reading a business card.
+  - PDFs → `pdf-parse/lib/pdf-parse.js` (direct import skips the v1 debug entry that reads a test fixture at startup).
+  - DOCX → `mammoth`. PPTX → `JSZip` over `ppt/slides/slide*.xml` with tag-strip.
+  - XLSX/CSV → reuses the AI Smart Import pipeline (`parseSmartFile` + `extractBatch`).
+  - TXT → raw UTF-8.
+  - Document text is sent to Claude with a strict-JSON prompt that returns `{ summary, contacts[], leads[], confidence }`.
+- `routes/attachments.ts`:
+  - `POST /api/attachments/upload` (multer 10 MB) saves the buffer directly via `bucket.file().save()` and inserts a `pending` row.
+  - `POST /api/attachments/:id/extract` flips the row to `running` and kicks extraction in the background; the response returns immediately so the client can poll.
+  - `GET /api/attachments/:id` is the polling endpoint.
+  - `POST /api/attachments/:id/apply { action, contactIndex }` upserts a contact (race-safe via Task #10's `(orgId, lower(email))` unique index) and optionally creates a lead with `source: "chat-attachment"` assigned to the requesting user.
+- Frontend: `pages/Chat.tsx` adds a paperclip button + page-wide drag-drop overlay + a pending-file chip. After upload the assistant message renders an `AttachmentCard` (file header → spinner while extracting → result with summary, confidence, per-contact "Add to Contacts" / "Add as Lead" actions). Polls every 1.5 s until `done`/`failed` and then invalidates the dashboard / contacts / pipeline queries on apply.
+
 ## Import / Export
 
 - `routes/importExport.ts` (multer + xlsx) handles CSV and Excel ingest from HubSpot, Salesforce, Pipedrive, etc.

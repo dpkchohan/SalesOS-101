@@ -1196,3 +1196,190 @@ export const SpeakTextResponse = zod.object({
   audioBase64: zod.string(),
   mimeType: zod.string(),
 });
+
+/**
+ * @summary Upload a chat attachment (image / document / spreadsheet) for AI extraction
+ */
+export const UploadChatAttachmentBody = zod.object({
+  file: zod.instanceof(File),
+});
+
+export const UploadChatAttachmentResponse = zod.object({
+  id: zod.string(),
+  fileName: zod.string(),
+  fileType: zod.enum(["image", "pdf", "docx", "pptx", "xlsx", "txt"]),
+  mimeType: zod.string(),
+  fileSize: zod.number(),
+  storageKey: zod.string(),
+  extractionStatus: zod.enum(["pending", "running", "done", "failed"]),
+  extractedData: zod
+    .union([
+      zod.object({
+        kind: zod.enum(["card", "document", "spreadsheet"]),
+        confidence: zod.number(),
+        summary: zod.string().nullish(),
+        contacts: zod.array(
+          zod.object({
+            name: zod.string(),
+            email: zod.string().nullish(),
+            phone: zod.string().nullish(),
+            title: zod.string().nullish(),
+            company: zod.string().nullish(),
+            notes: zod.string().nullish(),
+          }),
+        ),
+        leads: zod.array(
+          zod.object({
+            contactName: zod.string(),
+            stage: zod.string().nullish(),
+            valueUsd: zod.number().nullish(),
+            closeDate: zod.string().nullish(),
+            source: zod.string().nullish(),
+          }),
+        ),
+        rawTextPreview: zod.string().nullish(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
+  error: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Get the latest status + extracted data for an attachment (used for polling)
+ */
+export const GetChatAttachmentParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetChatAttachmentResponse = zod.object({
+  id: zod.string(),
+  fileName: zod.string(),
+  fileType: zod.enum(["image", "pdf", "docx", "pptx", "xlsx", "txt"]),
+  mimeType: zod.string(),
+  fileSize: zod.number(),
+  storageKey: zod.string(),
+  extractionStatus: zod.enum(["pending", "running", "done", "failed"]),
+  extractedData: zod
+    .union([
+      zod.object({
+        kind: zod.enum(["card", "document", "spreadsheet"]),
+        confidence: zod.number(),
+        summary: zod.string().nullish(),
+        contacts: zod.array(
+          zod.object({
+            name: zod.string(),
+            email: zod.string().nullish(),
+            phone: zod.string().nullish(),
+            title: zod.string().nullish(),
+            company: zod.string().nullish(),
+            notes: zod.string().nullish(),
+          }),
+        ),
+        leads: zod.array(
+          zod.object({
+            contactName: zod.string(),
+            stage: zod.string().nullish(),
+            valueUsd: zod.number().nullish(),
+            closeDate: zod.string().nullish(),
+            source: zod.string().nullish(),
+          }),
+        ),
+        rawTextPreview: zod.string().nullish(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
+  error: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Kick off Claude-powered extraction. Returns immediately; poll GET /attachments/{id}.
+ */
+export const ExtractChatAttachmentParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ExtractChatAttachmentResponse = zod.object({
+  id: zod.string(),
+  fileName: zod.string(),
+  fileType: zod.enum(["image", "pdf", "docx", "pptx", "xlsx", "txt"]),
+  mimeType: zod.string(),
+  fileSize: zod.number(),
+  storageKey: zod.string(),
+  extractionStatus: zod.enum(["pending", "running", "done", "failed"]),
+  extractedData: zod
+    .union([
+      zod.object({
+        kind: zod.enum(["card", "document", "spreadsheet"]),
+        confidence: zod.number(),
+        summary: zod.string().nullish(),
+        contacts: zod.array(
+          zod.object({
+            name: zod.string(),
+            email: zod.string().nullish(),
+            phone: zod.string().nullish(),
+            title: zod.string().nullish(),
+            company: zod.string().nullish(),
+            notes: zod.string().nullish(),
+          }),
+        ),
+        leads: zod.array(
+          zod.object({
+            contactName: zod.string(),
+            stage: zod.string().nullish(),
+            valueUsd: zod.number().nullish(),
+            closeDate: zod.string().nullish(),
+            source: zod.string().nullish(),
+          }),
+        ),
+        rawTextPreview: zod.string().nullish(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
+  error: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Create or merge contacts (and optionally leads) from an extracted attachment
+ */
+export const ApplyChatAttachmentParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ApplyChatAttachmentBody = zod.object({
+  action: zod.enum(["contact", "lead"]),
+  contactIndex: zod.number().nullish(),
+  overrides: zod
+    .object({
+      name: zod.string().nullish(),
+      email: zod.string().nullish(),
+      phone: zod.string().nullish(),
+      title: zod.string().nullish(),
+      company: zod.string().nullish(),
+      notes: zod.string().nullish(),
+      stage: zod.string().nullish(),
+      valueUsd: zod.number().nullish(),
+      closeDate: zod.string().nullish(),
+    })
+    .optional(),
+});
+
+export const ApplyChatAttachmentResponse = zod.object({
+  results: zod.array(
+    zod.object({
+      contactId: zod.string(),
+      contactName: zod.string(),
+      leadId: zod.string().nullish(),
+      merged: zod.boolean(),
+      email: zod.string().nullish(),
+    }),
+  ),
+});
