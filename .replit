@@ -40,7 +40,6 @@ externalPort = 3000
 
 [userenv.shared]
 VITE_CLERK_PUBLISHABLE_KEY = "pk_live_Y2xlcmsudGVtcG9yYXJ5LXNhbGVzb3MuY29tJA"
-VITE_CLERK_PROXY_URL = "https://salesos.pddt.in/api/__clerk"
 
 [nix]
 channel = "stable-25_05"
