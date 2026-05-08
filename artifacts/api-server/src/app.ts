@@ -50,6 +50,8 @@ app.use(
           host.endsWith(".replit.dev") ||
           host.endsWith(".replit.app") ||
           host.endsWith(".repl.co") ||
+          host === "salesos.pddt.in" ||
+          host.endsWith(".salesos.pddt.in") ||
           host === "testpddt.fun" ||
           host.endsWith(".testpddt.fun");
         return cb(null, allowed);
