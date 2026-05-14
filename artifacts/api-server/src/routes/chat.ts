@@ -27,6 +27,8 @@ interface Intent {
     | "create_lead"
     | "update_lead_stage"
     | "send_proposal"
+    | "query_calendar"
+    | "query_pipeline"
     | "search"
     | "general";
   reply: string;
@@ -68,7 +70,9 @@ Intents:
 - "create_lead": user wants to create a new lead/deal for a contact. Example: "create a lead for Acme, $5000 deal in negotiation" → contactName="Acme contact", lead.valueUsd=5000, lead.stage="negotiating". Also use this when user says "add deal", "open a deal", "new opportunity".
 - "update_lead_stage": user wants to move a lead to a different stage. Stages: new, interested, qualified, negotiating, won, lost
 - "send_proposal": user wants to generate a proposal. Example: "send John Smith a proposal about pricing and timeline" → contactName="John Smith", proposalContext="pricing and timeline". If the user explicitly asks to ALSO email it (e.g. "send AND email", "draft and email", "email it to them"), set sendEmail=true; otherwise omit sendEmail.
-- "search": user is looking for info about a contact or lead
+- "query_calendar": user asks about upcoming calendar events, schedule, meetings, or what's on their calendar. Examples: "what's on my calendar?", "show my upcoming meetings", "what do I have this week?", "any meetings today?"
+- "query_pipeline": user asks about their pipeline, deals, leads, revenue, or sales summary. Examples: "show my pipeline", "what deals do I have?", "how many leads?", "what's my total pipeline value?"
+- "search": user is looking for info about a specific contact or lead by name
 - "general": fallback for greetings and questions
 
 Respond JSON shape:
@@ -405,6 +409,44 @@ router.post("/chat", requireAuth, async (req, res): Promise<void> => {
       } else {
         reply.message = `Couldn't find contact ${intent.contactName}.`;
       }
+    } else if (intent.intent === "query_calendar") {
+      try {
+        const { listUpcomingEvents } = await import("../lib/gcal");
+        const events = await listUpcomingEvents(10, 7);
+        if (events.length === 0) {
+          reply.message = "No upcoming events in the next 7 days on your calendar.";
+        } else {
+          const lines = events.map((e) => {
+            const start = new Date(e.start);
+            const dateStr = isNaN(start.getTime())
+              ? e.start
+              : start.toLocaleString("en-IN", { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+            return `• **${e.title}** — ${dateStr}`;
+          });
+          reply.message = `Here are your upcoming events:\n\n${lines.join("\n")}`;
+        }
+      } catch (err) {
+        req.log.warn({ err }, "Calendar query failed");
+        reply.message = "Couldn't fetch your calendar right now. Make sure Google Calendar is connected in Settings.";
+      }
+    } else if (intent.intent === "query_pipeline") {
+      const leads = await db
+        .select()
+        .from(leadsTable)
+        .where(eq(leadsTable.orgId, r.orgId));
+
+      const total = leads.length;
+      const totalValue = leads.reduce((sum, l) => sum + (l.valueUsd ?? 0), 0);
+      const byStage = leads.reduce<Record<string, number>>((acc, l) => {
+        acc[l.stage] = (acc[l.stage] ?? 0) + 1;
+        return acc;
+      }, {});
+
+      const stageLines = Object.entries(byStage)
+        .map(([stage, count]) => `• **${stage}**: ${count}`)
+        .join("\n");
+
+      reply.message = `Pipeline summary — ${total} lead${total !== 1 ? "s" : ""}, total value $${totalValue.toLocaleString()}:\n\n${stageLines || "No leads yet."}`;
     }
   } catch (err) {
     req.log.error({ err }, "Failed to apply chat intent");

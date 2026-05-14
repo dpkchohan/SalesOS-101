@@ -122,6 +122,58 @@ export async function deleteCalendarEvent(eventId: string): Promise<void> {
   }
 }
 
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  start: string;
+  end: string;
+  description?: string | null;
+  htmlLink?: string | null;
+}
+
+export async function listUpcomingEvents(
+  maxResults = 10,
+  days = 7,
+): Promise<CalendarEvent[]> {
+  const connectors = new ReplitConnectors();
+  const now = new Date().toISOString();
+  const future = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+  const qs = new URLSearchParams({
+    timeMin: now,
+    timeMax: future,
+    maxResults: String(maxResults),
+    singleEvents: "true",
+    orderBy: "startTime",
+  });
+  const res = await connectors.proxy(
+    "google-calendar",
+    `${PROXY_BASE}?${qs}`,
+    { method: "GET" },
+  );
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Calendar list failed (${res.status}): ${text.slice(0, 300)}`);
+  }
+  const data = (await res.json().catch(() => ({ items: [] }))) as {
+    items?: Array<{
+      id?: string;
+      summary?: string;
+      start?: { dateTime?: string; date?: string };
+      end?: { dateTime?: string; date?: string };
+      description?: string;
+      htmlLink?: string;
+    }>;
+  };
+  return (data.items ?? []).map((e) => ({
+    id: e.id ?? "",
+    title: e.summary ?? "(no title)",
+    start: e.start?.dateTime ?? e.start?.date ?? "",
+    end: e.end?.dateTime ?? e.end?.date ?? "",
+    description: e.description ?? null,
+    htmlLink: e.htmlLink ?? null,
+  }));
+}
+
 export async function checkCalendarConnection(): Promise<{
   connected: boolean;
   email: string | null;
