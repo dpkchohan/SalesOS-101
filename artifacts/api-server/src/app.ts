@@ -84,18 +84,21 @@ app.use("/api", (_req, res) => {
 // Autoscale only needs a single exposed port (8080).
 // The web build is produced as part of the API server's production build step.
 if (process.env.NODE_ENV === "production") {
-  const webRoot = path.resolve(process.cwd(), "artifacts/salesos-web/dist/public");
-  if (existsSync(webRoot)) {
-    app.use(express.static(webRoot));
-    // SPA fallback. Express 5 / path-to-regexp v8 rejects the bare "*" path
-    // string, so use a middleware (no path) that only handles GET requests
-    // for non-API routes and returns the SPA shell.
-    app.use((req, res, next) => {
-      if (req.method !== "GET") return next();
-      if (req.path.startsWith("/api/")) return next();
-      res.sendFile(path.join(webRoot, "index.html"));
-    });
-  }
+  // Use import.meta.url so the path is anchored to this file's location in
+  // the bundle (artifacts/api-server/dist/index.mjs) rather than relying on
+  // process.cwd(), which may differ across deployment environments.
+  const __dirname = path.dirname(new URL(import.meta.url).pathname);
+  const webRoot = path.resolve(__dirname, "../../salesos-web/dist/public");
+  logger.info({ webRoot, exists: existsSync(webRoot) }, "SPA static root");
+  app.use(express.static(webRoot));
+  // SPA fallback. Express 5 / path-to-regexp v8 rejects the bare "*" path
+  // string, so use a middleware (no path) that only handles GET requests
+  // for non-API routes and returns the SPA shell.
+  app.use((req, res, next) => {
+    if (req.method !== "GET") return next();
+    if (req.path.startsWith("/api/")) return next();
+    res.sendFile(path.join(webRoot, "index.html"));
+  });
 }
 
 export default app;
