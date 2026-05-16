@@ -17,6 +17,9 @@ localPort = 22314
 [services.development]
 run = "pnpm --filter @workspace/salesos-web run dev"
 
+[services.production]
+publicDir = "dist/public"
+
 [services.env]
 PORT = "22314"
 BASE_PATH = "/"
