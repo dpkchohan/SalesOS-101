@@ -5,8 +5,10 @@ import {
   SignUp,
   Show,
   useClerk,
+  useAuth,
 } from "@clerk/react";
 import { publishableKeyFromHost } from "@clerk/react/internal";
+import { setBaseUrl, setAuthTokenGetter } from "@workspace/api-client-react";
 import { dark } from "@clerk/themes";
 import {
   Switch,
@@ -41,7 +43,15 @@ const clerkPubKey = publishableKeyFromHost(
   import.meta.env.VITE_CLERK_PUBLISHABLE_KEY,
 );
 
-const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
+// When VITE_API_BASE_URL is set (e.g. Vercel → Railway), point the generated
+// API client at the remote server. When unset, relative URLs are used (Replit).
+const _apiBase = import.meta.env.VITE_API_BASE_URL?.replace(/\/+$/, "") ?? null;
+setBaseUrl(_apiBase);
+
+// Derive Clerk proxy URL from the API base when not explicitly overridden.
+const clerkProxyUrl =
+  import.meta.env.VITE_CLERK_PROXY_URL ??
+  (_apiBase ? `${_apiBase}/api/__clerk` : undefined);
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -142,6 +152,17 @@ function SignUpPage() {
       </div>
     </div>
   );
+}
+
+// Wires Clerk's getToken() into the API client so cross-domain requests
+// (Vercel frontend → Railway backend) carry a Bearer token for auth.
+function ApiClientAuthBridge() {
+  const { getToken } = useAuth();
+  useEffect(() => {
+    setAuthTokenGetter(() => getToken());
+    return () => setAuthTokenGetter(null);
+  }, [getToken]);
+  return null;
 }
 
 function ClerkQueryClientCacheInvalidator() {
@@ -248,6 +269,7 @@ function ClerkProviderWithRoutes() {
       routerReplace={(to) => setLocation(stripBase(to), { replace: true })}
     >
       <QueryClientProvider client={queryClient}>
+        <ApiClientAuthBridge />
         <ClerkQueryClientCacheInvalidator />
         <Switch>
           <Route path="/sign-in/*?" component={SignInPage} />

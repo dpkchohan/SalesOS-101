@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Download, FileSpreadsheet, FileText } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-
-const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
+import { getApiUrl } from "@/lib/api";
 
 export function ExportMenu({
   resource,
@@ -23,7 +22,7 @@ export function ExportMenu({
   }, []);
 
   function download(format: "csv" | "xlsx") {
-    const url = `${basePath}/api/export/${resource}?format=${format}`;
+    const url = getApiUrl(`/api/export/${resource}?format=${format}`);
     const a = document.createElement("a");
     a.href = url;
     a.rel = "noopener";

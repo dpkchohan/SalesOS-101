@@ -19,6 +19,7 @@ import {
 } from "@workspace/api-client-react";
 import { PageHeader } from "@/components/AppLayout";
 import { cn } from "@/lib/utils";
+import { getApiUrl } from "@/lib/api";
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -92,7 +93,7 @@ export default function ImportAI() {
     try {
       const fd = new FormData();
       fd.append("file", f);
-      const resp = await fetch(`${basePath}/api/import/ai-smart/preview`, {
+      const resp = await fetch(getApiUrl("/api/import/ai-smart/preview"), {
         method: "POST",
         body: fd,
       });
@@ -115,7 +116,7 @@ export default function ImportAI() {
     setError(null);
     setWorking(true);
     try {
-      const resp = await fetch(`${basePath}/api/import/ai-smart/execute`, {
+      const resp = await fetch(getApiUrl("/api/import/ai-smart/execute"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ jobId: job.id }),
@@ -140,7 +141,7 @@ export default function ImportAI() {
     let cancelled = false;
     const tick = async () => {
       try {
-        const resp = await fetch(`${basePath}/api/import/ai-smart/job/${job.id}`);
+        const resp = await fetch(getApiUrl(`/api/import/ai-smart/job/${job.id}`));
         if (!resp.ok) return;
         const data: ImportJob = await resp.json();
         if (cancelled) return;

@@ -50,6 +50,7 @@ app.use(
           host.endsWith(".replit.dev") ||
           host.endsWith(".replit.app") ||
           host.endsWith(".repl.co") ||
+          host.endsWith(".vercel.app") ||
           host === "salesos.pddt.in" ||
           host.endsWith(".salesos.pddt.in") ||
           host === "testpddt.fun" ||
@@ -89,16 +90,20 @@ if (process.env.NODE_ENV === "production") {
   // process.cwd(), which may differ across deployment environments.
   const __dirname = path.dirname(new URL(import.meta.url).pathname);
   const webRoot = path.resolve(__dirname, "../../salesos-web/dist/public");
-  logger.info({ webRoot, exists: existsSync(webRoot) }, "SPA static root");
+  const webRootExists = existsSync(webRoot);
+  logger.info({ webRoot, exists: webRootExists }, "SPA static root");
   app.use(express.static(webRoot));
-  // SPA fallback. Express 5 / path-to-regexp v8 rejects the bare "*" path
-  // string, so use a middleware (no path) that only handles GET requests
-  // for non-API routes and returns the SPA shell.
-  app.use((req, res, next) => {
-    if (req.method !== "GET") return next();
-    if (req.path.startsWith("/api/")) return next();
-    res.sendFile(path.join(webRoot, "index.html"));
-  });
+  // SPA fallback — only register when the web build is present (i.e. not on
+  // API-only deployments such as Railway when the frontend is on Vercel).
+  if (webRootExists) {
+    // Express 5 / path-to-regexp v8 rejects the bare "*" path string, so use
+    // a middleware (no path) that only handles GET requests for non-API routes.
+    app.use((req, res, next) => {
+      if (req.method !== "GET") return next();
+      if (req.path.startsWith("/api/")) return next();
+      res.sendFile(path.join(webRoot, "index.html"));
+    });
+  }
 }
 
 export default app;

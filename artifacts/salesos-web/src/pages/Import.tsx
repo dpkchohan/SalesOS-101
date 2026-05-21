@@ -17,6 +17,7 @@ import {
 } from "@workspace/api-client-react";
 import { PageHeader } from "@/components/AppLayout";
 import { cn } from "@/lib/utils";
+import { getApiUrl } from "@/lib/api";
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -82,7 +83,7 @@ export default function Import() {
     try {
       const fd = new FormData();
       fd.append("file", f);
-      const resp = await fetch(`${basePath}/api/import/preview`, {
+      const resp = await fetch(getApiUrl("/api/import/preview"), {
         method: "POST",
         body: fd,
       });
@@ -114,7 +115,7 @@ export default function Import() {
       const fd = new FormData();
       fd.append("file", file);
       fd.append("mapping", JSON.stringify(mapping));
-      const resp = await fetch(`${basePath}/api/import/contacts`, {
+      const resp = await fetch(getApiUrl("/api/import/contacts"), {
         method: "POST",
         body: fd,
       });
