@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useParams } from "wouter";
 import {
   useGetContact,
@@ -7,11 +8,11 @@ import {
   getGetContactQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
 import { motion } from "framer-motion";
 import { ArrowLeft, Mail, Phone, Briefcase, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/AppLayout";
 import { Field } from "./Contacts";
+import { CompanyCombobox, TagsInput } from "@/components/ContactFormFields";
 import { formatCurrency, initials, relativeTime, STAGE_META } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -24,7 +25,15 @@ export default function ContactDetail() {
   });
   const update = useUpdateContact();
   const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", phone: "", title: "" });
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    title: "",
+    companyId: null as string | null,
+    companyName: "",
+    tags: [] as string[],
+  });
 
   const startEdit = () => {
     if (!data) return;
@@ -33,6 +42,9 @@ export default function ContactDetail() {
       email: data.email ?? "",
       phone: data.phone ?? "",
       title: data.title ?? "",
+      companyId: data.company?.id ?? null,
+      companyName: data.company?.name ?? "",
+      tags: data.tags ?? [],
     });
     setEditing(true);
   };
@@ -47,6 +59,8 @@ export default function ContactDetail() {
           email: form.email || null,
           phone: form.phone || null,
           title: form.title || null,
+          companyId: form.companyId || null,
+          tags: form.tags,
         },
       },
       {
@@ -211,7 +225,7 @@ export default function ContactDetail() {
             onSubmit={save}
             initial={{ y: 40, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            className="bg-card w-full md:max-w-md rounded-t-2xl md:rounded-2xl p-5 border border-card-border"
+            className="bg-card w-full md:max-w-md rounded-t-2xl md:rounded-2xl p-5 border border-card-border max-h-[90vh] overflow-y-auto"
           >
             <h2 className="text-[17px] font-bold tracking-tight mb-4">Edit contact</h2>
             <div className="space-y-3">
@@ -230,6 +244,13 @@ export default function ContactDetail() {
                   className="w-full bg-background border border-input rounded-md px-3 py-2 text-[14px] outline-none focus:border-primary"
                 />
               </Field>
+              <Field label="Company">
+                <CompanyCombobox
+                  value={form.companyId}
+                  valueName={form.companyName}
+                  onChange={(id, name) => setForm({ ...form, companyId: id, companyName: name })}
+                />
+              </Field>
               <Field label="Email">
                 <input
                   value={form.email}
@@ -243,6 +264,9 @@ export default function ContactDetail() {
                   onChange={(e) => setForm({ ...form, phone: e.target.value })}
                   className="w-full bg-background border border-input rounded-md px-3 py-2 text-[14px] outline-none focus:border-primary"
                 />
+              </Field>
+              <Field label="Tags">
+                <TagsInput value={form.tags} onChange={(tags) => setForm({ ...form, tags })} />
               </Field>
             </div>
             <div className="flex gap-2 mt-5">

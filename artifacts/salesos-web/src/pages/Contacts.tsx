@@ -14,6 +14,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Search, Briefcase, Mail, Phone, X, Users, Copy, Wand2, GitMerge, Check } from "lucide-react";
 import { PageHeader } from "@/components/AppLayout";
 import { ExportMenu } from "@/components/ExportMenu";
+import { CompanyCombobox, TagsInput } from "@/components/ContactFormFields";
 import { initials, relativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -467,7 +468,15 @@ function DuplicatesPanel() {
 function NewContactDialog({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient();
   const create = useCreateContact();
-  const [form, setForm] = useState({ name: "", email: "", phone: "", title: "" });
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    title: "",
+    companyId: null as string | null,
+    companyName: "",
+    tags: [] as string[],
+  });
   const [duplicate, setDuplicate] = useState<{
     matchedField: string;
     existing: { id: string; name: string; customerNo?: string | null; email?: string | null };
@@ -481,6 +490,8 @@ function NewContactDialog({ onClose }: { onClose: () => void }) {
           email: form.email || null,
           phone: form.phone || null,
           title: form.title || null,
+          companyId: form.companyId || null,
+          tags: form.tags.length > 0 ? form.tags : undefined,
           ...(force ? { force: true } : {}),
         },
       },
@@ -513,7 +524,7 @@ function NewContactDialog({ onClose }: { onClose: () => void }) {
         onSubmit={submit}
         initial={{ y: 40, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        className="bg-card w-full md:max-w-md rounded-t-2xl md:rounded-2xl p-5 border border-card-border"
+        className="bg-card w-full md:max-w-md rounded-t-2xl md:rounded-2xl p-5 border border-card-border max-h-[90vh] overflow-y-auto"
       >
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-[17px] font-bold tracking-tight">New contact</h2>
@@ -535,6 +546,13 @@ function NewContactDialog({ onClose }: { onClose: () => void }) {
           <Field label="Title">
             <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className={inputCls} />
           </Field>
+          <Field label="Company">
+            <CompanyCombobox
+              value={form.companyId}
+              valueName={form.companyName}
+              onChange={(id, name) => setForm({ ...form, companyId: id, companyName: name })}
+            />
+          </Field>
           <Field label="Email">
             <input
               type="email"
@@ -545,6 +563,9 @@ function NewContactDialog({ onClose }: { onClose: () => void }) {
           </Field>
           <Field label="Phone">
             <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className={inputCls} />
+          </Field>
+          <Field label="Tags">
+            <TagsInput value={form.tags} onChange={(tags) => setForm({ ...form, tags })} />
           </Field>
         </div>
         {duplicate && (
