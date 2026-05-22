@@ -1,15 +1,17 @@
 import { useState } from "react";
-import { Link, useParams } from "wouter";
+import { Link, useParams, useLocation } from "wouter";
 import {
   useGetContact,
   useUpdateContact,
+  useDeleteContact,
   useGetRelatedContacts,
   getGetRelatedContactsQueryKey,
   getGetContactQueryKey,
+  getListContactsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { ArrowLeft, Mail, Phone, Briefcase, Pencil } from "lucide-react";
+import { ArrowLeft, Mail, Phone, Briefcase, Pencil, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/AppLayout";
 import { Field } from "./Contacts";
 import { CompanyCombobox, TagsInput } from "@/components/ContactFormFields";
@@ -23,8 +25,30 @@ export default function ContactDetail() {
   const { data, isLoading } = useGetContact(id, {
     query: { enabled: !!id, queryKey: getGetContactQueryKey(id) },
   });
+  const [, navigate] = useLocation();
   const update = useUpdateContact();
+  const del = useDeleteContact();
   const [editing, setEditing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; error?: boolean } | null>(null);
+
+  const showToast = (msg: string, error = false) => {
+    setToast({ msg, error });
+    setTimeout(() => setToast(null), 4000);
+  };
+
+  const doDelete = () => {
+    del.mutate(
+      { id },
+      {
+        onSuccess: () => {
+          qc.invalidateQueries({ queryKey: getListContactsQueryKey() });
+          navigate("/contacts");
+        },
+        onError: () => showToast("Failed to delete contact. Please try again.", true),
+      },
+    );
+  };
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -98,13 +122,22 @@ export default function ContactDetail() {
         }
         subtitle={data.title ?? "Contact"}
         right={
-          <button
-            onClick={startEdit}
-            className="flex items-center gap-1.5 text-[12px] font-semibold px-3 py-1.5 rounded-lg border border-card-border hover:bg-muted"
-            data-testid="button-edit-contact"
-          >
-            <Pencil size={12} /> Edit
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={startEdit}
+              className="flex items-center gap-1.5 text-[12px] font-semibold px-3 py-1.5 rounded-lg border border-card-border hover:bg-muted"
+              data-testid="button-edit-contact"
+            >
+              <Pencil size={12} /> Edit
+            </button>
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="flex items-center gap-1.5 text-[12px] font-semibold px-3 py-1.5 rounded-lg border border-rose-500/40 text-rose-500 hover:bg-rose-500/10"
+              data-testid="button-delete-contact"
+            >
+              <Trash2 size={12} /> Delete
+            </button>
+          </div>
         }
       />
       <div className="px-4 md:px-8 grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
@@ -286,6 +319,62 @@ export default function ContactDetail() {
               </button>
             </div>
           </motion.form>
+        </div>
+      )}
+
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm grid place-items-end md:place-items-center p-0 md:p-4">
+          <motion.div
+            initial={{ y: 40, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            className="bg-card w-full md:max-w-sm rounded-t-2xl md:rounded-2xl p-5 border border-card-border"
+          >
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-9 h-9 rounded-full bg-rose-500/15 grid place-items-center flex-shrink-0">
+                <Trash2 size={16} className="text-rose-500" />
+              </div>
+              <h2 className="text-[16px] font-bold tracking-tight">Delete contact?</h2>
+            </div>
+            <p className="text-[13px] text-muted-foreground mb-5">
+              Are you sure you want to delete{" "}
+              <span className="font-semibold text-foreground">{data.name}</span>? This
+              action cannot be undone.
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(false)}
+                disabled={del.isPending}
+                className="flex-1 py-2.5 rounded-lg border border-card-border text-[14px] font-semibold hover:bg-muted disabled:opacity-50"
+                data-testid="button-cancel-delete"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={doDelete}
+                disabled={del.isPending}
+                className="flex-1 py-2.5 rounded-lg bg-rose-600 text-white text-[14px] font-semibold hover:bg-rose-700 disabled:opacity-50"
+                data-testid="button-confirm-delete"
+              >
+                {del.isPending ? "Deleting…" : "Delete"}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {toast && (
+        <div
+          className={cn(
+            "fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-lg text-[13px] font-medium shadow-lg",
+            toast.error
+              ? "bg-rose-600 text-white"
+              : "bg-foreground text-background",
+          )}
+          data-testid="contact-toast"
+        >
+          {toast.msg}
         </div>
       )}
     </div>
