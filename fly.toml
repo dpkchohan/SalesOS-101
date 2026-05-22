@@ -1,0 +1,38 @@
+# fly.toml — SalesOS API server on Fly.io
+# Deploy with: fly deploy
+# Set secrets with: fly secrets set KEY=value ...
+
+app            = "salesos-api"
+primary_region = "sin"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT     = "3000"
+  # Secrets below must be set via `fly secrets set`, NOT here:
+  #   fly secrets set \
+  #     DATABASE_URL="postgresql://postgres.xxx:password@aws-1-ap-south-1.pooler.supabase.com:6543/postgres" \
+  #     CLERK_PUBLISHABLE_KEY="pk_live_..." \
+  #     CLERK_SECRET_KEY="sk_live_..." \
+  #     CLAUDE_API_KEY="sk-ant-..." \
+  #     SARVAM_AI_API="..."
+
+[http_service]
+  internal_port       = 3000
+  force_https         = true
+  auto_stop_machines  = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes           = ["app"]
+
+  [http_service.concurrency]
+    type       = "connections"
+    hard_limit = 100
+    soft_limit = 80
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus     = 1
+  memory   = "512mb"

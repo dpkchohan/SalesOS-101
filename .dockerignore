@@ -1,0 +1,27 @@
+# Dependencies (reinstalled inside Docker)
+node_modules
+**/node_modules
+
+# Build outputs (rebuilt inside Docker)
+**/dist
+**/.cache
+
+# Frontend — not needed for the API server image
+artifacts/salesos-web
+artifacts/mockup-sandbox
+
+# Dev/tooling files
+.git
+.gitignore
+.local
+.cursor
+.vscode
+attached_assets
+*.md
+*.log
+
+# Replit-specific
+.replit
+replit.nix
+.nixpacks
+.upm
