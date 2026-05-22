@@ -2,7 +2,7 @@
 
 **Your AI Sales Coach. Just Talk. Close 20% More Deals.**
 
-The simplest CRM for the world's most complex job  —a conversational, AI-powered sales assistant built for Indian sales teams. Voice-first, Hinglish-native, zero training required.
+The simplest CRM for the world's most complex job  —a conversational, AI-powered sales assistant built for Indian sales teams. Voice-first, Hinglish-native, zero training required. 
    
 ---
  
