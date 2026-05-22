@@ -7,7 +7,6 @@ import {
   useClerk,
   useAuth,
 } from "@clerk/react";
-import { publishableKeyFromHost } from "@clerk/react/internal";
 import { setBaseUrl, setAuthTokenGetter } from "@workspace/api-client-react";
 import { dark } from "@clerk/themes";
 import {
@@ -38,10 +37,12 @@ import ImportAI from "./pages/ImportAI";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/not-found";
 
-const clerkPubKey = publishableKeyFromHost(
-  window.location.hostname,
-  import.meta.env.VITE_CLERK_PUBLISHABLE_KEY,
-);
+// Use the publishable key directly from the environment variable.
+// Do NOT use publishableKeyFromHost() here — that Replit-internal utility
+// derives Clerk's frontend API URL from window.location.hostname, which on
+// app.salesos.pddt.in would generate clerk.app.salesos.pddt.in instead of
+// the correct clerk.salesos.pddt.in (already encoded inside the pk_live key).
+const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string;
 
 // When VITE_API_BASE_URL is set (e.g. Vercel → Railway), point the generated
 // API client at the remote server. When unset, relative URLs are used (Replit).
