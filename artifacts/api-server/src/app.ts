@@ -4,13 +4,12 @@ import { existsSync } from "fs";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import { clerkMiddleware } from "@clerk/express";
-import { publishableKeyFromHost } from "@clerk/shared/keys";
 import {
   CLERK_PROXY_PATH,
   clerkProxyMiddleware,
-  getClerkProxyHost,
 } from "./middlewares/clerkProxyMiddleware";
 import router from "./routes";
+import healthRouter from "./routes/health";
 import { logger } from "./lib/logger";
 
 const app: Express = express();
@@ -65,13 +64,20 @@ app.use(
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
+// Register the health check BEFORE Clerk middleware so it is always publicly
+// reachable. Clerk's middleware initiates a FAPI handshake even for
+// unauthenticated requests, which would redirect /healthz to a non-existent
+// Clerk subdomain and break deployment health checks.
+app.use("/api", healthRouter);
+
+// Use the publishable key directly from the environment variable.
+// Do NOT use publishableKeyFromHost() here — on Coolify the request host is
+// api.salesos.pddt.in, so that utility would derive clerk.api.salesos.pddt.in
+// as the FAPI instead of the correct clerk.salesos.pddt.in (encoded in the key).
 app.use(
-  clerkMiddleware((req) => ({
-    publishableKey: publishableKeyFromHost(
-      getClerkProxyHost(req) ?? "",
-      process.env.CLERK_PUBLISHABLE_KEY,
-    ),
-  })),
+  clerkMiddleware({
+    publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
+  }),
 );
 
 app.use("/api", router);
