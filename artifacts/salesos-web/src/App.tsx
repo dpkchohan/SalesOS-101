@@ -48,10 +48,10 @@ const clerkPubKey = publishableKeyFromHost(
 const _apiBase = import.meta.env.VITE_API_BASE_URL?.replace(/\/+$/, "") ?? null;
 setBaseUrl(_apiBase);
 
-// Derive Clerk proxy URL from the API base when not explicitly overridden.
-const clerkProxyUrl =
-  import.meta.env.VITE_CLERK_PROXY_URL ??
-  (_apiBase ? `${_apiBase}/api/__clerk` : undefined);
+// Only use a Clerk proxy URL if explicitly configured — never auto-derive one
+// from the API base, as that routes auth traffic through our backend and
+// causes Clerk to reject requests with a 400 error.
+const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL || undefined;
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -251,7 +251,7 @@ function ClerkProviderWithRoutes() {
   return (
     <ClerkProvider
       publishableKey={clerkPubKey}
-      proxyUrl={clerkProxyUrl}
+      {...(clerkProxyUrl ? { proxyUrl: clerkProxyUrl } : {})}
       appearance={clerkAppearance}
       signInUrl={`${basePath}/sign-in`}
       signUpUrl={`${basePath}/sign-up`}
