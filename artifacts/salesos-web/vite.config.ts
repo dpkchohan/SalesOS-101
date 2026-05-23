@@ -17,7 +17,7 @@ if (rawPort && (Number.isNaN(port) || port <= 0)) {
 
 // BASE_PATH affects asset URLs in the build output; default to "/" when
 // missing so production builds don't fail when the env var isn't injected.
-const basePath = process.env.BASE_PATH ?? "/";
+const basePath = process.env.BASE_PATH || "/";
 
 export default defineConfig({
   base: basePath,

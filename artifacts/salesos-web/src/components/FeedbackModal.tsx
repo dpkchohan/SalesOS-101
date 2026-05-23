@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { motion } from "framer-motion";
 import { X, Upload, ImageIcon, AlertCircle, CheckCircle2 } from "lucide-react";
-import { useUser } from "@clerk/react";
+import { useAuth, useUser } from "@clerk/react";
 import { getApiUrl } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +25,7 @@ const inputCls =
   "w-full bg-background border border-input rounded-md px-3 py-2 text-[14px] outline-none focus:border-primary transition-colors";
 
 export function FeedbackModal({ onClose }: { onClose: () => void }) {
+  const { getToken } = useAuth();
   const { user } = useUser();
   const [type, setType] = useState<IssueType>("bug");
   const [criticality, setCriticality] = useState(3);
@@ -56,10 +57,11 @@ export function FeedbackModal({ onClose }: { onClose: () => void }) {
       fd.append("pageUrl", window.location.href);
       if (screenshot) fd.append("screenshot", screenshot);
 
+      const token = await getToken();
       const res = await fetch(getApiUrl("/api/feedback"), {
         method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: fd,
-        credentials: "include",
       });
 
       if (!res.ok) {

@@ -54,7 +54,14 @@ self.addEventListener("fetch", (event) => {
           }
           return res;
         })
-        .catch(() => caches.match(req)),
+        .catch(() =>
+          caches.match(req).then(
+            (cached) => cached || new Response(JSON.stringify({ error: "offline" }), {
+              status: 503,
+              headers: { "Content-Type": "application/json" },
+            }),
+          ),
+        ),
     );
     return;
   }
@@ -69,7 +76,7 @@ self.addEventListener("fetch", (event) => {
           }
           return res;
         })
-        .catch(() => cached);
+        .catch(() => cached || new Response("Offline", { status: 503 }));
       return cached || networkFetch;
     }),
   );
