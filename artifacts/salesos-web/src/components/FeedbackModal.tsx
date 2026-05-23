@@ -56,7 +56,7 @@ export function FeedbackModal({ onClose }: { onClose: () => void }) {
       fd.append("pageUrl", window.location.href);
       if (screenshot) fd.append("screenshot", screenshot);
 
-      const res = await fetch(getApiUrl("api/feedback"), {
+      const res = await fetch(getApiUrl("/api/feedback"), {
         method: "POST",
         body: fd,
         credentials: "include",

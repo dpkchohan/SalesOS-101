@@ -27,7 +27,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
     if (import.meta.env.PROD) {
       try {
-        fetch(getApiUrl("errors"), {
+        fetch(getApiUrl("/api/errors"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
