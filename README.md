@@ -1,4 +1,4 @@
-# SalesOS
+ # SalesOS
 
 **Your AI Sales Coach. Just Talk. Close 20% More Deals.**
 
