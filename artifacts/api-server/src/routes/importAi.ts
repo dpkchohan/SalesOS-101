@@ -411,7 +411,7 @@ async function processBatch(
           INSERT INTO contacts (org_id, company_id, customer_no, name, email, email_normalized, phone, phone_normalized, title, import_job_id)
           VALUES (${job.orgId}, ${companyId}, ${newCustomerNo}, ${contactName}, ${c.email}, ${c.email},
                   ${c.phone ?? null}, ${phoneNorm}, ${c.title ?? null}, ${job.id})
-          ON CONFLICT (org_id, lower(email)) WHERE email IS NOT NULL
+          ON CONFLICT (org_id, lower(email)) WHERE email IS NOT NULL AND is_duplicate = false
           DO UPDATE SET
             name = COALESCE(NULLIF(EXCLUDED.name, ''), contacts.name),
             phone = COALESCE(EXCLUDED.phone, contacts.phone),
