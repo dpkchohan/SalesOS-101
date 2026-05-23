@@ -4,6 +4,7 @@ import {
   getPresignedUploadUrl,
   getPresignedDownloadUrl,
   deleteFile,
+  getFileSize,
   getStorageUsage,
   checkQuota,
   updateStorageUsage,
@@ -158,6 +159,130 @@ router.use(
         res.status(403).json({ error: e.message });
       } else {
         req.log.error({ err }, "storage: failed to delete file");
+        res.status(500).json({ error: "Failed to delete file" });
+      }
+    }
+  },
+);
+
+// ── POST /storage/import/upload ───────────────────────────────────────────────
+// Quota-checked presigned PUT URL, always targeting temp/imports/.
+const ImportUploadBody = zod.object({
+  filename: zod.string().min(1).max(500),
+  contentType: zod.string().min(1).max(200),
+  fileSize: zod.number().int().positive(),
+});
+
+router.post(
+  "/storage/import/upload",
+  requireAuth,
+  async (req, res): Promise<void> => {
+    const r = req as AuthenticatedRequest;
+
+    const parsed = ImportUploadBody.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.message });
+      return;
+    }
+
+    const { filename, contentType, fileSize } = parsed.data;
+
+    try {
+      await checkQuota(r.userId, r.orgId, fileSize);
+    } catch (err: unknown) {
+      const e = err as Error & { statusCode?: number };
+      res.status(e.statusCode ?? 500).json({ error: e.message });
+      return;
+    }
+
+    try {
+      const result = await getPresignedUploadUrl(
+        r.userId,
+        r.orgId,
+        filename,
+        contentType,
+        "temp/imports" as StorageFolder,
+      );
+      await updateStorageUsage(r.userId, r.orgId, fileSize);
+      res.status(200).json(result);
+    } catch (err) {
+      req.log.error({ err }, "storage/import: failed to generate upload URL");
+      res.status(500).json({ error: "Failed to generate upload URL" });
+    }
+  },
+);
+
+// ── GET /storage/import/process/* ─────────────────────────────────────────────
+// Returns a 1-hour presigned GET URL so Claude can read the file.
+// fileKey may contain slashes — captured via router.use().
+router.use(
+  "/storage/import/process",
+  requireAuth,
+  async (req, res, next): Promise<void> => {
+    if (req.method !== "GET") {
+      next();
+      return;
+    }
+
+    const fileKey = req.path.replace(/^\//, "");
+    if (!fileKey) {
+      res.status(400).json({ error: "Missing fileKey" });
+      return;
+    }
+
+    const r = req as AuthenticatedRequest;
+    try {
+      const { downloadUrl, expiresIn } = await getPresignedDownloadUrl(
+        r.userId,
+        r.orgId,
+        fileKey,
+      );
+      res.json({ downloadUrl, fileKey, expiresIn });
+    } catch (err: unknown) {
+      const e = err as Error & { statusCode?: number };
+      if (e.statusCode === 403) {
+        res.status(403).json({ error: e.message });
+      } else {
+        req.log.error({ err }, "storage/import: failed to generate process URL");
+        res.status(500).json({ error: "Failed to generate process URL" });
+      }
+    }
+  },
+);
+
+// ── DELETE /storage/import/cleanup/* ─────────────────────────────────────────
+// Deletes the file from S3 and decrements the quota by the actual object size.
+// Called after Claude finishes extraction (success or failure).
+router.use(
+  "/storage/import/cleanup",
+  requireAuth,
+  async (req, res, next): Promise<void> => {
+    if (req.method !== "DELETE") {
+      next();
+      return;
+    }
+
+    const fileKey = req.path.replace(/^\//, "");
+    if (!fileKey) {
+      res.status(400).json({ error: "Missing fileKey" });
+      return;
+    }
+
+    const r = req as AuthenticatedRequest;
+    try {
+      // Get actual size before deleting so quota is decremented accurately.
+      const fileSize = await getFileSize(r.userId, r.orgId, fileKey);
+      await deleteFile(r.userId, r.orgId, fileKey);
+      if (fileSize > 0) {
+        await updateStorageUsage(r.userId, r.orgId, -fileSize);
+      }
+      res.json({ success: true });
+    } catch (err: unknown) {
+      const e = err as Error & { statusCode?: number };
+      if (e.statusCode === 403) {
+        res.status(403).json({ error: e.message });
+      } else {
+        req.log.error({ err }, "storage/import: failed to delete file");
         res.status(500).json({ error: "Failed to delete file" });
       }
     }

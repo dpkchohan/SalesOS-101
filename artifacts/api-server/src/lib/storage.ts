@@ -3,6 +3,7 @@ import {
   PutObjectCommand,
   GetObjectCommand,
   DeleteObjectCommand,
+  HeadObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { eq, sql } from "drizzle-orm";
@@ -249,6 +250,29 @@ export async function updateStorageUsage(
         updatedAt: sql`now()`,
       })
       .where(eq(storageUsageTable.userId, userId));
+  }
+}
+
+/**
+ * Returns the size in bytes of an S3 object via HeadObject.
+ * Throws 403 if the key doesn't belong to this user/org.
+ * Returns 0 if the object is not found (already deleted).
+ */
+export async function getFileSize(
+  userId: string,
+  orgId: string,
+  key: string,
+): Promise<number> {
+  await assertKeyOwnership(userId, orgId, key);
+  try {
+    const result = await getS3Client().send(
+      new HeadObjectCommand({ Bucket: BUCKET, Key: key }),
+    );
+    return result.ContentLength ?? 0;
+  } catch (err: unknown) {
+    const e = err as { name?: string };
+    if (e.name === "NotFound" || e.name === "NoSuchKey") return 0;
+    throw err;
   }
 }
 
