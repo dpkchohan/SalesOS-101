@@ -165,6 +165,30 @@ export async function getPresignedUploadUrl(
 }
 
 /**
+ * Uploads a Buffer directly to S3 (server-side). Returns the fileKey.
+ */
+export async function uploadBuffer(
+  userId: string,
+  orgId: string,
+  folder: StorageFolder,
+  filename: string,
+  buffer: Buffer,
+  contentType: string,
+): Promise<string> {
+  const { keyPrefix } = await resolveStorageContext(userId, orgId);
+  const fileKey = buildKey(keyPrefix, folder, filename);
+  await getS3Client().send(
+    new PutObjectCommand({
+      Bucket: BUCKET,
+      Key: fileKey,
+      Body: buffer,
+      ContentType: contentType,
+    }),
+  );
+  return fileKey;
+}
+
+/**
  * Returns a pre-signed GET URL (1 hour expiry).
  */
 export async function getPresignedDownloadUrl(

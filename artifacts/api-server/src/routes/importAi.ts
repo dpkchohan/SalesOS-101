@@ -6,18 +6,20 @@ import {
   type NextFunction,
 } from "express";
 import multer, { MulterError } from "multer";
-import { promises as fs } from "fs";
-import path from "path";
-import os from "os";
 import { randomUUID } from "crypto";
 import { and, eq, sql } from "drizzle-orm";
+import { uploadBuffer, getPresignedDownloadUrl, deleteFile } from "../lib/storage";
 
-async function cleanupJobFile(filePath: string | null | undefined): Promise<void> {
-  if (!filePath) return;
+async function cleanupS3File(
+  userId: string,
+  orgId: string,
+  key: string | null | undefined,
+): Promise<void> {
+  if (!key) return;
   try {
-    await fs.unlink(filePath);
+    await deleteFile(userId, orgId, key);
   } catch {
-    /* ignore */
+    /* ignore — best-effort cleanup */
   }
 }
 import {
@@ -65,23 +67,6 @@ function handleUpload(field: string) {
       res.status(400).json({ error: "Upload failed" });
     });
   };
-}
-
-function jobStorageDir(): string {
-  return path.join(os.tmpdir(), "salesos-import-jobs");
-}
-
-async function saveJobFile(jobId: string, filename: string, buf: Buffer): Promise<string> {
-  const dir = jobStorageDir();
-  await fs.mkdir(dir, { recursive: true });
-  const safe = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const fp = path.join(dir, `${jobId}__${safe}`);
-  await fs.writeFile(fp, buf);
-  return fp;
-}
-
-async function loadJobFile(filePath: string): Promise<Buffer> {
-  return fs.readFile(filePath);
 }
 
 function summaryFromJob(job: typeof importJobsTable.$inferSelect) {
@@ -137,10 +122,17 @@ router.post(
     const jobId = randomUUID();
     let filePath: string | null = null;
     try {
-      filePath = await saveJobFile(jobId, r.file.originalname, r.file.buffer);
+      filePath = await uploadBuffer(
+        r.userId,
+        r.orgId,
+        "temp/imports",
+        r.file.originalname,
+        r.file.buffer,
+        r.file.mimetype || "application/octet-stream",
+      );
     } catch (err) {
-      req.log.error({ err }, "Saving import file failed");
-      res.status(500).json({ error: "Could not save uploaded file." });
+      req.log.error({ err }, "Uploading import file to S3 failed");
+      res.status(500).json({ error: "Could not store uploaded file." });
       return;
     }
 
@@ -304,7 +296,7 @@ async function queueJobBatches(
           .update(importJobsTable)
           .set({ status: "failed", completedAt: new Date() })
           .where(eq(importJobsTable.id, jobId));
-        await cleanupJobFile(job.filePath);
+        await cleanupS3File(job.createdBy, job.orgId, job.filePath);
       }
     } catch (err) {
       log.error({ err, jobId }, "Failed to mark job as failed");
@@ -330,7 +322,10 @@ async function processBatch(
     .limit(1);
   if (!job || !job.filePath) return;
 
-  const buf = await loadJobFile(job.filePath);
+  const { downloadUrl } = await getPresignedDownloadUrl(job.createdBy, job.orgId, job.filePath);
+  const fileResp = await fetch(downloadUrl);
+  if (!fileResp.ok) throw new Error(`Failed to fetch import file from S3 (${fileResp.status})`);
+  const buf = Buffer.from(await fileResp.arrayBuffer());
   const parsed = parseSmartFile(buf, job.filename);
   const start = batchIndex * BATCH_SIZE;
   const slice = parsed.rows.slice(start, start + BATCH_SIZE);
@@ -588,7 +583,7 @@ async function markBatchDone(
       .update(importJobsTable)
       .set({ status: "completed", completedAt: new Date() })
       .where(eq(importJobsTable.id, jobId));
-    await cleanupJobFile(updated.filePath);
+    await cleanupS3File(updated.createdBy, updated.orgId, updated.filePath);
   }
 }
 
