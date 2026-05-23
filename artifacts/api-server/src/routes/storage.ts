@@ -48,7 +48,7 @@ router.post("/storage/upload", requireAuth, async (req, res): Promise<void> => {
   }
 
   try {
-    await checkQuota(r.orgId, fileSize);
+    await checkQuota(r.userId, r.orgId, fileSize);
   } catch (err: unknown) {
     const e = err as Error & { statusCode?: number };
     res.status(e.statusCode ?? 500).json({ error: e.message });
@@ -57,12 +57,13 @@ router.post("/storage/upload", requireAuth, async (req, res): Promise<void> => {
 
   try {
     const result = await getPresignedUploadUrl(
+      r.userId,
       r.orgId,
       filename,
       contentType,
       folder as StorageFolder,
     );
-    await updateStorageUsage(r.orgId, fileSize);
+    await updateStorageUsage(r.userId, r.orgId, fileSize);
     res.status(200).json(result);
   } catch (err) {
     req.log.error({ err }, "storage: failed to generate upload URL");
@@ -74,13 +75,15 @@ router.post("/storage/upload", requireAuth, async (req, res): Promise<void> => {
 router.get("/storage/usage", requireAuth, async (req, res): Promise<void> => {
   const r = req as AuthenticatedRequest;
   try {
-    const { usedBytes, quotaBytes } = await getStorageUsage(r.orgId);
+    const { usedBytes, quotaBytes, tier } = await getStorageUsage(r.userId, r.orgId);
     res.json({
+      tier,
       usedBytes,
       quotaBytes,
-      usedMB: +(usedBytes / 1048576).toFixed(2),
-      quotaMB: +(quotaBytes / 1048576).toFixed(2),
-      percentUsed: quotaBytes > 0 ? +((usedBytes / quotaBytes) * 100).toFixed(1) : 0,
+      usedMB: +(usedBytes / 1_048_576).toFixed(2),
+      quotaMB: +(quotaBytes / 1_048_576).toFixed(2),
+      percentUsed:
+        quotaBytes > 0 ? +((usedBytes / quotaBytes) * 100).toFixed(1) : 0,
     });
   } catch (err) {
     req.log.error({ err }, "storage: failed to get usage");
@@ -89,15 +92,18 @@ router.get("/storage/usage", requireAuth, async (req, res): Promise<void> => {
 });
 
 // ── GET /storage/download/* ───────────────────────────────────────────────────
-// Uses router.use() so that the full sub-path (including slashes) is captured
-// in req.path — avoids Express 5 / path-to-regexp v8 wildcard restrictions.
+// router.use() captures the full sub-path (including slashes) in req.path,
+// avoiding Express 5 / path-to-regexp v8 wildcard restrictions.
 router.use(
   "/storage/download",
   requireAuth,
   async (req, res, next): Promise<void> => {
-    if (req.method !== "GET") { next(); return; }
+    if (req.method !== "GET") {
+      next();
+      return;
+    }
 
-    const key = req.path.replace(/^\//, ""); // strip leading slash
+    const key = req.path.replace(/^\//, "");
     if (!key) {
       res.status(400).json({ error: "Missing file key" });
       return;
@@ -105,7 +111,7 @@ router.use(
 
     const r = req as AuthenticatedRequest;
     try {
-      const result = await getPresignedDownloadUrl(r.orgId, key);
+      const result = await getPresignedDownloadUrl(r.userId, r.orgId, key);
       res.json(result);
     } catch (err: unknown) {
       const e = err as Error & { statusCode?: number };
@@ -124,7 +130,10 @@ router.use(
   "/storage/file",
   requireAuth,
   async (req, res, next): Promise<void> => {
-    if (req.method !== "DELETE") { next(); return; }
+    if (req.method !== "DELETE") {
+      next();
+      return;
+    }
 
     const key = req.path.replace(/^\//, "");
     if (!key) {
@@ -134,15 +143,12 @@ router.use(
 
     const r = req as AuthenticatedRequest;
     try {
-      // Get the file size estimate from the DB before deleting — we need delta.
-      // Since we don't store per-file sizes here, accept an optional fileSize
-      // in the query string for an accurate decrement; fall back to 0.
-      const fileSize = parseInt(req.query.fileSize as string ?? "0", 10) || 0;
+      const fileSize = parseInt((req.query.fileSize as string) ?? "0", 10) || 0;
 
-      await deleteFile(r.orgId, key);
+      await deleteFile(r.userId, r.orgId, key);
 
       if (fileSize > 0) {
-        await updateStorageUsage(r.orgId, -fileSize);
+        await updateStorageUsage(r.userId, r.orgId, -fileSize);
       }
 
       res.json({ success: true });
