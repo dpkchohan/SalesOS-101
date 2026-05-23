@@ -13,6 +13,7 @@ import {
   LogOut,
   Settings,
   MessageSquare,
+  ShieldCheck,
 } from "lucide-react";
 import { initials } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -29,10 +30,15 @@ const NAV = [
   { to: "/import", label: "Import", icon: Upload },
 ];
 
+const ADMIN_EMAILS = ["deepak@pddt.in", "dpkchohan@gmail.com"];
+
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const [loc] = useLocation();
   const { user } = useUser();
   const { signOut } = useClerk();
+  const isAdmin = ADMIN_EMAILS.includes(
+    (user?.primaryEmailAddress?.emailAddress ?? "").toLowerCase(),
+  );
   const [showFeedback, setShowFeedback] = useState(false);
 
   // Stop stray file drops anywhere outside an explicit drop zone from
@@ -86,6 +92,27 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               </Link>
           ))}
         </nav>
+        {isAdmin && (
+          <div className="px-2 pb-1">
+            <div className="text-[10px] uppercase tracking-wider text-sidebar-foreground/40 font-semibold px-3 py-1.5">Admin</div>
+            {[
+              { to: "/admin/feedback", label: "Feedback" },
+              { to: "/admin/errors", label: "Errors" },
+            ].map(({ to, label }) => (
+              <Link key={to} to={to}
+                className={cn(
+                  "flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors",
+                  loc === to
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/60",
+                )}
+              >
+                <ShieldCheck size={16} strokeWidth={2.2} />
+                <span>{label}</span>
+              </Link>
+            ))}
+          </div>
+        )}
         <div className="p-3 border-t border-sidebar-border">
           <button
             onClick={() => setShowFeedback(true)}

@@ -1,0 +1,58 @@
+Build the admin dashboard with two pages: feedback and errors. All data from all orgs, email-gated access.
+What to build:
+
+Create src/middleware/adminAuth.ts:
+
+Middleware that checks if Clerk user's email is in whitelist: ['deepak@pddt.in', 'dpkchohan@gmail.com']
+If not admin: return 403 Forbidden
+If admin: attach userId to request and continue
+Use this middleware on all /api/admin/* routes
+
+
+Create admin API endpoints in src/routes/admin.ts:
+
+PATCH /api/admin/feedback/:id — update feedback status (New/Reviewed/Resolved)
+DELETE /api/admin/feedback/:id — delete feedback
+PATCH /api/admin/errors/:id — update error status (New/Investigated/Fixed/Ignored)
+DELETE /api/admin/errors/:id — delete error
+All use adminAuth middleware
+
+
+Create admin pages in web/src/pages/admin/:
+
+feedback.tsx — Table with all feedback from all orgs
+
+Columns: timestamp, user email, org name, type, criticality (color-coded 1-5), description (truncated), screenshot thumbnail, page URL, status, actions
+Filters: status, type, criticality, date range
+Sort: most recent first
+Click description → show full text in modal
+Click screenshot → open full image in modal
+Actions: Mark as Reviewed/Resolved, Delete
+
+
+errors.tsx — Table with all errors from all orgs
+
+Columns: timestamp, user email (nullable), org name (nullable), page URL, error message, stack trace (collapsed), status, actions
+Filters: status, page URL, date range
+Sort: most recent first
+Click stack trace → expand/collapse
+Actions: Mark as Investigated/Fixed/Ignored, Delete
+
+
+layout.tsx or guard component — Check email whitelist client-side, show 403 if not admin
+
+
+Database queries:
+
+Feedback query: JOIN feedback → users → organizations
+Errors query: JOIN errors → users (LEFT JOIN, nullable) → organizations (LEFT JOIN, nullable)
+
+
+Register routes in src/routes/index.ts
+Test:
+
+Log in as deepak@pddt.in or dpkchohan@gmail.com, access /admin/feedback and /admin/errors
+Verify tables load
+Try to access with non-admin email → should see 403
+Update feedback status → should reflect in table
+Delete a row → should disappear

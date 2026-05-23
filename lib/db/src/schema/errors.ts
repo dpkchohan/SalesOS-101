@@ -16,6 +16,7 @@ export const errorsTable = pgTable(
     stack: text("stack"),
     pageUrl: text("page_url").notNull(),
     userAgent: text("user_agent"),
+    status: text("status").notNull().default("new"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

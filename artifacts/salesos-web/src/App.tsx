@@ -36,6 +36,8 @@ import Import from "./pages/Import";
 import ImportAI from "./pages/ImportAI";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/not-found";
+import AdminFeedback from "./pages/admin/Feedback";
+import AdminErrors from "./pages/admin/Errors";
 
 // Use the publishable key directly from the environment variable.
 // Do NOT use publishableKeyFromHost() here — that Replit-internal utility
@@ -214,6 +216,8 @@ function SignedInApp() {
         <Route path="/import" component={Import} />
         <Route path="/import-ai" component={ImportAI} />
         <Route path="/settings" component={Settings} />
+        <Route path="/admin/feedback" component={AdminFeedback} />
+        <Route path="/admin/errors" component={AdminErrors} />
         <Route component={NotFound} />
       </Switch>
     </AppLayout>
@@ -290,6 +294,8 @@ function ClerkProviderWithRoutes() {
           <Route path="/import" component={ProtectedRoutes} />
           <Route path="/import-ai" component={ProtectedRoutes} />
           <Route path="/settings" component={ProtectedRoutes} />
+          <Route path="/admin/feedback" component={ProtectedRoutes} />
+          <Route path="/admin/errors" component={ProtectedRoutes} />
           <Route component={NotFound} />
         </Switch>
       </QueryClientProvider>
