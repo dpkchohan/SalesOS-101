@@ -11,6 +11,7 @@ import {
   FileSpreadsheet,
   Loader2,
 } from "lucide-react";
+import { useAuth } from "@clerk/react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   getListContactsQueryKey,
@@ -67,6 +68,7 @@ interface ImportJob {
 type Step = "upload" | "preview" | "processing" | "done";
 
 export default function ImportAI() {
+  const { getToken } = useAuth();
   const [step, setStep] = useState<Step>("upload");
   const [job, setJob] = useState<ImportJob | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -91,10 +93,12 @@ export default function ImportAI() {
     }
     setWorking(true);
     try {
+      const token = await getToken();
       const fd = new FormData();
       fd.append("file", f);
       const resp = await fetch(getApiUrl("/api/import/ai-smart/preview"), {
         method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: fd,
       });
       if (!resp.ok) {
@@ -116,9 +120,13 @@ export default function ImportAI() {
     setError(null);
     setWorking(true);
     try {
+      const token = await getToken();
       const resp = await fetch(getApiUrl("/api/import/ai-smart/execute"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ jobId: job.id }),
       });
       if (!resp.ok) {
@@ -141,7 +149,10 @@ export default function ImportAI() {
     let cancelled = false;
     const tick = async () => {
       try {
-        const resp = await fetch(getApiUrl(`/api/import/ai-smart/job/${job.id}`));
+        const token = await getToken();
+        const resp = await fetch(getApiUrl(`/api/import/ai-smart/job/${job.id}`), {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
         if (!resp.ok) return;
         const data: ImportJob = await resp.json();
         if (cancelled) return;
