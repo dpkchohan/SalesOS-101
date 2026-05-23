@@ -1,0 +1,70 @@
+Build the Import AI feature — Claude extracts contacts from any file format and creates them in the database.
+What to build:
+
+Create src/lib/importAI.ts:
+
+Function: extractContactsFromFile(downloadUrl: string, filename: string, contentType: string)
+Call Claude API with the file URL (use CLAUDE_API_KEY env var)
+Claude prompt: Extract contact details from the file. Return JSON with:
+
+
+
+json     {
+       "contacts": [
+         {
+           "name": "string (required)",
+           "email": "string",
+           "phone": "string",
+           "title": "string",
+           "company": "string",
+           "tags": ["string"],
+           "notes": "string",
+           "conversationHistory": "string",
+           "dealHistory": "string",
+           "lastContactDate": "string (ISO date)",
+           "source": "string"
+         }
+       ],
+       "organizations": [
+         {
+           "name": "string (required)",
+           "industry": "string",
+           "website": "string",
+           "address": "string"
+         }
+       ]
+     }
+
+Handle errors: return { error: string } if Claude fails
+Use @anthropic-sdk/sdk (already in package.json)
+
+
+Create src/routes/import.ts:
+
+POST /api/import/extract
+Body: { fileKey: string, filename: string, contentType: string }
+Auth: Required (get userId + orgId from Clerk)
+Flow:
+a. Call GET /api/storage/import/process/{fileKey} to get downloadUrl
+b. Call extractContactsFromFile(downloadUrl, filename, contentType)
+c. If success: create contacts + orgs in DB, call DELETE /api/storage/import/cleanup/{fileKey}
+d. If error: call cleanup anyway (in finally block), return error to user
+Return: { created: { contacts: number, organizations: number }, errors: [] }
+
+
+Database operations:
+
+For each contact in response:
+a. Find or create organization by name (if company provided)
+b. Create contact with organization_id FK
+c. Add tags via junction table (contacts_tags)
+Use transactions — if any contact fails, rollback that contact but continue others
+
+
+Register route in src/app.ts
+Test:
+
+Upload a CSV file
+Call POST /api/import/extract with fileKey
+Verify contacts + orgs created in DB
+Verify temp file deleted
