@@ -94,6 +94,7 @@ export default function ImportAI() {
     setWorking(true);
     try {
       const token = await getToken();
+      console.log("[ImportAI] preview token:", token ? `${token.slice(0, 20)}…` : "NULL — no token returned");
       const fd = new FormData();
       fd.append("file", f);
       const resp = await fetch(getApiUrl("/api/import/ai-smart/preview"), {
@@ -101,6 +102,7 @@ export default function ImportAI() {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: fd,
       });
+      console.log("[ImportAI] preview response status:", resp.status);
       if (!resp.ok) {
         const j = await resp.json().catch(() => ({}));
         throw new Error(j.error ?? `Preview failed (${resp.status})`);
