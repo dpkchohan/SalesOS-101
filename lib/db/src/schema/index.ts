@@ -10,3 +10,4 @@ export * from "./documents";
 export * from "./companyCredentials";
 export * from "./importJobs";
 export * from "./chatAttachments";
+export * from "./feedback";

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useClerk, useUser } from "@clerk/react";
 import {
@@ -12,9 +12,11 @@ import {
   Upload,
   LogOut,
   Settings,
+  MessageSquare,
 } from "lucide-react";
 import { initials } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { FeedbackModal } from "./FeedbackModal";
 
 const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -31,6 +33,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const [loc] = useLocation();
   const { user } = useUser();
   const { signOut } = useClerk();
+  const [showFeedback, setShowFeedback] = useState(false);
 
   // Stop stray file drops anywhere outside an explicit drop zone from
   // navigating the browser away (which would lose all in-page state).
@@ -84,6 +87,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           ))}
         </nav>
         <div className="p-3 border-t border-sidebar-border">
+          <button
+            onClick={() => setShowFeedback(true)}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[12px] font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent/60 transition-colors border border-sidebar-border mb-2"
+            data-testid="button-report-issue"
+          >
+            <MessageSquare size={14} /> Report Issue
+          </button>
           <Link to="/settings" className="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-sidebar-accent/60 transition-colors">
               <div className="w-9 h-9 rounded-full bg-primary text-primary-foreground grid place-items-center font-bold text-[13px]">
                 {initials(user?.fullName ?? user?.primaryEmailAddress?.emailAddress)}
@@ -114,9 +124,18 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="" className="w-7 h-7 rounded-md" />
               <span className="font-bold tracking-tight">SalesOS</span>
             </Link>
-          <Link to="/settings" className="w-8 h-8 rounded-full bg-primary text-primary-foreground grid place-items-center font-bold text-xs">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowFeedback(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-medium border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              data-testid="button-report-issue-mobile"
+            >
+              <MessageSquare size={13} /> Report
+            </button>
+            <Link to="/settings" className="w-8 h-8 rounded-full bg-primary text-primary-foreground grid place-items-center font-bold text-xs">
               {initials(user?.fullName ?? user?.primaryEmailAddress?.emailAddress)}
             </Link>
+          </div>
         </header>
 
         <main className="flex-1 pb-24 md:pb-8">{children}</main>
@@ -140,6 +159,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </nav>
       </div>
+
+      {showFeedback && <FeedbackModal onClose={() => setShowFeedback(false)} />}
     </div>
   );
 }
