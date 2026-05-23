@@ -10,14 +10,24 @@ import {
 } from "@workspace/db";
 import { GetDashboardSummaryResponse } from "@workspace/api-zod";
 import { requireAuth, type AuthenticatedRequest } from "../lib/auth";
+import type { z } from "zod";
+
+type DashboardSummary = z.infer<typeof GetDashboardSummaryResponse>;
 
 const router: IRouter = Router();
 
 const STAGES = ["new", "interested", "qualified", "negotiating", "won", "lost"] as const;
+const VALID_SENTIMENTS = new Set(["positive", "neutral", "negative"]);
+const VALID_SEVERITIES = new Set(["high", "medium", "low"]);
+const VALID_PRIORITIES = new Set(["high", "medium", "low"]);
+const VALID_INTERACTION_TYPES = new Set(["call", "email", "meeting", "note"]);
 
 router.get("/dashboard/summary", requireAuth, async (req, res): Promise<void> => {
   const r = req as AuthenticatedRequest;
 
+  // ── Pipeline ────────────────────────────────────────────────────────────────
+  let pipeline = STAGES.map((stage) => ({ stage, count: 0, totalValue: 0 }));
+  let totalPipelineValue = 0;
   try {
     const stageRows = await db
       .select({
@@ -28,19 +38,26 @@ router.get("/dashboard/summary", requireAuth, async (req, res): Promise<void> =>
       .from(leadsTable)
       .where(eq(leadsTable.orgId, r.orgId))
       .groupBy(leadsTable.stage);
-    const stageMap = new Map<string, { count: number; totalValue: number }>(
-      stageRows.map((s) => [s.stage, { count: s.count, totalValue: s.totalValue }]),
+
+    const stageMap = new Map(
+      stageRows.map((s) => [s.stage, { count: s.count ?? 0, totalValue: s.totalValue ?? 0 }]),
     );
-    const pipeline = STAGES.map((stage) => ({
+    pipeline = STAGES.map((stage) => ({
       stage,
       count: stageMap.get(stage)?.count ?? 0,
       totalValue: stageMap.get(stage)?.totalValue ?? 0,
     }));
-    const totalPipelineValue = pipeline
+    totalPipelineValue = pipeline
       .filter((p) => p.stage !== "won" && p.stage !== "lost")
       .reduce((sum, p) => sum + p.totalValue, 0);
+  } catch (err) {
+    req.log.error({ err }, "dashboard: failed to load pipeline — returning zeros");
+  }
 
-    const todaysTasksRaw = await db
+  // ── Today's tasks ────────────────────────────────────────────────────────────
+  let todaysTasks: unknown[] = [];
+  try {
+    const rows = await db
       .select({
         id: tasksTable.id,
         leadId: tasksTable.leadId,
@@ -49,8 +66,10 @@ router.get("/dashboard/summary", requireAuth, async (req, res): Promise<void> =>
         title: tasksTable.title,
         description: tasksTable.description,
         dueDate: tasksTable.dueDate,
+        dueTime: tasksTable.dueTime,
         completedAt: tasksTable.completedAt,
         priority: tasksTable.priority,
+        calendarEventId: tasksTable.calendarEventId,
         createdAt: tasksTable.createdAt,
       })
       .from(tasksTable)
@@ -66,7 +85,18 @@ router.get("/dashboard/summary", requireAuth, async (req, res): Promise<void> =>
       .orderBy(tasksTable.dueDate)
       .limit(20);
 
-    const activeSignals = await db
+    todaysTasks = rows.map((t) => ({
+      ...t,
+      priority: VALID_PRIORITIES.has(t.priority ?? "") ? (t.priority as "high" | "medium" | "low") : "medium",
+    }));
+  } catch (err) {
+    req.log.error({ err }, "dashboard: failed to load today's tasks — returning empty");
+  }
+
+  // ── AI signals ───────────────────────────────────────────────────────────────
+  let activeSignals: unknown[] = [];
+  try {
+    const rows = await db
       .select({
         id: aiSignalsTable.id,
         leadId: aiSignalsTable.leadId,
@@ -84,26 +114,53 @@ router.get("/dashboard/summary", requireAuth, async (req, res): Promise<void> =>
       .orderBy(desc(aiSignalsTable.createdAt))
       .limit(10);
 
-    const recentInteractions = await db
+    activeSignals = rows
+      .filter((s) => VALID_SEVERITIES.has(s.severity ?? ""))
+      .map((s) => ({
+        ...s,
+        severity: s.severity as "high" | "medium" | "low",
+      }));
+  } catch (err) {
+    req.log.error({ err }, "dashboard: failed to load AI signals — returning empty");
+  }
+
+  // ── Recent interactions ──────────────────────────────────────────────────────
+  let recentInteractions: unknown[] = [];
+  try {
+    const rows = await db
       .select()
       .from(interactionsTable)
       .where(eq(interactionsTable.orgId, r.orgId))
       .orderBy(desc(interactionsTable.createdAt))
       .limit(5);
 
-    res.json(
-      GetDashboardSummaryResponse.parse({
-        pipeline,
-        totalPipelineValue,
-        todaysTasks: todaysTasksRaw,
-        activeSignals,
-        recentInteractions,
-      }),
-    );
+    recentInteractions = rows
+      .filter((i) => VALID_INTERACTION_TYPES.has(i.type ?? ""))
+      .map((i) => ({
+        ...i,
+        type: i.type as "call" | "email" | "meeting" | "note",
+        gains: Array.isArray(i.gains) ? i.gains : [],
+        misses: Array.isArray(i.misses) ? i.misses : [],
+        actionItems: Array.isArray(i.actionItems) ? i.actionItems : [],
+        sentiment: VALID_SENTIMENTS.has(i.sentiment ?? "")
+          ? (i.sentiment as "positive" | "neutral" | "negative")
+          : null,
+      }));
   } catch (err) {
-    req.log.error({ err }, "Failed to load dashboard summary");
-    res.status(500).json({ error: "Failed to load dashboard summary" });
+    req.log.error({ err }, "dashboard: failed to load recent interactions — returning empty");
   }
+
+  // ── Serialize ────────────────────────────────────────────────────────────────
+  const payload = { pipeline, totalPipelineValue, todaysTasks, activeSignals, recentInteractions };
+
+  const parsed = GetDashboardSummaryResponse.safeParse(payload);
+  if (!parsed.success) {
+    req.log.error({ issues: parsed.error.issues }, "dashboard: Zod validation failed — returning raw payload");
+    res.json(payload);
+    return;
+  }
+
+  res.json(parsed.data);
 });
 
 export default router;
