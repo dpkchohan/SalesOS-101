@@ -76,6 +76,45 @@ async function getOrCreateUser(clerkUserId: string) {
   return { user, org };
 }
 
+export interface PartialAuthRequest extends Request {
+  userId?: string;
+  orgId?: string;
+  clerkUserId?: string;
+  userName?: string;
+  userEmail?: string;
+  orgName?: string;
+}
+
+/**
+ * Like requireAuth but never rejects — resolves identity when a valid Clerk
+ * token is present, otherwise just calls next() with no user fields set.
+ * Used on endpoints that are useful even when the user is not authenticated
+ * (e.g. client-side error reporting that fires before sign-in).
+ */
+export async function optionalAuth(
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const auth = getAuth(req);
+  const clerkUserId = auth?.userId;
+  if (clerkUserId) {
+    try {
+      const { user, org } = await getOrCreateUser(clerkUserId);
+      const r = req as AuthenticatedRequest;
+      r.clerkUserId = clerkUserId;
+      r.userId = user.id;
+      r.orgId = user.orgId;
+      r.userName = user.name;
+      r.userEmail = user.email;
+      r.orgName = org?.name ?? "Workspace";
+    } catch {
+      // best-effort identity resolution — proceed without identity
+    }
+  }
+  next();
+}
+
 export async function requireAuth(
   req: Request,
   res: Response,
