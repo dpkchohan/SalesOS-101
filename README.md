@@ -5,7 +5,7 @@
 The simplest CRM for the world's most complex job  —a conversational, AI-powered sales assistant built for Indian sales teams. Voice-first, Hinglish-native, zero training required.  
    
 --- 
- 
+
 ## What is SalesOS? 
 
 SalesOS is a CRM that works like WhatsApp, not like enterprise software. A sales rep opens the app, sees their deals, talks to Claude (voice or text), and closes deals. No forms, no menus, no learning curve.
