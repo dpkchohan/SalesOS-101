@@ -1,0 +1,89 @@
+YES, that's 100% correct.
+The wildcard route fix handles file keys with slashes properly.
+
+UPDATED PROMPT FOR REPLIT AGENT:
+
+We need to integrate AWS S3 for file storage with quota tracking and lifecycle management. The S3 bucket salesos-production-storage already exists in ap-south-1 region.
+What needs to happen:
+1. Install Dependencies
+Add to artifacts/api-server/package.json:
+
+@aws-sdk/client-s3 (latest)
+@aws-sdk/s3-request-presigner (latest)
+
+2. Environment Variables
+The following will be added to Coolify (don't hardcode them):
+
+AWS_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY
+AWS_S3_BUCKET=salesos-production-storage
+AWS_REGION=ap-south-1
+
+3. Database Schema
+Create lib/db/src/schema/storage.ts:
+typescript// Table: storage_usage
+- org_id (uuid, primary key, FK to organizations)
+- used_bytes (bigint, default 0)
+- quota_bytes (bigint, default 262144000) // 250MB in bytes
+- updated_at (timestamp, default now)
+Export from lib/db/src/schema/index.ts.
+4. Storage Service
+Create artifacts/api-server/src/lib/storage.ts:
+Functions needed:
+
+getPresignedUploadUrl(orgId: string, filename: string, contentType: string, folder: 'temp/imports' | 'temp/extractions' | 'documents/contacts' | 'documents/deals' | 'feedback') - Returns pre-signed PUT URL (15 min expiry)
+getPresignedDownloadUrl(orgId: string, key: string) - Returns pre-signed GET URL (1 hour expiry)
+deleteFile(orgId: string, key: string) - Deletes file from S3
+getStorageUsage(orgId: string) - Returns used/quota bytes from DB
+checkQuota(orgId: string, fileSize: number) - Throws error if would exceed quota
+updateStorageUsage(orgId: string, delta: number) - Increment/decrement used_bytes
+
+Use S3Client from @aws-sdk/client-s3 with credentials from env vars.
+All file keys should be prefixed with {org_id}/ for tenant isolation.
+5. API Endpoints
+Create artifacts/api-server/src/routes/storage.ts:
+POST /api/storage/upload
+
+Body: { filename: string, contentType: string, fileSize: number, folder: string }
+Auth: Required (get org_id from Clerk)
+Validation: Check quota before returning URL
+Returns: { uploadUrl: string, fileKey: string, expiresIn: number }
+Update storage_usage by incrementing used_bytes
+
+GET /api/storage/download/*
+
+Route uses wildcard to capture full file key with slashes
+Extract file key from req.params[0]
+Auth: Required
+Verify org_id matches the fileKey prefix (security check)
+Returns: { downloadUrl: string, expiresIn: number }
+
+DELETE /api/storage/*
+
+Route uses wildcard to capture full file key with slashes
+Extract file key from req.params[0]
+Auth: Required
+Verify org_id ownership
+Delete from S3
+Update storage_usage by decrementing used_bytes
+Returns: { success: true }
+
+GET /api/storage/usage
+
+Auth: Required
+Returns: { usedBytes: number, quotaBytes: number, usedMB: number, quotaMB: number, percentUsed: number }
+
+Register routes in artifacts/api-server/src/app.ts.
+6. Error Handling
+
+If quota exceeded → Return 413 Payload Too Large with message
+If file doesn't belong to org → Return 403 Forbidden
+If S3 operation fails → Return 500 with generic error (log details server-side)
+
+7. Testing
+After building, verify:
+
+POST /upload returns valid pre-signed URL
+Quota enforcement blocks uploads over 250MB total
+DELETE reduces used_bytes correctly
+org_id isolation prevents cross-tenant access
