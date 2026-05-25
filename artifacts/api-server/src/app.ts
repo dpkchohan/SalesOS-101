@@ -46,9 +46,7 @@ app.use(
         const allowed =
           host === "localhost" ||
           host === "127.0.0.1" ||
-          host.endsWith(".replit.dev") ||
           host.endsWith(".replit.app") ||
-          host.endsWith(".repl.co") ||
           host.endsWith(".vercel.app") ||
           host === "salesos.pddt.in" ||
           host.endsWith(".salesos.pddt.in") ||
