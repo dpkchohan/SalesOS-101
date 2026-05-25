@@ -57,15 +57,19 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
 
     let googleEmail = "";
     try {
+      const ac = new AbortController();
+      const emailTimeout = setTimeout(() => ac.abort(), 2000);
       const infoRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
         headers: { Authorization: `Bearer ${tokens.access_token}` },
+        signal: ac.signal,
       });
+      clearTimeout(emailTimeout);
       if (infoRes.ok) {
         const info = (await infoRes.json()) as { email?: string };
         googleEmail = info.email ?? "";
       }
     } catch {
-      // non-fatal — email is nice-to-have
+      // non-fatal — email is nice-to-have; timeout aborts cleanly
     }
 
     const expiry = tokens.expiry_date ? new Date(tokens.expiry_date) : null;
