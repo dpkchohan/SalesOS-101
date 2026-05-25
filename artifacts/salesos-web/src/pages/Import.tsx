@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useAuth } from "@clerk/react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   UploadCloud,
@@ -48,6 +49,7 @@ interface ImportSummary {
 type Step = "upload" | "mapping" | "importing" | "done";
 
 export default function Import() {
+  const { getToken } = useAuth();
   const [step, setStep] = useState<Step>("upload");
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
@@ -81,10 +83,12 @@ export default function Import() {
     setFile(f);
     setWorking(true);
     try {
+      const token = await getToken();
       const fd = new FormData();
       fd.append("file", f);
       const resp = await fetch(getApiUrl("/api/import/preview"), {
         method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: fd,
       });
       if (!resp.ok) {
@@ -112,11 +116,13 @@ export default function Import() {
       setProgress((p) => (p < 88 ? p + 4 : p));
     }, Math.max(120, Math.min(450, preview.rowCount * 4)));
     try {
+      const token = await getToken();
       const fd = new FormData();
       fd.append("file", file);
       fd.append("mapping", JSON.stringify(mapping));
       const resp = await fetch(getApiUrl("/api/import/contacts"), {
         method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: fd,
       });
       clearInterval(fakeProgress);
