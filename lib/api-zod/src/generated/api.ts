@@ -198,6 +198,7 @@ export const CreateContactBody = zod.object({
   email: zod.string().nullish(),
   phone: zod.string().nullish(),
   title: zod.string().nullish(),
+  linkedinUrl: zod.string().nullish(),
   tags: zod.array(zod.string()).optional(),
   force: zod
     .boolean()
@@ -395,6 +396,7 @@ export const GetContactResponse = zod.object({
   email: zod.string().nullish(),
   phone: zod.string().nullish(),
   title: zod.string().nullish(),
+  linkedinUrl: zod.string().nullish(),
   tags: zod.array(zod.string()).optional(),
   leads: zod.array(
     zod.object({
@@ -460,6 +462,7 @@ export const UpdateContactBody = zod.object({
   email: zod.string().nullish(),
   phone: zod.string().nullish(),
   title: zod.string().nullish(),
+  linkedinUrl: zod.string().nullish(),
   tags: zod.array(zod.string()).optional(),
   force: zod
     .boolean()
@@ -475,6 +478,7 @@ export const UpdateContactResponse = zod.object({
   email: zod.string().nullish(),
   phone: zod.string().nullish(),
   title: zod.string().nullish(),
+  linkedinUrl: zod.string().nullish(),
   tags: zod.array(zod.string()).optional(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date().optional(),

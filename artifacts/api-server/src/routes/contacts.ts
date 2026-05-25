@@ -39,6 +39,7 @@ function contactDto(row: typeof contactsTable.$inferSelect) {
     email: row.email,
     phone: row.phone,
     title: row.title,
+    linkedinUrl: row.linkedinUrl,
     tags: row.tags,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,

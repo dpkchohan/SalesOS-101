@@ -45,8 +45,8 @@ Return ONLY valid JSON — no markdown fences, no explanation — matching this 
   "contacts": [
     {
       "name": "string (required)",
-      "email": "string",
-      "phone": "string",
+      "email": "Primary email address only. If multiple emails exist, use the first/primary one.",
+      "phone": "Single normalized phone number (e.g., +919876543210). If multiple numbers exist, use the primary/first one. Do NOT concatenate multiple numbers.",
       "title": "string",
       "company": "string",
       "tags": ["string"],
@@ -68,6 +68,8 @@ Return ONLY valid JSON — no markdown fences, no explanation — matching this 
 }
 Rules:
 - "name" is the only required field per contact.
+- "email" must be a single email address string, never an array or multiple addresses.
+- "phone" must be a single phone number string, never an array or concatenated list.
 - Omit keys that have no value — do not include null.
 - Dates must be ISO 8601 (YYYY-MM-DD).
 - Return empty arrays if nothing is found.`;
