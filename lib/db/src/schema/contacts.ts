@@ -30,6 +30,7 @@ export const contactsTable = pgTable(
     phone: text("phone"),
     phoneNormalized: text("phone_normalized"),
     title: text("title"),
+    linkedinUrl: text("linkedin_url"),
     tags: text("tags").array().notNull().default([]),
     importJobId: uuid("import_job_id"),
     isDuplicate: boolean("is_duplicate").notNull().default(false),

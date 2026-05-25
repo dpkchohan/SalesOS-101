@@ -47,6 +47,7 @@ const SALESOS_FIELDS = [
   { id: "lead_status", label: "Lead status" },
   { id: "value_usd", label: "Deal amount (USD)" },
   { id: "close_date", label: "Close date" },
+  { id: "linkedin_url", label: "LinkedIn URL" },
   { id: "ignore", label: "(do not import)" },
 ] as const;
 
@@ -92,6 +93,11 @@ const HEADER_HINTS: Record<string, FieldId> = {
   "expected close": "close_date",
   "expected close date": "close_date",
   "closing date": "close_date",
+  linkedin: "linkedin_url",
+  "linkedin url": "linkedin_url",
+  "linkedin profile": "linkedin_url",
+  "linkedin profile url": "linkedin_url",
+  "linkedin link": "linkedin_url",
 };
 
 function suggestMapping(headers: string[]): Record<string, FieldId> {
@@ -296,6 +302,7 @@ router.post(
         const leadStatus = get("lead_status");
         const valueUsd = parseAmount(get("value_usd"));
         const closeDate = parseDateISO(get("close_date"));
+        const linkedinUrl = get("linkedin_url") || null;
 
         if (email && !isValidEmail(email)) {
           summary.skipped++;
@@ -336,6 +343,7 @@ router.post(
                 phoneNormalized: phoneNorm ?? undefined,
                 title: title || undefined,
                 companyId: companyId ?? undefined,
+                linkedinUrl: linkedinUrl ?? undefined,
               })
               .where(eq(contactsTable.id, contactId));
             summary.contactsUpdated++;
@@ -360,6 +368,7 @@ router.post(
                 name: displayName,
                 title: title || undefined,
                 companyId: companyId ?? undefined,
+                linkedinUrl: linkedinUrl ?? undefined,
               })
               .where(eq(contactsTable.id, contactId));
             summary.contactsUpdated++;
@@ -380,6 +389,7 @@ router.post(
               phone: phone || null,
               phoneNormalized: phoneNorm,
               title: title || null,
+              linkedinUrl,
             })
             .returning({ id: contactsTable.id });
           contactId = created.id;
