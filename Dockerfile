@@ -30,6 +30,7 @@ ENV NODE_ENV=production
 ENV PORT=3000
 
 COPY scripts/migrate-and-start.sh scripts/migrate-and-start.sh
-RUN chmod +x scripts/migrate-and-start.sh
+COPY scripts/lint-migrations.sh scripts/lint-migrations.sh
+RUN chmod +x scripts/migrate-and-start.sh scripts/lint-migrations.sh
 
 CMD ["sh", "scripts/migrate-and-start.sh"]

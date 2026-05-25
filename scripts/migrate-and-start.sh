@@ -72,6 +72,21 @@ elif [ "${NODE_ENV:-}" = "production" ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# Migration lint: reject non-idempotent SQL before touching the database.
+# ---------------------------------------------------------------------------
+echo "Linting migrations for idempotency..."
+if ! sh "$SCRIPT_DIR/lint-migrations.sh" "lib/db/migrations"; then
+  echo "" >&2
+  echo "================================================================" >&2
+  echo "  DEPLOY ABORTED — migration lint failed." >&2
+  echo "" >&2
+  echo "  Fix the non-idempotent statements listed above, then redeploy." >&2
+  echo "  See docs/migration-recovery.md for the authoring guide." >&2
+  echo "================================================================" >&2
+  exit 1
+fi
+
+# ---------------------------------------------------------------------------
 # Pre-flight: verify the database is reachable before touching the schema.
 # ---------------------------------------------------------------------------
 echo "Checking database connectivity..."
