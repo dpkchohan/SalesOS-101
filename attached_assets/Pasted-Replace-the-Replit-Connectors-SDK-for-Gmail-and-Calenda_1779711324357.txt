@@ -1,0 +1,45 @@
+Replace the Replit Connectors SDK for Gmail and Calendar with our own per-user Google OAuth. This is multi-org: each user connects their own Google account, and we store their tokens in Supabase. Replit's @replit/connectors-sdk does not exist on Coolify, so this is currently broken in production.
+Use these env vars (already set in Coolify): GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI (= https://api.salesos.pddt.in/api/auth/google/callback).
+1. Database — new table google_connections:
+
+id, user_id (FK to users), org_id, google_email, access_token, refresh_token, token_expiry (timestamp), scopes, created_at, updated_at
+One row per user per Google account. Tag with org_id. Tokens stored encrypted at rest if practical.
+Generate a proper Drizzle migration file (do not use db push).
+
+2. OAuth flow — new routes in a google-auth.ts route file:
+
+GET /api/auth/google/connect — authenticated (Clerk); builds the Google consent URL with the right scopes (Gmail send + Calendar read/write) and access_type=offline + prompt=consent (so we get a refresh token), redirects the user to Google.
+GET /api/auth/google/callback — handles Google's redirect; exchanges the code for access + refresh tokens using our client credentials; upserts a google_connections row for the current user; redirects back to the app frontend.
+GET /api/auth/google/status — returns whether the current user has a connected Google account.
+DELETE /api/auth/google/disconnect — revokes and deletes the user's connection.
+
+3. Token management — a helper module:
+
+getValidAccessToken(userId) — reads the user's row; if the access token is expired, uses the refresh token to get a new one via Google's token endpoint, updates the DB, returns a valid token.
+Use the official googleapis (or google-auth-library) npm package, not Replit's SDK.
+
+4. Rewrite gcal.ts and gmail.ts:
+
+Remove every new ReplitConnectors() call.
+Each calendar/email operation now takes the userId, calls getValidAccessToken(userId), and calls the Google REST API directly with that token.
+Preserve the existing function signatures/behavior so callers don't break.
+
+5. Cleanup:
+
+Remove @replit/connectors-sdk from package.json.
+In documents.ts line ~365, change the error text "Reconnect your Gmail account in Replit integrations" to "Reconnect your Google account in settings".
+Remove the integrations = [...] line from .replit.
+
+6. Frontend:
+
+Add a "Connect Google" button (Settings or wherever calendar/email features live) that hits /api/auth/google/connect.
+Show connected/disconnected state using /api/auth/google/status.
+
+7. Test & deliver:
+
+Confirm the connect flow redirects to Google, comes back, and stores tokens.
+Confirm a calendar create and an email send work using the stored token.
+Confirm token refresh works when the access token expires.
+Generate the migration file, commit, and push. Tell me what changed and how to verify.
+
+Do not require any manual DB command from me — the migration must run via the deploy pipeline (or tell me clearly if a one-time step is unavoidable).
