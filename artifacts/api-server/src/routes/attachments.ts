@@ -6,7 +6,6 @@ import {
   type NextFunction,
 } from "express";
 import multer, { MulterError } from "multer";
-import { randomUUID } from "crypto";
 import { and, eq, sql } from "drizzle-orm";
 import {
   db,
@@ -17,7 +16,14 @@ import {
 } from "@workspace/db";
 import { requireAuth, type AuthenticatedRequest } from "../lib/auth";
 import { assignCustomerNo, normalizePhone } from "../lib/dedup";
-import { objectStorageClient } from "../lib/objectStorage";
+import {
+  uploadBuffer,
+  downloadToBuffer,
+  getPresignedDownloadUrlForKey,
+  deleteFileByKey,
+  checkQuota,
+  updateStorageUsage,
+} from "../lib/storage";
 import {
   extractAttachment,
   classifyAttachment,
@@ -54,14 +60,6 @@ function handleUpload(field: string) {
   };
 }
 
-function privateBucketAndPrefix(): { bucketName: string; prefix: string } {
-  const dir = process.env.PRIVATE_OBJECT_DIR;
-  if (!dir) throw new Error("PRIVATE_OBJECT_DIR not set");
-  const path = dir.startsWith("/") ? dir.slice(1) : dir;
-  const [bucketName, ...rest] = path.split("/");
-  return { bucketName, prefix: rest.join("/") };
-}
-
 function attachmentDto(row: typeof chatAttachmentsTable.$inferSelect) {
   return {
     id: row.id,
@@ -78,6 +76,7 @@ function attachmentDto(row: typeof chatAttachmentsTable.$inferSelect) {
   };
 }
 
+// POST /attachments/upload
 router.post(
   "/attachments/upload",
   requireAuth,
@@ -97,29 +96,31 @@ router.post(
       return;
     }
 
-    const { bucketName, prefix } = privateBucketAndPrefix();
-    const objectId = randomUUID();
-    const safeName = r.file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const objectName = [prefix, "chat-attachments", r.orgId, `${objectId}-${safeName}`]
-      .filter(Boolean)
-      .join("/");
-
     try {
-      const bucket = objectStorageClient.bucket(bucketName);
-      const file = bucket.file(objectName);
-      await file.save(r.file.buffer, {
-        contentType: r.file.mimetype,
-        resumable: false,
-        metadata: {
-          contentType: r.file.mimetype,
-          metadata: { orgId: r.orgId, uploadedBy: r.userId, originalName: r.file.originalname },
-        },
-      });
+      await checkQuota(r.userId, r.orgId, r.file.size);
     } catch (err) {
-      req.log.error({ err }, "Chat attachment storage upload failed");
+      const e = err as { statusCode?: number; message?: string };
+      res.status(e.statusCode ?? 413).json({ error: e.message ?? "Storage quota exceeded" });
+      return;
+    }
+
+    let storageKey: string;
+    try {
+      storageKey = await uploadBuffer(
+        r.userId,
+        r.orgId,
+        "attachments/contacts",
+        r.file.originalname,
+        r.file.buffer,
+        r.file.mimetype,
+      );
+    } catch (err) {
+      req.log.error({ err }, "Chat attachment S3 upload failed");
       res.status(500).json({ error: "Could not store the attachment. Try again." });
       return;
     }
+
+    await updateStorageUsage(r.userId, r.orgId, r.file.size);
 
     const [created] = await db
       .insert(chatAttachmentsTable)
@@ -130,7 +131,7 @@ router.post(
         fileType: kind,
         mimeType: r.file.mimetype,
         fileSize: r.file.size,
-        storageKey: objectName,
+        storageKey,
         extractionStatus: "pending",
       })
       .returning();
@@ -139,6 +140,7 @@ router.post(
   },
 );
 
+// GET /attachments/:id
 router.get(
   "/attachments/:id",
   requireAuth,
@@ -162,6 +164,32 @@ router.get(
   },
 );
 
+// GET /attachments/:id/download — returns a presigned S3 URL (1 h expiry)
+router.get(
+  "/attachments/:id/download",
+  requireAuth,
+  async (req, res): Promise<void> => {
+    const r = req as AuthenticatedRequest;
+    const [row] = await db
+      .select()
+      .from(chatAttachmentsTable)
+      .where(
+        and(
+          eq(chatAttachmentsTable.id, String(req.params.id)),
+          eq(chatAttachmentsTable.orgId, r.orgId),
+        ),
+      )
+      .limit(1);
+    if (!row) {
+      res.status(404).json({ error: "Attachment not found" });
+      return;
+    }
+    const { downloadUrl, expiresIn } = await getPresignedDownloadUrlForKey(row.storageKey);
+    res.json({ downloadUrl, expiresIn });
+  },
+);
+
+// POST /attachments/:id/extract
 router.post(
   "/attachments/:id/extract",
   requireAuth,
@@ -195,7 +223,6 @@ router.post(
       .returning();
     res.json(attachmentDto(marked));
 
-    // Process in the background; the frontend polls GET /attachments/:id
     void runExtraction(id, row.storageKey, row.mimeType, row.fileName, req.log).catch(
       (err) => {
         req.log.error({ err, id }, "attachment extraction crashed");
@@ -212,10 +239,7 @@ async function runExtraction(
   log: { error: (...a: unknown[]) => void },
 ): Promise<void> {
   try {
-    const { bucketName } = privateBucketAndPrefix();
-    const bucket = objectStorageClient.bucket(bucketName);
-    const file = bucket.file(storageKey);
-    const [buf] = await file.download();
+    const buf = await downloadToBuffer(storageKey);
     const data = await extractAttachment(buf, mimeType, fileName);
     await db
       .update(chatAttachmentsTable)
@@ -236,6 +260,44 @@ async function runExtraction(
       .where(eq(chatAttachmentsTable.id, attachmentId));
   }
 }
+
+// DELETE /attachments/:id
+router.delete(
+  "/attachments/:id",
+  requireAuth,
+  async (req, res): Promise<void> => {
+    const r = req as AuthenticatedRequest;
+    const id = String(req.params.id);
+    const [row] = await db
+      .select()
+      .from(chatAttachmentsTable)
+      .where(
+        and(
+          eq(chatAttachmentsTable.id, id),
+          eq(chatAttachmentsTable.orgId, r.orgId),
+        ),
+      )
+      .limit(1);
+    if (!row) {
+      res.status(404).json({ error: "Attachment not found" });
+      return;
+    }
+
+    try {
+      await deleteFileByKey(row.storageKey);
+    } catch (err) {
+      req.log.error({ err, id }, "S3 delete failed — continuing with DB cleanup");
+    }
+
+    await db
+      .delete(chatAttachmentsTable)
+      .where(eq(chatAttachmentsTable.id, id));
+
+    await updateStorageUsage(row.uploadedBy ?? r.userId, r.orgId, -row.fileSize);
+
+    res.status(204).send();
+  },
+);
 
 interface ApplyBody {
   action: "contact" | "lead";
@@ -287,6 +349,7 @@ function findLead(contacts: ExtractedContact[], leads: ExtractedLead[], idx: num
   );
 }
 
+// POST /attachments/:id/apply
 router.post(
   "/attachments/:id/apply",
   requireAuth,

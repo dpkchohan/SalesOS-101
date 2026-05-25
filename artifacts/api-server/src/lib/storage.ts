@@ -27,6 +27,8 @@ export type StorageFolder =
   | "temp/extractions"
   | "documents/contacts"
   | "documents/deals"
+  | "attachments/contacts"
+  | "attachments/deals"
   | "feedback";
 
 // ── Internal: resolve which row + key-prefix to use for a given user ──────────
@@ -298,6 +300,41 @@ export async function getFileSize(
     if (e.name === "NotFound" || e.name === "NoSuchKey") return 0;
     throw err;
   }
+}
+
+// ── Internal trusted helpers (caller has already verified ownership via DB) ───
+
+/**
+ * Downloads an S3 object to a Buffer.
+ * No ownership check — callers must verify access at the DB level first.
+ */
+export async function downloadToBuffer(key: string): Promise<Buffer> {
+  const result = await getS3Client().send(
+    new GetObjectCommand({ Bucket: BUCKET, Key: key }),
+  );
+  if (!result.Body) throw new Error(`S3 object has no body: ${key}`);
+  const bytes = await (result.Body as { transformToByteArray(): Promise<Uint8Array> }).transformToByteArray();
+  return Buffer.from(bytes);
+}
+
+/**
+ * Returns a presigned GET URL without an ownership check.
+ * No ownership check — callers must verify access at the DB level first.
+ */
+export async function getPresignedDownloadUrlForKey(
+  key: string,
+): Promise<{ downloadUrl: string; expiresIn: number }> {
+  const cmd = new GetObjectCommand({ Bucket: BUCKET, Key: key });
+  const downloadUrl = await getSignedUrl(getS3Client(), cmd, { expiresIn: 3600 });
+  return { downloadUrl, expiresIn: 3600 };
+}
+
+/**
+ * Deletes an S3 object by key.
+ * No ownership check — callers must verify access at the DB level first.
+ */
+export async function deleteFileByKey(key: string): Promise<void> {
+  await getS3Client().send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }));
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────

@@ -15,7 +15,6 @@
     "@aws-sdk/s3-request-presigner": "^3.1052.0",
     "@clerk/express": "^2.1.11",
     "@clerk/shared": "^4.8.7",
-    "@google-cloud/storage": "^7.19.0",
     "@replit/connectors-sdk": "^0.4.0",
     "@types/pdf-parse": "^1.1.5",
     "@workspace/api-zod": "workspace:*",
