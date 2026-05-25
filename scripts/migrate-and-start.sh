@@ -22,19 +22,53 @@ if [ -z "$DB_URL" ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# send_alert MESSAGE
+# Posts a JSON {"text": "MESSAGE"} payload to BACKUP_ALERT_WEBHOOK if set.
+# Failures are logged but never cause the script to exit non-zero on their own.
+# ---------------------------------------------------------------------------
+send_alert() {
+  _msg="$1"
+  if [ -z "$BACKUP_ALERT_WEBHOOK" ]; then
+    return 0
+  fi
+  if ! command -v curl > /dev/null 2>&1; then
+    echo "WARNING: BACKUP_ALERT_WEBHOOK is set but curl is not available — alert not sent." >&2
+    return 0
+  fi
+  _escaped="$(printf '%s' "$_msg" | sed 's/\\/\\\\/g; s/"/\\"/g; s/$/\\n/g' | tr -d '\n' | sed 's/\\n$//')"
+  curl --silent --max-time 10 \
+    --header "Content-Type: application/json" \
+    --data "{\"text\": \"$_escaped\"}" \
+    "$BACKUP_ALERT_WEBHOOK" > /dev/null 2>&1 || \
+    echo "WARNING: Failed to deliver alert to BACKUP_ALERT_WEBHOOK." >&2
+}
+
+# ---------------------------------------------------------------------------
 # Optional pre-deploy backup (set BACKUP_BEFORE_MIGRATE=true to enable).
 # Runs scripts/pre-deploy-backup.sh and exits on failure so migrations never
 # run against a database whose backup could not be taken.
+#
+# When running in a production-like environment (NODE_ENV=production) and
+# BACKUP_BEFORE_MIGRATE is not set, a warning is printed and an alert is sent
+# so the team knows the deploy proceeded without a backup.
 # ---------------------------------------------------------------------------
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
 if [ "${BACKUP_BEFORE_MIGRATE:-false}" = "true" ]; then
-  SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
   echo "BACKUP_BEFORE_MIGRATE=true — running pre-deploy backup..."
   if ! sh "$SCRIPT_DIR/pre-deploy-backup.sh"; then
+    send_alert "[migrate-and-start] BACKUP FAILED: Pre-deploy backup script exited with an error. The deploy has been aborted. Fix the backup or unset BACKUP_BEFORE_MIGRATE to skip."
     echo "ERROR: Pre-deploy backup failed — aborting deploy." >&2
     echo "       Fix the backup error or unset BACKUP_BEFORE_MIGRATE to skip." >&2
     exit 1
   fi
   echo "Pre-deploy backup complete."
+elif [ "${NODE_ENV:-}" = "production" ]; then
+  _warn="[migrate-and-start] WARNING: Deploying to production without a pre-deploy backup. Set BACKUP_BEFORE_MIGRATE=true to enable automatic backups before migrations."
+  echo "WARNING: BACKUP_BEFORE_MIGRATE is not set — skipping pre-deploy backup." >&2
+  echo "         Running in NODE_ENV=production without a backup is risky." >&2
+  echo "         Set BACKUP_BEFORE_MIGRATE=true to enable automatic backups." >&2
+  send_alert "$_warn"
 fi
 
 # ---------------------------------------------------------------------------

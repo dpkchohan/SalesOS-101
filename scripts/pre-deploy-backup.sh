@@ -18,6 +18,9 @@ set -e
 #                            /tmp/db_backups/ for the lifetime of the process.
 #   BACKUP_RETAIN_LOCAL    — set to "true" to keep the local dump file even
 #                            after a successful upload (default: deleted).
+#   BACKUP_ALERT_WEBHOOK   — URL to POST a JSON alert payload when the backup
+#                            fails. Compatible with Slack incoming webhooks and
+#                            any service that accepts {"text": "..."}.
 #
 # Upload tools used (whichever is found first):
 #   AWS S3 / S3-compatible  → aws cli   (s3:// prefix)
@@ -29,15 +32,39 @@ set -e
 # See also: docs/migration-recovery.md
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# send_alert MESSAGE
+# Posts a JSON {"text": "MESSAGE"} payload to BACKUP_ALERT_WEBHOOK if set.
+# Failures are logged but never cause the script to exit non-zero on their own.
+# ---------------------------------------------------------------------------
+send_alert() {
+  _msg="$1"
+  if [ -z "$BACKUP_ALERT_WEBHOOK" ]; then
+    return 0
+  fi
+  if ! command -v curl > /dev/null 2>&1; then
+    echo "WARNING: BACKUP_ALERT_WEBHOOK is set but curl is not available — alert not sent." >&2
+    return 0
+  fi
+  _escaped="$(printf '%s' "$_msg" | sed 's/\\/\\\\/g; s/"/\\"/g; s/$/\\n/g' | tr -d '\n' | sed 's/\\n$//')"
+  curl --silent --max-time 10 \
+    --header "Content-Type: application/json" \
+    --data "{\"text\": \"$_escaped\"}" \
+    "$BACKUP_ALERT_WEBHOOK" > /dev/null 2>&1 || \
+    echo "WARNING: Failed to deliver alert to BACKUP_ALERT_WEBHOOK." >&2
+}
+
 DB_URL="${SUPABASE_SESSION_URL:-$DATABASE_URL}"
 
 if [ -z "$DB_URL" ]; then
+  send_alert "[pre-deploy-backup] BACKUP FAILED: No database connection string found. Set SUPABASE_SESSION_URL or DATABASE_URL."
   echo "ERROR: No database connection string found." >&2
   echo "       Set SUPABASE_SESSION_URL or DATABASE_URL." >&2
   exit 1
 fi
 
 if ! command -v pg_dump > /dev/null 2>&1; then
+  send_alert "[pre-deploy-backup] BACKUP FAILED: pg_dump not found. Install postgresql-client before running this script."
   echo "ERROR: pg_dump not found. Install postgresql-client before running this script." >&2
   exit 1
 fi
@@ -51,6 +78,7 @@ mkdir -p "$BACKUP_DIR"
 
 echo "Starting database backup (${TIMESTAMP})..."
 if ! pg_dump "$DB_URL" --format=custom --file="$BACKUP_PATH"; then
+  send_alert "[pre-deploy-backup] BACKUP FAILED: pg_dump exited with an error at ${TIMESTAMP}. Deploy has been aborted."
   echo "ERROR: pg_dump failed — aborting backup." >&2
   exit 1
 fi
@@ -74,23 +102,34 @@ REMOTE_DEST="${BUCKET_PREFIX}${BACKUP_FILE}"
 case "$BACKUP_STORAGE_BUCKET" in
   s3://*)
     if ! command -v aws > /dev/null 2>&1; then
+      send_alert "[pre-deploy-backup] BACKUP FAILED: aws CLI not found but BACKUP_STORAGE_BUCKET is an s3:// destination. Deploy has been aborted."
       echo "ERROR: aws CLI not found but BACKUP_STORAGE_BUCKET is an s3:// destination." >&2
       echo "       Install the AWS CLI or switch to a gs:// bucket with gsutil." >&2
       exit 1
     fi
     echo "Uploading to S3: ${REMOTE_DEST} ..."
-    aws s3 cp "$BACKUP_PATH" "$REMOTE_DEST"
+    if ! aws s3 cp "$BACKUP_PATH" "$REMOTE_DEST"; then
+      send_alert "[pre-deploy-backup] BACKUP FAILED: Upload to S3 destination ${REMOTE_DEST} failed at ${TIMESTAMP}. Deploy has been aborted."
+      echo "ERROR: S3 upload failed." >&2
+      exit 1
+    fi
     ;;
   gs://*)
     if ! command -v gsutil > /dev/null 2>&1; then
+      send_alert "[pre-deploy-backup] BACKUP FAILED: gsutil not found but BACKUP_STORAGE_BUCKET is a gs:// destination. Deploy has been aborted."
       echo "ERROR: gsutil not found but BACKUP_STORAGE_BUCKET is a gs:// destination." >&2
       echo "       Install the Google Cloud SDK or switch to an s3:// bucket with the AWS CLI." >&2
       exit 1
     fi
     echo "Uploading to GCS: ${REMOTE_DEST} ..."
-    gsutil cp "$BACKUP_PATH" "$REMOTE_DEST"
+    if ! gsutil cp "$BACKUP_PATH" "$REMOTE_DEST"; then
+      send_alert "[pre-deploy-backup] BACKUP FAILED: Upload to GCS destination ${REMOTE_DEST} failed at ${TIMESTAMP}. Deploy has been aborted."
+      echo "ERROR: GCS upload failed." >&2
+      exit 1
+    fi
     ;;
   *)
+    send_alert "[pre-deploy-backup] BACKUP FAILED: Unrecognised BACKUP_STORAGE_BUCKET scheme '${BACKUP_STORAGE_BUCKET}'. Deploy has been aborted."
     echo "ERROR: Unrecognised BACKUP_STORAGE_BUCKET scheme: ${BACKUP_STORAGE_BUCKET}" >&2
     echo "       Use an s3:// or gs:// destination." >&2
     exit 1
