@@ -1,9 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import {
   ClerkProvider,
   SignIn,
   SignUp,
-  Show,
   useClerk,
   useAuth,
 } from "@clerk/react";
@@ -224,29 +223,25 @@ function SignedInApp() {
   );
 }
 
+function AuthGate({ children, fallback }: { children: ReactNode; fallback: ReactNode }) {
+  const { isLoaded, isSignedIn } = useAuth();
+  if (!isLoaded) return <div className="min-h-[100dvh] bg-secondary" />;
+  return <>{isSignedIn ? children : fallback}</>;
+}
+
 function HomeRoute() {
   return (
-    <>
-      <Show when="signed-in">
-        <SignedInApp />
-      </Show>
-      <Show when="signed-out">
-        <Landing />
-      </Show>
-    </>
+    <AuthGate fallback={<Landing />}>
+      <SignedInApp />
+    </AuthGate>
   );
 }
 
 function ProtectedRoutes() {
   return (
-    <>
-      <Show when="signed-in">
-        <SignedInApp />
-      </Show>
-      <Show when="signed-out">
-        <Redirect to="/" />
-      </Show>
-    </>
+    <AuthGate fallback={<Redirect to="/" />}>
+      <SignedInApp />
+    </AuthGate>
   );
 }
 
