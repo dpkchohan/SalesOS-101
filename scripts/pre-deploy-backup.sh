@@ -18,6 +18,10 @@ set -e
 #                            /tmp/db_backups/ for the lifetime of the process.
 #   BACKUP_RETAIN_LOCAL    — set to "true" to keep the local dump file even
 #                            after a successful upload (default: deleted).
+#   BACKUP_RETAIN_DAYS     — number of days to keep remote backup files.
+#                            Dumps in the bucket older than this value are
+#                            deleted after a successful upload.
+#                            If unset, no remote files are ever deleted.
 #   BACKUP_ALERT_WEBHOOK   — URL to POST a JSON alert payload when the backup
 #                            fails. Compatible with Slack incoming webhooks and
 #                            any service that accepts {"text": "..."}.
@@ -137,6 +141,63 @@ case "$BACKUP_STORAGE_BUCKET" in
 esac
 
 echo "Backup uploaded successfully: ${REMOTE_DEST}"
+
+# ---------------------------------------------------------------------------
+# Remote retention cleanup — delete dumps older than BACKUP_RETAIN_DAYS.
+# ---------------------------------------------------------------------------
+if [ -z "$BACKUP_RETAIN_DAYS" ]; then
+  echo "BACKUP_RETAIN_DAYS is not set — skipping remote retention cleanup."
+else
+  # Validate that the value is a positive integer.
+  case "$BACKUP_RETAIN_DAYS" in
+    ''|*[!0-9]*)
+      echo "WARNING: BACKUP_RETAIN_DAYS='${BACKUP_RETAIN_DAYS}' is not a positive integer — skipping retention cleanup." >&2
+      ;;
+    *)
+      # Compute cutoff date as YYYYMMDD integer for filename comparison.
+      # date -d is a GNU coreutils extension standard on Linux deploy runners.
+      CUTOFF_DATE="$(date -d "${BACKUP_RETAIN_DAYS} days ago" +%Y%m%d 2>/dev/null)" || {
+        echo "WARNING: Could not compute cutoff date (GNU date required) — skipping retention cleanup." >&2
+        CUTOFF_DATE=""
+      }
+
+      if [ -n "$CUTOFF_DATE" ]; then
+        echo "Retention policy: removing remote dumps with a date older than ${CUTOFF_DATE} (${BACKUP_RETAIN_DAYS} days)..."
+
+        case "$BACKUP_STORAGE_BUCKET" in
+          s3://*)
+            # List objects under the bucket prefix; filenames are in column 4.
+            aws s3 ls "${BUCKET_PREFIX}" 2>/dev/null | while IFS= read -r _line; do
+              _fname="$(printf '%s' "$_line" | awk '{print $4}')"
+              # Extract embedded date: backup_YYYYMMDD_HHMMSS.dump → YYYYMMDD
+              _fdate="$(printf '%s' "$_fname" | sed -n 's/^backup_\([0-9]\{8\}\)_[0-9]\{6\}\.dump$/\1/p')"
+              if [ -n "$_fdate" ] && [ "$_fdate" -lt "$CUTOFF_DATE" ] 2>/dev/null; then
+                echo "  Deleting old backup: ${BUCKET_PREFIX}${_fname}"
+                aws s3 rm "${BUCKET_PREFIX}${_fname}" || \
+                  echo "  WARNING: Failed to delete ${BUCKET_PREFIX}${_fname}" >&2
+              fi
+            done
+            ;;
+          gs://*)
+            # gsutil ls -l prints: SIZE  DATE  gs://bucket/prefix/filename
+            gsutil ls -l "${BUCKET_PREFIX}" 2>/dev/null | while IFS= read -r _line; do
+              _remote="$(printf '%s' "$_line" | awk '{print $3}')"
+              _fname="$(basename "$_remote")"
+              _fdate="$(printf '%s' "$_fname" | sed -n 's/^backup_\([0-9]\{8\}\)_[0-9]\{6\}\.dump$/\1/p')"
+              if [ -n "$_fdate" ] && [ "$_fdate" -lt "$CUTOFF_DATE" ] 2>/dev/null; then
+                echo "  Deleting old backup: ${_remote}"
+                gsutil rm "$_remote" || \
+                  echo "  WARNING: Failed to delete ${_remote}" >&2
+              fi
+            done
+            ;;
+        esac
+
+        echo "Retention cleanup complete."
+      fi
+      ;;
+  esac
+fi
 
 # Clean up the local dump unless explicitly asked to retain it.
 if [ "${BACKUP_RETAIN_LOCAL:-false}" != "true" ]; then
