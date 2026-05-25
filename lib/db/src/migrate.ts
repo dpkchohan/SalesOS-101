@@ -21,23 +21,76 @@ import { fileURLToPath } from "url";
 
 const { Pool } = pg;
 
-const connectionString =
-  process.env.SUPABASE_SESSION_URL ?? process.env.DATABASE_URL;
+function buildConnectionString(): string {
+  let cs = process.env.SUPABASE_SESSION_URL ?? process.env.DATABASE_URL;
 
-if (!connectionString) {
-  console.error(
-    "ERROR: No database connection string found.\n" +
-      "       Set SUPABASE_SESSION_URL or DATABASE_URL.",
-  );
-  process.exit(1);
+  if (!cs) {
+    console.error(
+      "ERROR: No database connection string found.\n" +
+        "       Set SUPABASE_SESSION_URL or DATABASE_URL.",
+    );
+    process.exit(1);
+  }
+
+  // Always override the password with SUPABASE_DB_PASSWORD when available.
+  // The stored URL may have a stale or missing password — this ensures the
+  // correct credential is always used for migrations.
+  const dbPassword = process.env.SUPABASE_DB_PASSWORD;
+  if (dbPassword) {
+    try {
+      const u = new URL(cs);
+      u.password = encodeURIComponent(dbPassword);
+      cs = u.toString();
+    } catch {
+      // not a valid URL — leave as-is
+    }
+  }
+
+  return cs;
 }
+
+const connectionString = buildConnectionString();
 
 const isLocalDb = /localhost|127\.0\.0\.1|0\.0\.0\.0/.test(connectionString);
 
+// Supabase pooler uses a self-signed certificate chain.  We must pass
+// rejectUnauthorized:false AND override checkServerIdentity to prevent
+// newer versions of node-postgres from re-enabling strict verification
+// via the sslmode=require query parameter.
+const sslConfig = isLocalDb
+  ? undefined
+  : { rejectUnauthorized: false, checkServerIdentity: (): undefined => undefined };
+
 const pool = new Pool({
   connectionString,
-  ...(isLocalDb ? {} : { ssl: { rejectUnauthorized: false } }),
+  ...(sslConfig ? { ssl: sslConfig } : {}),
 });
+
+// Pre-create the drizzle tracking schema OUTSIDE any transaction.
+// Supabase session pooler (PgBouncer in transaction mode, port 5432) rejects
+// CREATE SCHEMA when Drizzle's migrator runs it inside a transaction block
+// on first-run setup.  Creating it here beforehand is idempotent and safe.
+const client = await pool.connect();
+try {
+  await client.query('CREATE SCHEMA IF NOT EXISTS "drizzle"');
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS "drizzle"."__drizzle_migrations" (
+      id SERIAL PRIMARY KEY,
+      hash TEXT NOT NULL,
+      created_at BIGINT
+    )
+  `);
+} catch (err) {
+  console.error(
+    "Failed to pre-create drizzle tracking schema:",
+    err instanceof Error ? err.message : err,
+  );
+  client.release();
+  await pool.end();
+  process.exit(1);
+} finally {
+  client.release();
+}
 
 const db = drizzle(pool);
 
