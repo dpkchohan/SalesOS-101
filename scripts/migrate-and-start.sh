@@ -13,14 +13,6 @@ set -e
 # Recovery guide: docs/migration-recovery.md
 # ---------------------------------------------------------------------------
 
-DB_URL="${SUPABASE_SESSION_URL:-$DATABASE_URL}"
-
-if [ -z "$DB_URL" ]; then
-  echo "ERROR: No database connection string found." >&2
-  echo "       Set SUPABASE_SESSION_URL or DATABASE_URL." >&2
-  exit 1
-fi
-
 # ---------------------------------------------------------------------------
 # send_alert MESSAGE
 # Posts a JSON {"text": "MESSAGE"} payload to MIGRATION_ALERT_WEBHOOK if set,
@@ -44,6 +36,16 @@ send_alert() {
     "$_webhook" > /dev/null 2>&1 || \
     echo "WARNING: Failed to deliver alert to webhook." >&2
 }
+
+DB_URL="${SUPABASE_SESSION_URL:-$DATABASE_URL}"
+
+if [ -z "$DB_URL" ]; then
+  _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u)"
+  send_alert "[migrate-and-start] MISSING DATABASE URL at ${_ts}: No database connection string found (SUPABASE_SESSION_URL and DATABASE_URL are both unset). The server was NOT started. See docs/migration-recovery.md for recovery steps."
+  echo "ERROR: No database connection string found." >&2
+  echo "       Set SUPABASE_SESSION_URL or DATABASE_URL." >&2
+  exit 1
+fi
 
 # ---------------------------------------------------------------------------
 # Optional pre-deploy backup (set BACKUP_BEFORE_MIGRATE=true to enable).
@@ -94,6 +96,8 @@ fi
 echo "Checking database connectivity..."
 if command -v psql > /dev/null 2>&1; then
   if ! psql "$DB_URL" -c "SELECT 1" > /dev/null 2>&1; then
+    _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u)"
+    send_alert "[migrate-and-start] DATABASE UNREACHABLE at ${_ts}: The connectivity pre-check (psql) could not connect to the database. The server was NOT started. Check your connection string and network access, then see docs/migration-recovery.md for recovery steps."
     echo "ERROR: Cannot connect to the database. Check your connection string and network access." >&2
     exit 1
   fi
