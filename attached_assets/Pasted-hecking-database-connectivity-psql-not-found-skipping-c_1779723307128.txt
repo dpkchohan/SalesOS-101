@@ -1,0 +1,26 @@
+hecking database connectivity...
+psql not found — skipping connectivity pre-check.
+Running database migrations...
+> @workspace/db@0.0.0 migrate /app/lib/db
+> tsx ./src/migrate.ts
+Running migrations from: /app/lib/db/migrations
+Each migration is wrapped in a transaction — a failure rolls back the entire migration automatically.
+All migrations applied successfully.
+Migrations complete. Starting server...
+{"level":30,"time":1779722705763,"pid":1,"hostname":"1afd0024de2d","webRoot":"/app/artifacts/salesos-web/dist/public","exists":false,"msg":"SPA static root"}
+{"level":40,"time":1779722705815,"pid":1,"hostname":"1afd0024de2d","pending":["0000_absent_ted_forrester"],"applied":1,"total":2,"msg":"migrationCheck: PENDING MIGRATIONS DETECTED — run migrate-and-start.sh or `pnpm --filter @workspace/db run migrate` to apply them"}
+{"level":30,"time":1779722705818,"pid":1,"hostname":"1afd0024de2d","port":3000,"host":"0.0.0.0","msg":"Server listening"}
+{"level":30,"time":1779722705819,"pid":1,"hostname":"1afd0024de2d","job":"cleanupTempFiles","msg":"Starting temp file cleanup"}
+{"level":30,"time":1779722705941,"pid":1,"hostname":"1afd0024de2d","job":"cleanupTempFiles","listed":0,"deleted":0,"errors":0,"msg":"Temp file cleanup complete — 0 deleted, 0 errors"}
+{"level":30,"time":1779723005858,"pid":1,"hostname":"1afd0024de2d","job":"cleanupTempFiles","msg":"Starting temp file cleanup"}
+{"level":30,"time":1779723005921,"pid":1,"hostname":"1afd0024de2d","job":"cleanupTempFiles","listed":0,"deleted":0,"errors":0,"msg":"Temp file cleanup complete — 0 deleted, 0 errors"}
+{"level":30,"time":1779723177731,"pid":1,"hostname":"1afd0024de2d","req":{"id":1,"method":"OPTIONS","url":"/api/dashboard/summary"},"res":{"statusCode":204},"responseTime":3,"msg":"request completed"}
+{"level":30,"time":1779723178266,"pid":1,"hostname":"1afd0024de2d","req":{"id":2,"method":"GET","url":"/api/dashboard/summary"},"res":{"statusCode":304},"responseTime":507,"msg":"request completed"}
+{"level":30,"time":1779723179563,"pid":1,"hostname":"1afd0024de2d","req":{"id":3,"method":"OPTIONS","url":"/api/me"},"res":{"statusCode":204},"responseTime":1,"msg":"request completed"}
+{"level":30,"time":1779723179566,"pid":1,"hostname":"1afd0024de2d","req":{"id":4,"method":"OPTIONS","url":"/api/integrations/calendar-status"},"res":{"statusCode":204},"responseTime":1,"msg":"request completed"}
+{"level":30,"time":1779723179614,"pid":1,"hostname":"1afd0024de2d","req":{"id":5,"method":"GET","url":"/api/integrations/calendar-status"},"res":{"statusCode":304},"responseTime":25,"msg":"request completed"}
+{"level":30,"time":1779723179633,"pid":1,"hostname":"1afd0024de2d","req":{"id":6,"method":"GET","url":"/api/me"},"res":{"statusCode":304},"responseTime":42,"msg":"request completed"}
+{"level":30,"time":1779723181434,"pid":1,"hostname":"1afd0024de2d","req":{"id":7,"method":"GET","url":"/api/auth/google/connect"},"res":{"statusCode":302},"responseTime":372,"msg":"request completed"}
+{"level":30,"time":1779723195910,"pid":1,"hostname":"1afd0024de2d","req":{"id":8,"method":"GET","url":"/api/auth/google/connect"},"res":{"statusCode":307},"responseTime":4,"msg":"request completed"}
+{"level":30,"time":1779723196313,"pid":1,"hostname":"1afd0024de2d","req":{"id":9,"method":"GET","url":"/api/auth/google/connect"},"res":{"statusCode":302},"responseTime":29,"msg":"request completed"}
+{"level":30,"time":1779723224907,"pid":1,"hostname":"1afd0024de2d","req":{"id":10,"method":"GET","url":"/api/auth/google/callback"},"res":{"statusCode":302},"responseTime":288,"msg":"request completed"}

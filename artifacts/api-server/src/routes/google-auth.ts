@@ -96,7 +96,8 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
     res.redirect(`${FRONTEND_URL}/settings?google=connected`);
   } catch (err) {
     req.log.error({ err }, "Google OAuth callback failed");
-    res.redirect(`${FRONTEND_URL}/settings?google=error&reason=token_exchange`);
+    const reason = err instanceof Error ? encodeURIComponent(err.message) : "token_exchange";
+    res.redirect(`${FRONTEND_URL}/settings?google=error&reason=${reason}`);
   }
 });
 
