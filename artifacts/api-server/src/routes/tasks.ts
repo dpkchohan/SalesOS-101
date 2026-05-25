@@ -46,12 +46,13 @@ function buildEvent(row: {
 
 async function syncCreateEvent(
   log: Logger,
+  userId: string,
   row: { id: string; title: string; description: string | null; dueDate: string | null; dueTime: string | null },
 ): Promise<string | null> {
   const ev = buildEvent(row);
   if (!ev) return null;
   try {
-    const { id } = await createCalendarEvent(ev);
+    const { id } = await createCalendarEvent(userId, ev);
     return id;
   } catch (err) {
     log.warn({ err, taskId: row.id }, "Calendar event create skipped");
@@ -61,6 +62,7 @@ async function syncCreateEvent(
 
 async function syncUpdateEvent(
   log: Logger,
+  userId: string,
   row: {
     id: string;
     title: string;
@@ -74,7 +76,7 @@ async function syncUpdateEvent(
   if (row.completedAt || !row.dueDate) {
     if (row.calendarEventId) {
       try {
-        await deleteCalendarEvent(row.calendarEventId);
+        await deleteCalendarEvent(userId, row.calendarEventId);
         return null;
       } catch (err) {
         log.warn(
@@ -89,13 +91,13 @@ async function syncUpdateEvent(
   const ev = buildEvent(row)!;
   if (row.calendarEventId) {
     try {
-      await updateCalendarEvent(row.calendarEventId, ev);
+      await updateCalendarEvent(userId, row.calendarEventId, ev);
       return row.calendarEventId;
     } catch (err) {
       if (err instanceof CalendarEventGoneError) {
         log.info({ taskId: row.id }, "Calendar event gone; recreating");
         try {
-          const { id } = await createCalendarEvent(ev);
+          const { id } = await createCalendarEvent(userId, ev);
           return id;
         } catch (err2) {
           log.warn({ err: err2, taskId: row.id }, "Calendar event recreate skipped");
@@ -107,7 +109,7 @@ async function syncUpdateEvent(
     }
   }
   try {
-    const { id } = await createCalendarEvent(ev);
+    const { id } = await createCalendarEvent(userId, ev);
     return id;
   } catch (err) {
     log.warn({ err, taskId: row.id }, "Calendar event create skipped");
@@ -179,7 +181,7 @@ router.post("/tasks", requireAuth, async (req, res): Promise<void> => {
       })
       .returning();
 
-    const eventId = await syncCreateEvent(req.log, row);
+    const eventId = await syncCreateEvent(req.log, r.userId, row);
     if (eventId) {
       await db
         .update(tasksTable)
@@ -219,7 +221,7 @@ router.put("/tasks/:id", requireAuth, async (req, res): Promise<void> => {
       return;
     }
 
-    const newEventId = await syncUpdateEvent(req.log, row);
+    const newEventId = await syncUpdateEvent(req.log, r.userId, row);
     if (newEventId !== row.calendarEventId) {
       await db
         .update(tasksTable)
@@ -254,7 +256,7 @@ router.delete("/tasks/:id", requireAuth, async (req, res): Promise<void> => {
     }
     if (existing.calendarEventId) {
       try {
-        await deleteCalendarEvent(existing.calendarEventId);
+        await deleteCalendarEvent(r.userId, existing.calendarEventId);
       } catch (err) {
         req.log.warn({ err, taskId: existing.id }, "Calendar event delete skipped");
       }

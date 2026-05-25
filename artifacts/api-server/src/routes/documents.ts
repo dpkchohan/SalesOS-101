@@ -351,7 +351,7 @@ router.post("/documents/:id/send-email", requireAuth, async (req, res): Promise<
 
     let gmailMessageId: string | null = null;
     try {
-      const sendRes = await sendProposalEmail({
+      const sendRes = await sendProposalEmail(r.userId, {
         to: recipient,
         subject,
         html: doc.content,
@@ -362,7 +362,7 @@ router.post("/documents/:id/send-email", requireAuth, async (req, res): Promise<
       req.log.error({ err }, "Gmail send failed");
       res.status(502).json({
         error:
-          "Couldn't send via Gmail. Reconnect your Gmail account in Replit integrations and try again.",
+          "Couldn't send via Gmail. Reconnect your Google account in settings and try again.",
       });
       return;
     }

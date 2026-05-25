@@ -21,6 +21,7 @@ import companyCredentialsRouter from "./companyCredentials";
 import integrationsRouter from "./integrations";
 import attachmentsRouter from "./attachments";
 import adminRouter from "./admin";
+import googleAuthRouter from "./google-auth";
 
 const router: IRouter = Router();
 
@@ -46,5 +47,6 @@ router.use(companyCredentialsRouter);
 router.use(integrationsRouter);
 router.use(attachmentsRouter);
 router.use(adminRouter);
+router.use(googleAuthRouter);
 
 export default router;

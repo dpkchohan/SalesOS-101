@@ -1,4 +1,4 @@
-import { ReplitConnectors } from "@replit/connectors-sdk";
+import { getValidAccessToken } from "./googleTokens";
 
 export interface SendEmailParams {
   to: string;
@@ -41,18 +41,20 @@ function buildRawMime({ to, subject, html, fromName }: SendEmailParams): string 
   return lines.join("\r\n");
 }
 
-export async function sendProposalEmail(params: SendEmailParams): Promise<{ id: string | null }> {
-  const connectors = new ReplitConnectors();
+export async function sendProposalEmail(
+  userId: string,
+  params: SendEmailParams,
+): Promise<{ id: string | null }> {
+  const token = await getValidAccessToken(userId);
   const raw = base64Url(buildRawMime(params));
-  const response = await connectors.proxy(
-    "google-mail",
-    "/gmail/v1/users/me/messages/send",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ raw }),
+  const response = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
     },
-  );
+    body: JSON.stringify({ raw }),
+  });
   if (!response.ok) {
     const text = await response.text().catch(() => "");
     throw new Error(`Gmail send failed (${response.status}): ${text.slice(0, 500)}`);

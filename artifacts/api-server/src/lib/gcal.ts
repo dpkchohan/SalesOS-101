@@ -1,7 +1,7 @@
-import { ReplitConnectors } from "@replit/connectors-sdk";
+import { getValidAccessToken, NoGoogleConnectionError } from "./googleTokens";
 
 const CALENDAR_ID = "primary";
-const PROXY_BASE = `/calendar/v3/calendars/${CALENDAR_ID}/events`;
+const GCAL_BASE = `https://www.googleapis.com/calendar/v3/calendars/${CALENDAR_ID}/events`;
 
 export interface CalendarEventInput {
   title: string;
@@ -52,7 +52,6 @@ function buildEventBody(input: CalendarEventInput): Record<string, unknown> {
       end: { dateTime: endIso, timeZone: tz },
     };
   }
-  // All-day event: Google Calendar requires end.date to be EXCLUSIVE (the day after start).
   return {
     summary: input.title,
     description: input.description ?? "",
@@ -61,13 +60,28 @@ function buildEventBody(input: CalendarEventInput): Record<string, unknown> {
   };
 }
 
+async function calendarFetch(
+  userId: string,
+  url: string,
+  init: RequestInit,
+): Promise<Response> {
+  const token = await getValidAccessToken(userId);
+  return fetch(url, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      ...(init.headers as Record<string, string> | undefined),
+    },
+  });
+}
+
 export async function createCalendarEvent(
+  userId: string,
   input: CalendarEventInput,
 ): Promise<{ id: string; htmlLink: string | null }> {
-  const connectors = new ReplitConnectors();
-  const res = await connectors.proxy("google-calendar", PROXY_BASE, {
+  const res = await calendarFetch(userId, GCAL_BASE, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(buildEventBody(input)),
   });
   if (!res.ok) {
@@ -87,16 +101,15 @@ export class CalendarEventGoneError extends Error {
 }
 
 export async function updateCalendarEvent(
+  userId: string,
   eventId: string,
   input: CalendarEventInput,
 ): Promise<void> {
-  const connectors = new ReplitConnectors();
-  const res = await connectors.proxy(
-    "google-calendar",
-    `${PROXY_BASE}/${encodeURIComponent(eventId)}`,
+  const res = await calendarFetch(
+    userId,
+    `${GCAL_BASE}/${encodeURIComponent(eventId)}`,
     {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(buildEventBody(input)),
     },
   );
@@ -109,11 +122,13 @@ export async function updateCalendarEvent(
   }
 }
 
-export async function deleteCalendarEvent(eventId: string): Promise<void> {
-  const connectors = new ReplitConnectors();
-  const res = await connectors.proxy(
-    "google-calendar",
-    `${PROXY_BASE}/${encodeURIComponent(eventId)}`,
+export async function deleteCalendarEvent(
+  userId: string,
+  eventId: string,
+): Promise<void> {
+  const res = await calendarFetch(
+    userId,
+    `${GCAL_BASE}/${encodeURIComponent(eventId)}`,
     { method: "DELETE" },
   );
   if (!res.ok && res.status !== 404 && res.status !== 410) {
@@ -132,10 +147,10 @@ export interface CalendarEvent {
 }
 
 export async function listUpcomingEvents(
+  userId: string,
   maxResults = 10,
   days = 7,
 ): Promise<CalendarEvent[]> {
-  const connectors = new ReplitConnectors();
   const now = new Date().toISOString();
   const future = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
   const qs = new URLSearchParams({
@@ -145,11 +160,7 @@ export async function listUpcomingEvents(
     singleEvents: "true",
     orderBy: "startTime",
   });
-  const res = await connectors.proxy(
-    "google-calendar",
-    `${PROXY_BASE}?${qs}`,
-    { method: "GET" },
-  );
+  const res = await calendarFetch(userId, `${GCAL_BASE}?${qs}`, { method: "GET" });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`Calendar list failed (${res.status}): ${text.slice(0, 300)}`);
@@ -174,17 +185,16 @@ export async function listUpcomingEvents(
   }));
 }
 
-export async function checkCalendarConnection(): Promise<{
+export async function checkCalendarConnection(userId: string): Promise<{
   connected: boolean;
   email: string | null;
   error: string | null;
 }> {
   try {
-    const connectors = new ReplitConnectors();
-    const res = await connectors.proxy(
-      "google-calendar",
-      "/calendar/v3/users/me/calendarList?maxResults=1",
-      { method: "GET" },
+    const token = await getValidAccessToken(userId);
+    const res = await fetch(
+      "https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=1",
+      { headers: { Authorization: `Bearer ${token}` } },
     );
     if (!res.ok) {
       return { connected: false, email: null, error: `HTTP ${res.status}` };
@@ -199,6 +209,9 @@ export async function checkCalendarConnection(): Promise<{
       error: null,
     };
   } catch (err) {
+    if (err instanceof NoGoogleConnectionError) {
+      return { connected: false, email: null, error: null };
+    }
     return {
       connected: false,
       email: null,

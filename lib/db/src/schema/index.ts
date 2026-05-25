@@ -13,3 +13,4 @@ export * from "./chatAttachments";
 export * from "./feedback";
 export * from "./errors";
 export * from "./storage";
+export * from "./googleConnections";

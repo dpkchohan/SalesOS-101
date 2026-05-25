@@ -28,6 +28,7 @@ import {
 import { PageHeader } from "@/components/AppLayout";
 import { initials } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { getApiUrl } from "@/lib/api";
 
 type Tab = "account" | "company";
 
@@ -122,14 +123,50 @@ function CalendarStatusCard() {
   const { data, isLoading, refetch, isFetching } = useGetCalendarStatus({
     query: { staleTime: 60_000, refetchOnWindowFocus: false, queryKey: ["calendarStatus"] },
   });
+  const [notice, setNotice] = useState<{ msg: string; ok: boolean } | null>(null);
+  const [disconnecting, setDisconnecting] = useState(false);
   const connected = data?.connected === true;
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const google = params.get("google");
+    if (!google) return;
+    if (google === "connected") {
+      setNotice({ msg: "Google account connected successfully.", ok: true });
+      refetch();
+    } else if (google === "denied") {
+      setNotice({ msg: "Google authorisation was cancelled.", ok: false });
+    } else if (google === "error") {
+      setNotice({ msg: "Google connection failed — please try again.", ok: false });
+    }
+    const url = new URL(window.location.href);
+    url.searchParams.delete("google");
+    url.searchParams.delete("reason");
+    window.history.replaceState({}, "", url.toString());
+  }, [refetch]);
+
   const onConnect = () => {
-    window.open(
-      "https://replit.com/integrations/google-calendar",
-      "_blank",
-      "noopener,noreferrer",
-    );
+    window.location.href = getApiUrl("/api/auth/google/connect");
   };
+
+  const onDisconnect = async () => {
+    setDisconnecting(true);
+    setNotice(null);
+    try {
+      const res = await fetch(getApiUrl("/api/auth/google/disconnect"), {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("disconnect failed");
+      setNotice({ msg: "Google account disconnected.", ok: true });
+      refetch();
+    } catch {
+      setNotice({ msg: "Failed to disconnect — please try again.", ok: false });
+    } finally {
+      setDisconnecting(false);
+    }
+  };
+
   return (
     <div
       className="rounded-2xl bg-card border border-card-border p-5"
@@ -138,6 +175,18 @@ function CalendarStatusCard() {
       <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground font-bold mb-3">
         <Calendar size={14} /> Integrations
       </div>
+      {notice && (
+        <div
+          className={cn(
+            "text-[12px] mb-3 px-3 py-2 rounded-lg",
+            notice.ok
+              ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+              : "bg-rose-500/10 text-rose-700 dark:text-rose-400",
+          )}
+        >
+          {notice.msg}
+        </div>
+      )}
       <div className="flex items-start gap-3">
         <div
           className={cn(
@@ -150,13 +199,13 @@ function CalendarStatusCard() {
           <Calendar size={18} />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="font-semibold text-[14px]">Google Calendar</div>
+          <div className="font-semibold text-[14px]">Google (Calendar + Gmail)</div>
           <div className="text-[12px] text-muted-foreground mt-0.5">
             {isLoading
               ? "Checking…"
               : connected
-                ? `Connected${data?.email ? ` as ${data.email}` : ""}. Tasks with a due date sync automatically.`
-                : "Authorize Google Calendar so SalesOS can keep your follow-ups in sync with your day."}
+                ? `Connected${data?.email ? ` as ${data.email}` : ""}. Tasks sync to Calendar and proposals send via Gmail.`
+                : "Connect your Google account to sync tasks to Calendar and send proposals via Gmail."}
           </div>
         </div>
         <span
@@ -171,7 +220,7 @@ function CalendarStatusCard() {
           {isLoading ? "…" : connected ? "Connected" : "Off"}
         </span>
       </div>
-      <div className="flex gap-2 mt-3">
+      <div className="flex gap-2 mt-3 flex-wrap">
         {!connected && (
           <button
             type="button"
@@ -180,7 +229,18 @@ function CalendarStatusCard() {
             className="px-3 py-1.5 text-[12px] font-semibold rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
             data-testid="button-connect-calendar"
           >
-            Connect Google Calendar
+            Connect Google
+          </button>
+        )}
+        {connected && (
+          <button
+            type="button"
+            onClick={onDisconnect}
+            disabled={disconnecting}
+            className="px-3 py-1.5 text-[12px] font-semibold rounded-md bg-rose-500/10 text-rose-700 dark:text-rose-400 hover:bg-rose-500/20 disabled:opacity-60"
+            data-testid="button-disconnect-google"
+          >
+            {disconnecting ? "Disconnecting…" : "Disconnect"}
           </button>
         )}
         <button
@@ -190,7 +250,7 @@ function CalendarStatusCard() {
           className="px-3 py-1.5 text-[12px] font-semibold rounded-md bg-muted text-muted-foreground hover:bg-muted/70 disabled:opacity-60"
           data-testid="button-refresh-calendar"
         >
-          {isFetching ? "Checking…" : connected ? "Recheck status" : "I've authorized — recheck"}
+          {isFetching ? "Checking…" : "Recheck status"}
         </button>
       </div>
     </div>
