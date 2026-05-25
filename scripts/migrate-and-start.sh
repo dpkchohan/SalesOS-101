@@ -22,6 +22,22 @@ if [ -z "$DB_URL" ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# Optional pre-deploy backup (set BACKUP_BEFORE_MIGRATE=true to enable).
+# Runs scripts/pre-deploy-backup.sh and exits on failure so migrations never
+# run against a database whose backup could not be taken.
+# ---------------------------------------------------------------------------
+if [ "${BACKUP_BEFORE_MIGRATE:-false}" = "true" ]; then
+  SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+  echo "BACKUP_BEFORE_MIGRATE=true — running pre-deploy backup..."
+  if ! sh "$SCRIPT_DIR/pre-deploy-backup.sh"; then
+    echo "ERROR: Pre-deploy backup failed — aborting deploy." >&2
+    echo "       Fix the backup error or unset BACKUP_BEFORE_MIGRATE to skip." >&2
+    exit 1
+  fi
+  echo "Pre-deploy backup complete."
+fi
+
+# ---------------------------------------------------------------------------
 # Pre-flight: verify the database is reachable before touching the schema.
 # ---------------------------------------------------------------------------
 echo "Checking database connectivity..."

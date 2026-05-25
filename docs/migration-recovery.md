@@ -131,7 +131,7 @@ Then redeploy. The `migrate-and-start.sh` script will re-attempt any migration n
 | Use `IF NOT EXISTS` / `IF EXISTS` guards on `CREATE` and `DROP` | Makes statements idempotent so partial re-runs are safe |
 | Never delete a migration file that has already been applied to any environment | Drizzle will try to fill the gap and produce unpredictable results |
 | Test migrations against a staging DB before deploying to production | Catches constraint violations before they affect live data |
-| Take a database backup (`pg_dump`) before each production deploy | Gives you a restore point if Option B above is needed |
+| Take a database backup (`pg_dump`) before each production deploy | Gives you a restore point if Option B above is needed — set `BACKUP_BEFORE_MIGRATE=true` to automate this via `scripts/pre-deploy-backup.sh` |
 
 ---
 
