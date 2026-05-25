@@ -8,7 +8,7 @@ The simplest CRM for the world's most complex job  —a conversational, AI-power
  
 ## What is SalesOS?
  
-SalesOS is a CRM that works like WhatsApp, not like enterprise software. A sales rep opens the app, sees their deals, talks to Claude (voice or text), and closes deals. No forms, no menus, no learning curve.
+SalesOS is a CRM that works like WhatsApp, not like enterprise software. A sales rep opens the app, sees their deals, talks to Claude (voice or text), and closes deals. No forms, no menus, no learning curve..
 
 Most CRMs fail because reps don't use them. SalesOS is built around a single principle: **a rep should only ever see 4–5 things, and AI handles the rest in the background.**
 
