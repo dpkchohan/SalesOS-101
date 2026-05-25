@@ -6,3 +6,6 @@ cmds = ['pnpm install --no-frozen-lockfile']
 
 [phases.build]
 cmds = ['pnpm --filter @workspace/api-server run build']
+
+[start]
+cmd = 'sh scripts/migrate-and-start.sh'

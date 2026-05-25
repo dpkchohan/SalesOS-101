@@ -29,4 +29,7 @@ EXPOSE 3000
 ENV NODE_ENV=production
 ENV PORT=3000
 
-CMD ["node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs"]
+COPY scripts/migrate-and-start.sh scripts/migrate-and-start.sh
+RUN chmod +x scripts/migrate-and-start.sh
+
+CMD ["sh", "scripts/migrate-and-start.sh"]
