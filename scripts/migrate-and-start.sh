@@ -23,24 +23,26 @@ fi
 
 # ---------------------------------------------------------------------------
 # send_alert MESSAGE
-# Posts a JSON {"text": "MESSAGE"} payload to BACKUP_ALERT_WEBHOOK if set.
+# Posts a JSON {"text": "MESSAGE"} payload to MIGRATION_ALERT_WEBHOOK if set,
+# falling back to BACKUP_ALERT_WEBHOOK.
 # Failures are logged but never cause the script to exit non-zero on their own.
 # ---------------------------------------------------------------------------
 send_alert() {
   _msg="$1"
-  if [ -z "$BACKUP_ALERT_WEBHOOK" ]; then
+  _webhook="${MIGRATION_ALERT_WEBHOOK:-$BACKUP_ALERT_WEBHOOK}"
+  if [ -z "$_webhook" ]; then
     return 0
   fi
   if ! command -v curl > /dev/null 2>&1; then
-    echo "WARNING: BACKUP_ALERT_WEBHOOK is set but curl is not available — alert not sent." >&2
+    echo "WARNING: Alert webhook is set but curl is not available — alert not sent." >&2
     return 0
   fi
   _escaped="$(printf '%s' "$_msg" | sed 's/\\/\\\\/g; s/"/\\"/g; s/$/\\n/g' | tr -d '\n' | sed 's/\\n$//')"
   curl --silent --max-time 10 \
     --header "Content-Type: application/json" \
     --data "{\"text\": \"$_escaped\"}" \
-    "$BACKUP_ALERT_WEBHOOK" > /dev/null 2>&1 || \
-    echo "WARNING: Failed to deliver alert to BACKUP_ALERT_WEBHOOK." >&2
+    "$_webhook" > /dev/null 2>&1 || \
+    echo "WARNING: Failed to deliver alert to webhook." >&2
 }
 
 # ---------------------------------------------------------------------------
@@ -107,6 +109,8 @@ fi
 # ---------------------------------------------------------------------------
 echo "Running database migrations..."
 if ! pnpm --filter @workspace/db run migrate; then
+  _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u)"
+  send_alert "[migrate-and-start] MIGRATION FAILED at ${_ts}: The database migration step exited with an error and the server was NOT started. The database may be in a partially-applied state. Follow the recovery steps in docs/migration-recovery.md before attempting another deploy."
   echo "" >&2
   echo "================================================================" >&2
   echo "  MIGRATION FAILED — server will NOT start." >&2
