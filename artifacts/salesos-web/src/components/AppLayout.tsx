@@ -14,6 +14,9 @@ import {
   Settings,
   MessageSquare,
   ShieldCheck,
+  ChevronLeft,
+  ChevronRight,
+  RotateCw,
 } from "lucide-react";
 import { initials } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -31,6 +34,38 @@ const NAV = [
 ];
 
 const ADMIN_EMAILS = ["deepak@pddt.in", "dpkchohan@gmail.com"];
+
+function NavButtons() {
+  return (
+    <div className="flex items-center">
+      <button
+        type="button"
+        onClick={() => window.history.back()}
+        disabled={window.history.length <= 1}
+        className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        title="Go back"
+      >
+        <ChevronLeft size={16} strokeWidth={2} />
+      </button>
+      <button
+        type="button"
+        onClick={() => window.history.forward()}
+        className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+        title="Go forward"
+      >
+        <ChevronRight size={16} strokeWidth={2} />
+      </button>
+      <button
+        type="button"
+        onClick={() => window.location.reload()}
+        className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+        title="Refresh"
+      >
+        <RotateCw size={14} strokeWidth={2} />
+      </button>
+    </div>
+  );
+}
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const [loc] = useLocation();
@@ -146,11 +181,20 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       </aside>
 
       <div className="flex-1 min-w-0 flex flex-col">
+        {/* Desktop-only nav strip */}
+        <div className="hidden md:flex items-center px-3 py-1 border-b border-border bg-background sticky top-0 z-30">
+          <NavButtons />
+        </div>
+
         <header className="md:hidden flex items-center justify-between px-4 py-3 border-b border-border bg-background sticky top-0 z-30">
-          <Link to="/" className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
+            <NavButtons />
+            <div className="w-px h-4 bg-border mx-1" />
+            <Link to="/" className="flex items-center gap-2">
               <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="" className="w-7 h-7 rounded-md" />
               <span className="font-bold tracking-tight">SalesOS</span>
             </Link>
+          </div>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowFeedback(true)}
