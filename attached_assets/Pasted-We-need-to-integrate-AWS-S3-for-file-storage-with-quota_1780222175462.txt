@@ -1,0 +1,70 @@
+We need to integrate AWS S3 for file storage with quota tracking. The S3 bucket salesos-production-storage already exists in ap-south-1 region.
+1. Install Dependencies
+Add to artifacts/api-server/package.json:
+
+@aws-sdk/client-s3
+@aws-sdk/s3-request-presigner
+
+2. Environment Variables (already in Coolify - don't hardcode):
+
+AWS_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY
+AWS_S3_BUCKET=salesos-production-storage
+AWS_REGION=ap-south-1
+
+3. Database Schema
+Create lib/db/src/schema/storage.ts:
+typescript// storage_usage table
+- org_id: uuid (primary key, FK to organizations)
+- used_bytes: bigint (default 0)
+- quota_bytes: bigint (default 262144000) // 250MB
+- updated_at: timestamp (default now)
+Export from lib/db/src/schema/index.ts
+4. Storage Service
+Create artifacts/api-server/src/lib/storage.ts with these functions:
+
+getPresignedUploadUrl(orgId, filename, contentType, folder) - pre-signed PUT URL, 15min expiry. Folder options: temp/imports | temp/extractions | documents/contacts | documents/deals | feedback
+getPresignedDownloadUrl(orgId, key) - pre-signed GET URL, 1hr expiry
+deleteFile(orgId, key) - delete from S3
+getStorageUsage(orgId) - returns used/quota bytes from DB
+checkQuota(orgId, fileSize) - throws error if would exceed quota
+updateStorageUsage(orgId, delta) - increment or decrement used_bytes
+
+All file keys must be prefixed with {orgId}/ for tenant isolation.
+5. API Endpoints
+Create artifacts/api-server/src/routes/storage.ts:
+POST /api/storage/upload
+
+Body: { filename, contentType, fileSize, folder }
+Auth: Required (get org_id from Clerk)
+Check quota before returning URL
+Returns: { uploadUrl, fileKey, expiresIn }
+Increment storage_usage by fileSize
+
+GET /api/storage/download/*
+
+Wildcard route - extract full file key from req.params[0]
+Auth: Required
+Verify org_id matches fileKey prefix
+Returns: { downloadUrl, expiresIn }
+
+DELETE /api/storage/*
+
+Wildcard route - extract full file key from req.params[0]
+Auth: Required
+Verify org_id ownership
+Delete from S3
+Decrement storage_usage by file size
+Returns: { success: true }
+
+GET /api/storage/usage
+
+Auth: Required
+Returns: { usedBytes, quotaBytes, usedMB, quotaMB, percentUsed }
+
+Register all routes in artifacts/api-server/src/app.ts
+6. Error Handling
+
+Quota exceeded → 413 with message "Storage quota exceeded. You have used X MB of your 250 MB allowance."
+Wrong org accessing file → 403 Forbidden
+S3 failure → 500 (log details server-side, generic message to client)

@@ -240,7 +240,7 @@ export async function checkQuota(
   const { usedBytes, quotaBytes } = await resolveStorageContext(userId, orgId);
   if (usedBytes + fileSize > quotaBytes) {
     const err = new Error(
-      `Storage quota exceeded. Used ${(usedBytes / 1_048_576).toFixed(1)} MB of ${(quotaBytes / 1_048_576).toFixed(0)} MB.`,
+      `Storage quota exceeded. You have used ${(usedBytes / 1_048_576).toFixed(1)} MB of your ${(quotaBytes / 1_048_576).toFixed(0)} MB allowance.`,
     );
     (err as Error & { statusCode: number }).statusCode = 413;
     throw err;
