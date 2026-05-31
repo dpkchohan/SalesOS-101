@@ -24,6 +24,8 @@ export interface ContactDetail {
   /** @nullable */
   title?: string | null;
   tags?: string[];
+  /** @nullable */
+  notes?: string | null;
   leads: Lead[];
   interactions: Interaction[];
   isDuplicate?: boolean;

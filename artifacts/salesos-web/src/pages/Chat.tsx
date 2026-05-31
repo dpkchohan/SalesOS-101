@@ -95,11 +95,21 @@ const DEFAULT_TTS_LANG = "en-IN";
 const DEFAULT_TTS_SPEAKER = "anushka";
 
 export default function Chat() {
+  // Read contactId from URL query params (e.g. /chat?contactId=xxx&contactName=yyy)
+  const searchParams = new URLSearchParams(
+    typeof window !== "undefined" ? window.location.search : "",
+  );
+  const urlContactId = searchParams.get("contactId") ?? null;
+  const urlContactName = searchParams.get("contactName") ?? null;
+
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Msg[]>([
     {
       id: "intro",
       role: "assistant",
-      text: "Hi. Talk to me like you would your assistant — log a call, add a task, move a deal. I'll handle the rest.",
+      text: urlContactName
+        ? `Hi. I'm ready to help you with ${urlContactName}. Log a call, add a task, move a deal — just tell me.`
+        : "Hi. Talk to me like you would your assistant — log a call, add a task, move a deal. I'll handle the rest.",
     },
   ]);
   const [input, setInput] = useState("");
@@ -380,9 +390,10 @@ export default function Chat() {
     const userMsg: Msg = { id: crypto.randomUUID(), role: "user", text };
     setMessages((m) => [...m, userMsg]);
     send.mutate(
-      { data: { text } },
+      { data: { text, contactId: urlContactId, sessionId } },
       {
         onSuccess: (resp) => {
+          if (resp.sessionId && !sessionId) setSessionId(resp.sessionId);
           const dup = resp.duplicateDetected && resp.duplicateContact
             ? {
                 id: resp.duplicateContact.id,

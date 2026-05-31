@@ -8,4 +8,8 @@
 
 export interface ChatInput {
   text: string;
+  /** @nullable */
+  contactId?: string | null;
+  /** @nullable */
+  sessionId?: string | null;
 }

@@ -9,6 +9,8 @@ import {
   documentsTable,
   companiesTable,
   companyCredentialsTable,
+  chatSessionsTable,
+  chatMessagesTable,
 } from "@workspace/db";
 import { SendChatBody, SendChatResponse } from "@workspace/api-zod";
 import { requireAuth, type AuthenticatedRequest } from "../lib/auth";
@@ -117,6 +119,46 @@ router.post("/chat", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
+  const incomingContactId = body.data.contactId ?? null;
+  const incomingSessionId = body.data.sessionId ?? null;
+
+  // Resolve or create a chat session
+  let sessionId: string | null = null;
+  try {
+    if (incomingSessionId) {
+      // Verify session belongs to this org
+      const [existing] = await db
+        .select({ id: chatSessionsTable.id })
+        .from(chatSessionsTable)
+        .where(
+          and(
+            eq(chatSessionsTable.id, incomingSessionId),
+            eq(chatSessionsTable.orgId, r.orgId),
+          ),
+        );
+      if (existing) sessionId = existing.id;
+    }
+    if (!sessionId) {
+      const [session] = await db
+        .insert(chatSessionsTable)
+        .values({
+          orgId: r.orgId,
+          userId: r.userId,
+          contactId: incomingContactId,
+        })
+        .returning();
+      sessionId = session.id;
+    }
+    // Save user message
+    await db.insert(chatMessagesTable).values({
+      sessionId,
+      role: "user",
+      content: body.data.text,
+    });
+  } catch (err) {
+    req.log.warn({ err }, "chat: failed to persist session/message — continuing without persistence");
+  }
+
   let intent: Intent;
   try {
     intent = await claudeJson<Intent>(
@@ -130,6 +172,7 @@ router.post("/chat", requireAuth, async (req, res): Promise<void> => {
         success: false,
         message: "Sorry, I couldn't understand that. Try again.",
         intent: "general",
+        sessionId,
       }),
     );
     return;
@@ -139,6 +182,7 @@ router.post("/chat", requireAuth, async (req, res): Promise<void> => {
     success: true as boolean,
     message: intent.reply ?? "Done.",
     intent: intent.intent ?? "general",
+    sessionId,
     contactId: null as string | null,
     leadId: null as string | null,
     taskId: null as string | null,
@@ -452,6 +496,19 @@ router.post("/chat", requireAuth, async (req, res): Promise<void> => {
     req.log.error({ err }, "Failed to apply chat intent");
     reply.success = false;
     reply.message = "I understood you but couldn't save that. Please try again.";
+  }
+
+  // Persist assistant reply
+  if (sessionId) {
+    try {
+      await db.insert(chatMessagesTable).values({
+        sessionId,
+        role: "assistant",
+        content: reply.message,
+      });
+    } catch (err) {
+      req.log.warn({ err }, "chat: failed to save assistant message");
+    }
   }
 
   res.json(SendChatResponse.parse(reply));

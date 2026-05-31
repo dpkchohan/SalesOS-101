@@ -40,6 +40,7 @@ function contactDto(row: typeof contactsTable.$inferSelect) {
     phone: row.phone,
     title: row.title,
     linkedinUrl: row.linkedinUrl,
+    notes: row.notes,
     tags: row.tags,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -406,10 +407,17 @@ router.get("/contacts/:id/related", requireAuth, async (req, res): Promise<void>
             .limit(20)
         : [];
 
-    // Same email domain
+    // Same email domain — skip common consumer email providers to avoid noise
+    const COMMON_EMAIL_DOMAINS = new Set([
+      "gmail.com", "yahoo.com", "hotmail.com", "outlook.com",
+      "icloud.com", "live.com", "rediffmail.com", "ymail.com",
+      "protonmail.com", "aol.com", "zoho.com", "mail.com",
+      "yahoo.in", "yahoo.co.in", "hotmail.co.in", "googlemail.com",
+      "msn.com", "me.com", "mac.com",
+    ]);
     let sameDomain: (typeof contactsTable.$inferSelect)[] = [];
     const domain = (row.email ?? "").split("@")[1]?.toLowerCase();
-    if (domain) {
+    if (domain && !COMMON_EMAIL_DOMAINS.has(domain)) {
       sameDomain = await db
         .select()
         .from(contactsTable)
@@ -475,6 +483,28 @@ router.put("/contacts/:id", requireAuth, async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err }, "Failed to update contact");
     res.status(500).json({ error: "Failed to update contact" });
+  }
+});
+
+// PATCH /contacts/:id — partial update, currently used for notes-only auto-save
+router.patch("/contacts/:id", requireAuth, async (req, res): Promise<void> => {
+  const r = req as AuthenticatedRequest;
+  const id = String(req.params.id);
+  const notes = typeof req.body.notes === "string" ? req.body.notes : null;
+  try {
+    const [row] = await db
+      .update(contactsTable)
+      .set({ notes })
+      .where(and(eq(contactsTable.id, id), eq(contactsTable.orgId, r.orgId)))
+      .returning();
+    if (!row) {
+      res.status(404).json({ error: "Contact not found" });
+      return;
+    }
+    res.json({ success: true, notes: row.notes });
+  } catch (err) {
+    req.log.error({ err }, "Failed to patch contact notes");
+    res.status(500).json({ error: "Failed to update notes" });
   }
 });
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useParams, useLocation } from "wouter";
 import {
   useGetContact,
@@ -9,19 +9,22 @@ import {
   getGetContactQueryKey,
   getListContactsQueryKey,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { useAuth } from "@clerk/react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Mail, Phone, Briefcase, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeft, Mail, Phone, Briefcase, Pencil, Trash2, MessageSquare, StickyNote } from "lucide-react";
 import { PageHeader } from "@/components/AppLayout";
 import { Field } from "./Contacts";
 import { CompanyCombobox, TagsInput } from "@/components/ContactFormFields";
 import { formatCurrency, initials, relativeTime, STAGE_META } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { getApiUrl } from "@/lib/api";
 
 export default function ContactDetail() {
   const params = useParams<{ id: string }>();
   const id = params.id;
   const qc = useQueryClient();
+  const { getToken } = useAuth();
   const { data, isLoading } = useGetContact(id, {
     query: { enabled: !!id, queryKey: getGetContactQueryKey(id) },
   });
@@ -31,6 +34,19 @@ export default function ContactDetail() {
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [toast, setToast] = useState<{ msg: string; error?: boolean } | null>(null);
+
+  // Notes state
+  const [notesText, setNotesText] = useState("");
+  const [notesSaving, setNotesSaving] = useState(false);
+  const [notesEditing, setNotesEditing] = useState(false);
+  const notesInitialRef = useRef<string>("");
+  useEffect(() => {
+    if (data) {
+      const initial = data.notes ?? "";
+      setNotesText(initial);
+      notesInitialRef.current = initial;
+    }
+  }, [data]);
 
   const showToast = (msg: string, error = false) => {
     setToast({ msg, error });
@@ -57,6 +73,7 @@ export default function ContactDetail() {
     companyId: null as string | null,
     companyName: "",
     tags: [] as string[],
+    notes: "",
   });
 
   const startEdit = () => {
@@ -69,6 +86,7 @@ export default function ContactDetail() {
       companyId: data.company?.id ?? null,
       companyName: data.company?.name ?? "",
       tags: data.tags ?? [],
+      notes: data.notes ?? "",
     });
     setEditing(true);
   };
@@ -84,6 +102,7 @@ export default function ContactDetail() {
           phone: form.phone || null,
           title: form.title || null,
           companyId: form.companyId || null,
+          notes: form.notes || null,
           tags: form.tags,
         },
       },
@@ -94,6 +113,29 @@ export default function ContactDetail() {
         },
       },
     );
+  };
+
+  const saveNotes = async (value: string) => {
+    if (value === notesInitialRef.current) return;
+    setNotesSaving(true);
+    try {
+      const token = await getToken();
+      await fetch(getApiUrl(`/api/contacts/${id}`), {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ notes: value || null }),
+      });
+      notesInitialRef.current = value;
+      qc.invalidateQueries({ queryKey: getGetContactQueryKey(id) });
+    } catch {
+      showToast("Failed to save notes", true);
+    } finally {
+      setNotesSaving(false);
+      setNotesEditing(false);
+    }
   };
 
   if (isLoading) return <div className="px-4 md:px-8 pt-8 text-muted-foreground">Loading…</div>;
@@ -191,7 +233,58 @@ export default function ContactDetail() {
             )}
           </div>
 
+          {/* Notes Card */}
+          <div className="rounded-2xl bg-card border border-card-border p-5">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-[13px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <StickyNote size={13} /> Notes
+              </h2>
+              {!notesEditing && (
+                <button
+                  onClick={() => setNotesEditing(true)}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                  title="Edit notes"
+                >
+                  <Pencil size={13} />
+                </button>
+              )}
+              {notesSaving && (
+                <span className="text-[11px] text-muted-foreground">Saving…</span>
+              )}
+            </div>
+            {notesEditing ? (
+              <textarea
+                autoFocus
+                value={notesText}
+                onChange={(e) => setNotesText(e.target.value)}
+                onBlur={() => saveNotes(notesText)}
+                rows={5}
+                placeholder="Add notes about this contact…"
+                className="w-full bg-background border border-input rounded-md px-3 py-2 text-[13px] leading-relaxed outline-none focus:border-primary resize-none"
+              />
+            ) : (
+              <div
+                onClick={() => setNotesEditing(true)}
+                className={cn(
+                  "text-[13px] leading-relaxed whitespace-pre-wrap cursor-text min-h-[40px]",
+                  notesText ? "text-foreground" : "text-muted-foreground italic",
+                )}
+              >
+                {notesText || "No notes yet. Click to add."}
+              </div>
+            )}
+          </div>
+
           <RelatedPanel id={id} />
+
+          {/* Chat link */}
+          <Link
+            to={`/chat?contactId=${id}&contactName=${encodeURIComponent(data.name)}`}
+            className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-card border border-card-border hover:bg-muted transition-colors text-[13px] font-semibold"
+          >
+            <MessageSquare size={14} className="text-primary" />
+            Chat with AI about {data.name.split(" ")[0]}
+          </Link>
 
           <div className="rounded-2xl bg-card border border-card-border p-5">
             <h2 className="text-[13px] font-bold uppercase tracking-wider text-muted-foreground mb-3">
@@ -222,8 +315,9 @@ export default function ContactDetail() {
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05 }}
-          className="md:col-span-2 rounded-2xl bg-card border border-card-border p-5"
+          className="md:col-span-2 space-y-4"
         >
+          <div className="rounded-2xl bg-card border border-card-border p-5">
           <h2 className="text-[15px] font-bold tracking-tight mb-4">Recent interactions</h2>
           <div className="space-y-3">
             {data.interactions.length === 0 && (
@@ -249,6 +343,10 @@ export default function ContactDetail() {
               </motion.div>
             ))}
           </div>
+          </div>
+
+          {/* Chat History */}
+          <ChatHistoryPanel contactId={id} contactName={data.name} />
         </motion.div>
       </div>
 
@@ -300,6 +398,15 @@ export default function ContactDetail() {
               </Field>
               <Field label="Tags">
                 <TagsInput value={form.tags} onChange={(tags) => setForm({ ...form, tags })} />
+              </Field>
+              <Field label="Notes">
+                <textarea
+                  value={form.notes}
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                  rows={4}
+                  placeholder="Add notes about this contact…"
+                  className="w-full bg-background border border-input rounded-md px-3 py-2 text-[14px] outline-none focus:border-primary resize-none"
+                />
               </Field>
             </div>
             <div className="flex gap-2 mt-5">
@@ -445,6 +552,61 @@ function RelatedSection({
                 {c.customerNo}
               </span>
             )}
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+type ChatSession = { id: string; createdAt: string; firstMessage?: string | null };
+
+function ChatHistoryPanel({ contactId, contactName }: { contactId: string; contactName: string }) {
+  const { getToken } = useAuth();
+  const { data, isLoading } = useQuery<ChatSession[]>({
+    queryKey: ["contact-chat-sessions", contactId],
+    queryFn: async () => {
+      const token = await getToken();
+      const res = await fetch(getApiUrl(`/api/contacts/${contactId}/chat-sessions`), {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: !!contactId,
+  });
+
+  return (
+    <div className="rounded-2xl bg-card border border-card-border p-5">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-[13px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+          <MessageSquare size={13} /> Chat History
+        </h2>
+        <Link
+          to={`/chat?contactId=${contactId}&contactName=${encodeURIComponent(contactName)}`}
+          className="text-[11px] font-semibold text-primary hover:underline"
+        >
+          + New chat
+        </Link>
+      </div>
+      {isLoading && <div className="text-[12px] text-muted-foreground">Loading…</div>}
+      {!isLoading && (!data || data.length === 0) && (
+        <div className="text-[12px] text-muted-foreground italic">No chat sessions yet.</div>
+      )}
+      <div className="space-y-1.5">
+        {data?.map((s) => (
+          <Link
+            key={s.id}
+            to={`/chat?sessionId=${s.id}&contactId=${contactId}&contactName=${encodeURIComponent(contactName)}`}
+            className="flex items-start gap-2 px-3 py-2 rounded-lg bg-muted/40 hover:bg-muted transition-colors"
+          >
+            <MessageSquare size={12} className="text-muted-foreground mt-0.5 flex-shrink-0" />
+            <div className="min-w-0">
+              <div className="text-[12px] text-muted-foreground">{relativeTime(s.createdAt)}</div>
+              {s.firstMessage && (
+                <div className="text-[12.5px] truncate mt-0.5">{s.firstMessage}</div>
+              )}
+            </div>
           </Link>
         ))}
       </div>

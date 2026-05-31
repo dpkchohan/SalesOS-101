@@ -204,6 +204,8 @@ export interface ContactInput {
   /** @nullable */
   title?: string | null;
   tags?: string[];
+  /** @nullable */
+  notes?: string | null;
   /** Skip duplicate detection and force-create the contact. */
   force?: boolean;
 }
@@ -283,6 +285,8 @@ export interface ContactDetail {
   /** @nullable */
   title?: string | null;
   tags?: string[];
+  /** @nullable */
+  notes?: string | null;
   leads: Lead[];
   interactions: Interaction[];
   isDuplicate?: boolean;
@@ -722,6 +726,10 @@ export interface DashboardSummary {
 
 export interface ChatInput {
   text: string;
+  /** @nullable */
+  contactId?: string | null;
+  /** @nullable */
+  sessionId?: string | null;
 }
 
 /**
@@ -758,6 +766,8 @@ export interface ChatReply {
   duplicateContact?: Contact | null;
   /** @nullable */
   duplicateMatchedField?: ChatReplyDuplicateMatchedField;
+  /** @nullable */
+  sessionId?: string | null;
 }
 
 export interface TranscribeInput {

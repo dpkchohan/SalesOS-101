@@ -444,6 +444,7 @@ export const GetContactResponse = zod.object({
       createdAt: zod.coerce.date(),
     }),
   ),
+  notes: zod.string().nullish(),
   isDuplicate: zod.boolean().optional(),
   duplicateOf: zod.string().nullish(),
   mergedAt: zod.coerce.date().nullish(),
@@ -463,6 +464,7 @@ export const UpdateContactBody = zod.object({
   phone: zod.string().nullish(),
   title: zod.string().nullish(),
   linkedinUrl: zod.string().nullish(),
+  notes: zod.string().nullish(),
   tags: zod.array(zod.string()).optional(),
   force: zod
     .boolean()
@@ -479,6 +481,7 @@ export const UpdateContactResponse = zod.object({
   phone: zod.string().nullish(),
   title: zod.string().nullish(),
   linkedinUrl: zod.string().nullish(),
+  notes: zod.string().nullish(),
   tags: zod.array(zod.string()).optional(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date().optional(),
@@ -1328,6 +1331,8 @@ export const GetAiSmartImportJobResponse = zod.object({
  */
 export const SendChatBody = zod.object({
   text: zod.string(),
+  contactId: zod.string().nullish(),
+  sessionId: zod.string().nullish(),
 });
 
 export const SendChatResponse = zod.object({
@@ -1362,6 +1367,7 @@ export const SendChatResponse = zod.object({
       zod.null(),
     ])
     .optional(),
+  sessionId: zod.string().nullish(),
   duplicateMatchedField: zod
     .union([zod.literal("email"), zod.literal("phone"), zod.literal(null)])
     .nullish(),

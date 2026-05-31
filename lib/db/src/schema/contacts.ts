@@ -37,6 +37,7 @@ export const contactsTable = pgTable(
     duplicateOf: uuid("duplicate_of").references((): AnyPgColumn => contactsTable.id, {
       onDelete: "set null",
     }),
+    notes: text("notes"),
     mergedAt: timestamp("merged_at", { withTimezone: true }),
     mergedReason: text("merged_reason"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
