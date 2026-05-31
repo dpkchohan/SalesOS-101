@@ -201,8 +201,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <NavButtons />
         </div>
 
-        {/* Mobile header — 8% horizontal padding so content doesn't touch edges */}
-        <header className="md:hidden flex items-center justify-between px-[8%] py-3 border-b border-border bg-background sticky top-0 z-30">
+        {/* Mobile header — 8% horizontal padding + safe-area top for PWA */}
+        <header className="md:hidden flex items-center justify-between px-[8%] py-3 border-b border-border bg-background sticky top-0 z-30 safe-top">
           <div className="flex items-center gap-1">
             <NavButtons />
             <div className="w-px h-4 bg-border mx-1" />
@@ -228,7 +228,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         <main className="flex-1 pb-24 md:pb-8">{children}</main>
 
         {/* Mobile bottom nav — 4 primary items + More */}
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-sidebar text-sidebar-foreground border-t border-sidebar-border">
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-sidebar text-sidebar-foreground border-t border-sidebar-border safe-bottom">
           <div className="grid grid-cols-5">
             {PRIMARY_NAV.map(({ to, label, icon: Icon }) => (
               <Link

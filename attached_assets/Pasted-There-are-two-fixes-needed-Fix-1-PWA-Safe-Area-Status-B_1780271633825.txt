@@ -1,0 +1,47 @@
+There are two fixes needed:
+Fix 1: PWA Safe Area / Status Bar overlap
+When the app is installed as a PWA on Android or iOS, the mobile header overlaps with the phone's system status bar (time, battery, signal icons). The SalesOS logo, Report button, and profile avatar are hidden behind the system UI.
+This is a safe area inset issue. Fix it by:
+
+In index.html, add this meta tag if not already present:
+
+html<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+
+In the mobile header component inside AppLayout.tsx, add top padding that accounts for the safe area inset:
+
+
+Add pt-safe or use CSS: padding-top: env(safe-area-inset-top)
+The header should sit BELOW the system status bar, not behind it
+On browser (non-PWA) this should have no effect since env(safe-area-inset-top) returns 0
+
+
+Also add bottom safe area padding to the bottom navigation bar:
+
+
+padding-bottom: env(safe-area-inset-bottom)
+This prevents the nav bar from being hidden behind the home indicator on iPhone
+
+
+In the global CSS file, add:
+
+cssbody {
+  padding-top: env(safe-area-inset-top);
+}
+Fix 2: Microphone recording not working
+The mic button in the chat turns red when clicked (showing it's "active") but nothing is actually recorded. Two problems:
+
+The browser MediaRecorder API is not being started correctly when the mic button is clicked
+On mobile, the button needs touchstart/touchend events in addition to mousedown/mouseup for hold-to-record to work
+
+Fix the mic button in Chat.tsx:
+
+On click/tap: request microphone permission using navigator.mediaDevices.getUserMedia({ audio: true })
+If permission granted: start MediaRecorder, collect audio chunks
+On second click/tap (or release for hold-to-record): stop recording, send audio blob to Whisper API endpoint POST /api/voice/transcribe
+Backend transcribes audio and returns text
+Insert transcribed text into the chat input field automatically
+If permission denied: show a clear message "Microphone permission required — please allow access in browser settings"
+Handle the case where MediaRecorder is not supported (show "Voice not supported in this browser")
+
+For mobile specifically, add both touch and mouse event handlers so it works on all devices.
+Push to GitHub when done.

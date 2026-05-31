@@ -125,6 +125,7 @@ export default function Chat() {
   );
   const [input, setInput] = useState("");
   const [recording, setRecording] = useState(false);
+  const [micError, setMicError] = useState<string | null>(null);
   const [ttsPlaying, setTtsPlaying] = useState(false);
   const [ttsEnabled, setTtsEnabled] = useState<boolean>(() => {
     if (typeof window === "undefined") return true;
@@ -219,6 +220,7 @@ export default function Chat() {
   }, [urlSessionId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const recorderRef = useRef<MediaRecorder | null>(null);
+  const pendingStopRef = useRef(false);
   const chunksRef = useRef<Blob[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -509,8 +511,24 @@ export default function Chat() {
   };
 
   const startRecord = async () => {
+    setMicError(null);
+    pendingStopRef.current = false;
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setMicError("Voice not supported in this browser");
+      return;
+    }
+    if (typeof MediaRecorder === "undefined") {
+      setMicError("Voice not supported in this browser");
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // If stop was requested while awaiting permission (fast tap), abort cleanly
+      if (pendingStopRef.current) {
+        stream.getTracks().forEach((t) => t.stop());
+        pendingStopRef.current = false;
+        return;
+      }
       const preferredTypes = ["audio/webm", "audio/mp4", "audio/ogg"];
       const mimeType = preferredTypes.find((t) => MediaRecorder.isTypeSupported(t)) ?? "";
       const mr = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
@@ -522,6 +540,7 @@ export default function Chat() {
       mr.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
         const blob = new Blob(chunksRef.current, { type: actualMime });
+        if (blob.size === 0) return;
         const buf = await blob.arrayBuffer();
         const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
         transcribe.mutate(
@@ -536,15 +555,38 @@ export default function Chat() {
       recorderRef.current = mr;
       mr.start();
       setRecording(true);
-    } catch (err) {
-      alert("Microphone access denied or unavailable.");
+    } catch (err: unknown) {
+      const name = (err as { name?: string }).name;
+      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+        setMicError("Microphone permission required — allow access in browser settings");
+      } else if (name === "NotFoundError") {
+        setMicError("No microphone found on this device");
+      } else {
+        setMicError("Microphone unavailable");
+      }
       console.error(err);
     }
   };
 
   const stopRecord = () => {
-    recorderRef.current?.stop();
+    if (!recorderRef.current) {
+      // startRecord hasn't finished yet — flag it to abort immediately on init
+      pendingStopRef.current = true;
+      setRecording(false);
+      return;
+    }
+    try { recorderRef.current.stop(); } catch { /* already stopped */ }
+    recorderRef.current = null;
     setRecording(false);
+  };
+
+  const handleMicClick = () => {
+    setMicError(null);
+    if (recording) {
+      stopRecord();
+    } else {
+      void startRecord();
+    }
   };
 
   const speakReply = (msg: Msg) => playTts(msg.text);
@@ -918,11 +960,7 @@ export default function Chat() {
         />
         <button
           type="button"
-          onMouseDown={startRecord}
-          onMouseUp={stopRecord}
-          onMouseLeave={() => recording && stopRecord()}
-          onTouchStart={startRecord}
-          onTouchEnd={stopRecord}
+          onClick={handleMicClick}
           className={cn(
             "w-11 h-11 rounded-full grid place-items-center transition-all flex-shrink-0 relative",
             recording
@@ -930,7 +968,7 @@ export default function Chat() {
               : "bg-muted text-muted-foreground hover:bg-muted/80",
           )}
           data-testid="button-mic"
-          aria-label="Hold to record"
+          aria-label={recording ? "Tap to stop recording" : "Tap to record"}
           aria-pressed={recording}
         >
           <Mic size={18} />
@@ -939,6 +977,11 @@ export default function Chat() {
           )}
         </button>
         <div className="flex-1 flex flex-col gap-1.5">
+          {micError && (
+            <div className="text-[11px] text-rose-500 px-1 flex items-center gap-1">
+              <span>⚠</span> {micError}
+            </div>
+          )}
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -948,7 +991,7 @@ export default function Chat() {
                 sendText(input);
               }
             }}
-            placeholder={recording ? "Listening…" : transcribe.isPending ? "Transcribing…" : "Type or hold mic to talk…"}
+            placeholder={recording ? "Listening… tap mic to stop" : transcribe.isPending ? "Transcribing…" : "Type or tap mic to record…"}
             rows={1}
             className="flex-1 bg-card border border-card-border rounded-2xl px-4 py-2.5 text-[14px] outline-none focus:border-primary resize-none max-h-32"
             data-testid="input-chat"

@@ -7,6 +7,9 @@
   color: hsl(244 10% 50%);
   opacity: 1;
 }
+.safe-top {
+  padding-top: env(safe-area-inset-top, 0);
+}
 .safe-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0);
 }
