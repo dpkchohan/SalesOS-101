@@ -1,5 +1,5 @@
-const CACHE = "salesos-v2";
-const API_CACHE = "salesos-api-v2";
+const CACHE = "salesos-v3";
+const API_CACHE = "salesos-api-v3";
 
 self.addEventListener("message", (event) => {
   if (event.data?.type === "CLEAR_API_CACHE") {
