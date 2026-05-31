@@ -17,6 +17,7 @@ import {
   ChevronLeft,
   ChevronRight,
   RotateCw,
+  MoreHorizontal,
 } from "lucide-react";
 import { initials } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -28,6 +29,20 @@ const NAV = [
   { to: "/leads", label: "Leads", icon: TrendingUp },
   { to: "/pipeline", label: "Pipeline", icon: Kanban },
   { to: "/chat", label: "Chat", icon: MessageCircle },
+  { to: "/tasks", label: "Tasks", icon: CheckSquare },
+  { to: "/documents", label: "Docs", icon: FileText },
+  { to: "/import", label: "Import", icon: Upload },
+];
+
+const PRIMARY_NAV = [
+  { to: "/", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/contacts", label: "Contacts", icon: Users },
+  { to: "/chat", label: "Chat", icon: MessageCircle },
+  { to: "/pipeline", label: "Pipeline", icon: Kanban },
+];
+
+const MORE_NAV = [
+  { to: "/leads", label: "Leads", icon: TrendingUp },
   { to: "/tasks", label: "Tasks", icon: CheckSquare },
   { to: "/documents", label: "Docs", icon: FileText },
   { to: "/import", label: "Import", icon: Upload },
@@ -75,14 +90,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     (user?.primaryEmailAddress?.emailAddress ?? "").toLowerCase(),
   );
   const [showFeedback, setShowFeedback] = useState(false);
+  const [showMore, setShowMore] = useState(false);
 
-  // Stop stray file drops anywhere outside an explicit drop zone from
-  // navigating the browser away (which would lose all in-page state).
-  // Drop zones (e.g. Chat) keep working because they call preventDefault on
-  // their own drop event and read e.dataTransfer.files synchronously before
-  // these window-level listeners run; calling preventDefault again here is a
-  // no-op for them and stops the browser's "open file" default everywhere
-  // else.
+  useEffect(() => {
+    setShowMore(false);
+  }, [loc]);
+
   useEffect(() => {
     const onDragOver = (e: DragEvent) => {
       if (e.dataTransfer?.types?.includes("Files")) e.preventDefault();
@@ -100,6 +113,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   const isActive = (to: string) =>
     to === "/" ? loc === "/" : loc === to || loc.startsWith(to + "/");
+
+  const moreIsActive = MORE_NAV.some(({ to }) => isActive(to));
 
   return (
     <div className="min-h-[100dvh] bg-background text-foreground flex">
@@ -186,7 +201,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <NavButtons />
         </div>
 
-        <header className="md:hidden flex items-center justify-between px-4 py-3 border-b border-border bg-background sticky top-0 z-30">
+        {/* Mobile header — 8% horizontal padding so content doesn't touch edges */}
+        <header className="md:hidden flex items-center justify-between px-[8%] py-3 border-b border-border bg-background sticky top-0 z-30">
           <div className="flex items-center gap-1">
             <NavButtons />
             <div className="w-px h-4 bg-border mx-1" />
@@ -211,24 +227,74 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
         <main className="flex-1 pb-24 md:pb-8">{children}</main>
 
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-sidebar text-sidebar-foreground border-t border-sidebar-border safe-bottom">
-          <div className="grid grid-cols-8">
-            {NAV.map(({ to, label, icon: Icon }) => (
-              <Link key={to} to={to}
-                  className={cn(
-                    "flex flex-col items-center gap-0.5 py-2.5 text-[10px] font-medium transition-colors",
-                    isActive(to)
-                      ? "text-primary"
-                      : "text-sidebar-foreground/60 hover:text-sidebar-foreground",
-                  )}
-                  data-testid={`mobilenav-${label.toLowerCase()}`}
-                >
-                  <Icon size={20} strokeWidth={2.2} />
-                  <span>{label}</span>
-                </Link>
+        {/* Mobile bottom nav — 4 primary items + More */}
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-sidebar text-sidebar-foreground border-t border-sidebar-border">
+          <div className="grid grid-cols-5">
+            {PRIMARY_NAV.map(({ to, label, icon: Icon }) => (
+              <Link
+                key={to}
+                to={to}
+                className={cn(
+                  "flex flex-col items-center gap-0.5 py-2.5 text-[10px] font-medium transition-colors",
+                  isActive(to)
+                    ? "text-primary"
+                    : "text-sidebar-foreground/60 hover:text-sidebar-foreground",
+                )}
+                data-testid={`mobilenav-${label.toLowerCase()}`}
+              >
+                <Icon size={20} strokeWidth={2.2} />
+                <span>{label}</span>
+              </Link>
             ))}
+            <button
+              onClick={() => setShowMore(true)}
+              className={cn(
+                "flex flex-col items-center gap-0.5 py-2.5 text-[10px] font-medium transition-colors",
+                moreIsActive
+                  ? "text-primary"
+                  : "text-sidebar-foreground/60 hover:text-sidebar-foreground",
+              )}
+              data-testid="mobilenav-more"
+            >
+              <MoreHorizontal size={20} strokeWidth={2.2} />
+              <span>More</span>
+            </button>
           </div>
         </nav>
+
+        {/* More drawer */}
+        {showMore && (
+          <>
+            <div
+              className="md:hidden fixed inset-0 z-40 bg-black/40 backdrop-blur-[1px]"
+              onClick={() => setShowMore(false)}
+            />
+            <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-sidebar rounded-t-2xl border-t border-sidebar-border shadow-xl">
+              <div className="flex justify-center pt-3 pb-1">
+                <div className="w-9 h-1 rounded-full bg-sidebar-foreground/20" />
+              </div>
+              <div className="pb-6 px-3 pt-1">
+                {MORE_NAV.map(({ to, label, icon: Icon }) => (
+                  <Link
+                    key={to}
+                    to={to}
+                    onClick={() => setShowMore(false)}
+                    className={cn(
+                      "flex items-center gap-4 px-4 py-4 rounded-xl text-[15px] font-medium transition-colors",
+                      isActive(to)
+                        ? "text-primary bg-primary/10"
+                        : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60",
+                    )}
+                    data-testid={`mobilenav-more-${label.toLowerCase()}`}
+                  >
+                    <Icon size={22} strokeWidth={2.2} />
+                    <span>{label}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {showFeedback && <FeedbackModal onClose={() => setShowFeedback(false)} />}

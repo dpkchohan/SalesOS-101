@@ -682,7 +682,7 @@ export default function Chat() {
           </div>
         }
       />
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 md:px-8 py-2 space-y-3">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 md:px-8 py-2 space-y-3 pb-36 md:pb-2">
         <AnimatePresence initial={false}>
           {messages.map((m) => (
             <motion.div
@@ -857,7 +857,7 @@ export default function Chat() {
             sendText(input);
           }
         }}
-        className="border-t border-border px-3 md:px-8 py-3 flex flex-col gap-2 bg-background"
+        className="fixed bottom-14 left-0 right-0 z-40 border-t border-border px-3 md:px-8 py-3 flex flex-col gap-2 bg-background md:static md:bottom-auto md:left-auto md:right-auto md:z-auto"
       >
         {(pendingFile || uploadError) && (
           <div className="flex items-center gap-2 flex-wrap">
