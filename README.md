@@ -14,7 +14,7 @@ Most CRMs fail because reps don't use them. SalesOS is built around a single pri
 
 ### The 3 USPs
 
-1. **Your AI Sales Coach** — Claude suggests next steps, spots patterns, predicts closes.
+1. **Your AI Sales Coach** — Claude suggests next steps, spots patterns, predicts closes..
 2. **Just Talk** — Voice or text. "I called John" → logged. No data entry.
 3. **Close 20% More Deals** — Faster cycles, better objection handling, smarter prioritization..
 
