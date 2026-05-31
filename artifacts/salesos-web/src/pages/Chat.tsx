@@ -206,15 +206,9 @@ export default function Chat() {
             })),
           );
         } else {
-          setMessages([
-            {
-              id: "intro",
-              role: "assistant",
-              text: urlContactName
-                ? `Hi. I'm ready to help you with ${urlContactName}. Log a call, add a task, move a deal — just tell me.`
-                : "Hi. Talk to me like you would your assistant — log a call, add a task, move a deal. I'll handle the rest.",
-            },
-          ]);
+          // Session exists but has no messages — keep empty so the user
+          // can continue typing (the sessionId state is already set above).
+          setMessages([]);
         }
       })
       .catch((err) => {

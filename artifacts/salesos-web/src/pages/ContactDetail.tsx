@@ -559,7 +559,7 @@ function RelatedSection({
   );
 }
 
-type ChatSession = { id: string; createdAt: string; firstMessage?: string | null };
+type ChatSession = { id: string; createdAt: string; preview?: string | null };
 
 function ChatHistoryPanel({ contactId, contactName }: { contactId: string; contactName: string }) {
   const { getToken } = useAuth();
@@ -603,8 +603,8 @@ function ChatHistoryPanel({ contactId, contactName }: { contactId: string; conta
             <MessageSquare size={12} className="text-muted-foreground mt-0.5 flex-shrink-0" />
             <div className="min-w-0">
               <div className="text-[12px] text-muted-foreground">{relativeTime(s.createdAt)}</div>
-              {s.firstMessage && (
-                <div className="text-[12.5px] truncate mt-0.5">{s.firstMessage}</div>
+              {s.preview && (
+                <div className="text-[12.5px] truncate mt-0.5">{s.preview}</div>
               )}
             </div>
           </Link>
