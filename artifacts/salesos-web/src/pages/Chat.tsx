@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Link } from "wouter";
+import { useAuth } from "@clerk/react";
+import { getApiUrl } from "@/lib/api";
 import {
   useSendChat,
   useTranscribeAudio,
@@ -52,6 +54,7 @@ interface Msg {
   id: string;
   role: "user" | "assistant";
   text: string;
+  timestamp?: string;
   intent?: string;
   audioUrl?: string;
   attachment?: ChatAttachment;
@@ -101,17 +104,25 @@ export default function Chat() {
   );
   const urlContactId = searchParams.get("contactId") ?? null;
   const urlContactName = searchParams.get("contactName") ?? null;
+  const urlSessionId = searchParams.get("sessionId") ?? null;
 
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<Msg[]>([
-    {
-      id: "intro",
-      role: "assistant",
-      text: urlContactName
-        ? `Hi. I'm ready to help you with ${urlContactName}. Log a call, add a task, move a deal — just tell me.`
-        : "Hi. Talk to me like you would your assistant — log a call, add a task, move a deal. I'll handle the rest.",
-    },
-  ]);
+  const { getToken } = useAuth();
+
+  const [sessionId, setSessionId] = useState<string | null>(urlSessionId);
+  const [sessionLoading, setSessionLoading] = useState(!!urlSessionId);
+  const [messages, setMessages] = useState<Msg[]>(
+    urlSessionId
+      ? []
+      : [
+          {
+            id: "intro",
+            role: "assistant" as const,
+            text: urlContactName
+              ? `Hi. I'm ready to help you with ${urlContactName}. Log a call, add a task, move a deal — just tell me.`
+              : "Hi. Talk to me like you would your assistant — log a call, add a task, move a deal. I'll handle the rest.",
+          },
+        ],
+  );
   const [input, setInput] = useState("");
   const [recording, setRecording] = useState(false);
   const [ttsPlaying, setTtsPlaying] = useState(false);
@@ -173,6 +184,46 @@ export default function Chat() {
       document.removeEventListener("keydown", onKey);
     };
   }, [voiceMenuOpen]);
+  // Bug 2: Load existing session transcript when sessionId is in URL
+  useEffect(() => {
+    if (!urlSessionId) return;
+    setSessionLoading(true);
+    getToken()
+      .then((token) =>
+        fetch(getApiUrl(`/api/chat-sessions/${urlSessionId}/messages`), {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        }),
+      )
+      .then((r) => r.json())
+      .then((data: { messages?: Array<{ id: string; role: string; content: string; createdAt: string }> }) => {
+        if (data.messages && Array.isArray(data.messages) && data.messages.length > 0) {
+          setMessages(
+            data.messages.map((m) => ({
+              id: m.id,
+              role: m.role as "user" | "assistant",
+              text: m.content,
+              timestamp: m.createdAt,
+            })),
+          );
+        } else {
+          setMessages([
+            {
+              id: "intro",
+              role: "assistant",
+              text: urlContactName
+                ? `Hi. I'm ready to help you with ${urlContactName}. Log a call, add a task, move a deal — just tell me.`
+                : "Hi. Talk to me like you would your assistant — log a call, add a task, move a deal. I'll handle the rest.",
+            },
+          ]);
+        }
+      })
+      .catch((err) => {
+        console.warn("Failed to load session transcript:", err);
+        setMessages([{ id: "intro", role: "assistant", text: "Couldn't load previous messages." }]);
+      })
+      .finally(() => setSessionLoading(false));
+  }, [urlSessionId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -389,11 +440,36 @@ export default function Chat() {
     setInput("");
     const userMsg: Msg = { id: crypto.randomUUID(), role: "user", text };
     setMessages((m) => [...m, userMsg]);
-    send.mutate(
-      { data: { text, contactId: urlContactId, sessionId } },
-      {
-        onSuccess: (resp) => {
-          if (resp.sessionId && !sessionId) setSessionId(resp.sessionId);
+
+    // Bug 1: Explicitly create a session before the first message
+    const doSend = async () => {
+      let currentSessionId = sessionId;
+      if (!currentSessionId) {
+        try {
+          const token = await getToken();
+          const resp = await fetch(getApiUrl("/api/chat/sessions"), {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({ contactId: urlContactId }),
+          });
+          const data = (await resp.json()) as { sessionId?: string };
+          if (data.sessionId) {
+            currentSessionId = data.sessionId;
+            setSessionId(currentSessionId);
+          }
+        } catch (err) {
+          console.warn("Failed to pre-create chat session:", err);
+        }
+      }
+
+      send.mutate(
+        { data: { text, contactId: urlContactId, sessionId: currentSessionId } },
+        {
+          onSuccess: (resp) => {
+            if (resp.sessionId && !currentSessionId) setSessionId(resp.sessionId);
           const dup = resp.duplicateDetected && resp.duplicateContact
             ? {
                 id: resp.duplicateContact.id,
@@ -434,6 +510,8 @@ export default function Chat() {
         },
       },
     );
+    };
+    void doSend();
   };
 
   const startRecord = async () => {
@@ -504,7 +582,7 @@ export default function Chat() {
     >
       <PageHeader
         title="Chat"
-        subtitle="Type or speak — Claude handles intent"
+        subtitle={urlContactName ? `Chatting about ${urlContactName}` : "Type or speak — Claude handles intent"}
         right={
           <div ref={voiceMenuRef} className="flex items-center gap-1.5 relative">
             <button
@@ -704,6 +782,21 @@ export default function Chat() {
                       <Volume2 size={12} />
                     </button>
                   )}
+                  {m.timestamp && (
+                    <div
+                      className={cn(
+                        "text-[10px] mt-1 opacity-60",
+                        m.role === "user" ? "text-primary-foreground" : "text-muted-foreground",
+                      )}
+                    >
+                      {new Date(m.timestamp).toLocaleString("en-IN", {
+                        day: "numeric",
+                        month: "short",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
             </motion.div>
@@ -725,6 +818,12 @@ export default function Chat() {
             >
               <Square size={11} className="fill-current" /> Stop
             </button>
+          </div>
+        )}
+        {sessionLoading && (
+          <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
+            <Loader2 size={13} className="animate-spin" />
+            Loading conversation…
           </div>
         )}
         {(send.isPending || transcribe.isPending) && (

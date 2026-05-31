@@ -1,0 +1,88 @@
+There are three bugs to fix in the chat system:
+Bug 1: Fix chat → contact session linking
+In artifacts/salesos-web/src/pages/Chat.tsx:
+
+Read contactId and contactName from URL params
+When sending the FIRST message, create a new session via POST /api/chat/sessions with { contactId, orgId }
+Store the returned sessionId in state
+Send sessionId on every subsequent message so all messages are saved under the same session
+The greeting should be personalized: "Chatting about [contactName]" if contactId is present
+
+In artifacts/api-server/src/routes/chat.ts:
+
+POST /api/chat/sessions → create session with contact_id if provided, return sessionId
+Save EVERY message (user + assistant) to chat_messages table with: session_id, role (user/assistant), content, created_at
+GET /api/chat/sessions/:sessionId/messages → return all messages for a session with timestamps
+
+Bug 2: Fix chat history transcript loading
+In artifacts/salesos-web/src/pages/ContactDetail.tsx:
+
+Chat history panel shows past sessions linked to this contact
+Clicking a session should navigate to /chat?sessionId=xxx&contactId=xxx&contactName=xxx
+
+In artifacts/salesos-web/src/pages/Chat.tsx:
+
+If sessionId is in URL params → load existing messages from GET /api/chat/sessions/:sessionId/messages
+Display them in the chat window with timestamps (date + time)
+User messages on right, assistant messages on left
+Then allow continuing the conversation
+
+Bug 3: Implement AI Tool Use for actual database writes
+Add Claude tool use / function calling to the chat backend.
+In artifacts/api-server/src/routes/chat.ts, add these tools to the Claude API call:
+typescripttools: [
+  {
+    name: "add_note",
+    description: "Add or update a note for a specific contact",
+    input_schema: {
+      type: "object",
+      properties: {
+        contact_id: { type: "string" },
+        note: { type: "string" }
+      },
+      required: ["contact_id", "note"]
+    }
+  },
+  {
+    name: "create_task", 
+    description: "Create a task linked to a contact",
+    input_schema: {
+      type: "object",
+      properties: {
+        contact_id: { type: "string" },
+        title: { type: "string" },
+        due_date: { type: "string", description: "ISO date string" },
+        priority: { type: "string", enum: ["low", "medium", "high"] }
+      },
+      required: ["contact_id", "title"]
+    }
+  },
+  {
+    name: "update_contact",
+    description: "Update contact fields like title, phone, email, tags",
+    input_schema: {
+      type: "object", 
+      properties: {
+        contact_id: { type: "string" },
+        fields: { 
+          type: "object",
+          description: "Fields to update: title, phone, email, tags, notes"
+        }
+      },
+      required: ["contact_id", "fields"]
+    }
+  }
+]
+When Claude returns a tool_use block:
+
+Parse the tool name and input
+Execute the actual database operation
+Return the result back to Claude as tool_result
+Claude generates a confirmation message
+Save the final assistant message to chat_messages
+
+The system prompt for contact-linked chats should include:
+You are a sales assistant for SalesOS. You are currently helping with contact: [contactName] (ID: [contactId]).
+You have access to tools to actually modify the database. When the user asks you to add a note, create a task, or update contact details, USE THE TOOLS to actually do it, then confirm what you did.
+Always be concise and action-oriented.
+Run DB migration and push to GitHub when done.

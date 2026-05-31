@@ -15,7 +15,8 @@ import {
 import { SendChatBody, SendChatResponse } from "@workspace/api-zod";
 import { requireAuth, type AuthenticatedRequest } from "../lib/auth";
 import { assignCustomerNo, findDuplicate, normalizeEmail, normalizePhone } from "../lib/dedup";
-import { claudeJson } from "../lib/claude";
+import Anthropic from "@anthropic-ai/sdk";
+import { claudeJson, getClaude, CLAUDE_MODEL } from "../lib/claude";
 import { generateProposalHtml } from "../lib/proposalGen";
 import { sendProposalEmail } from "../lib/gmail";
 
@@ -101,6 +102,163 @@ async function findContactByName(orgId: string, name: string) {
   return c ?? null;
 }
 
+// ── Claude tool-use handler for contact-linked sessions ───────────────────────
+async function processWithTools(params: {
+  orgId: string;
+  contactId: string;
+  userText: string;
+  log: { warn: (obj: object, msg: string) => void };
+}): Promise<string> {
+  const { orgId, contactId, userText, log } = params;
+
+  const [contact] = await db
+    .select()
+    .from(contactsTable)
+    .where(and(eq(contactsTable.id, contactId), eq(contactsTable.orgId, orgId)));
+
+  if (!contact) return "Contact not found.";
+
+  const systemPrompt = `You are a sales assistant for SalesOS. You are currently helping with contact: ${contact.name} (ID: ${contact.id}).
+You have access to tools to actually modify the database. When the user asks you to add a note, create a task, or update contact details, USE THE TOOLS to actually do it, then confirm what you did.
+Always be concise and action-oriented.`;
+
+  const tools: Anthropic.Tool[] = [
+    {
+      name: "add_note",
+      description: "Add or update a note for this contact",
+      input_schema: {
+        type: "object",
+        properties: { note: { type: "string", description: "Note content to save" } },
+        required: ["note"],
+      },
+    },
+    {
+      name: "create_task",
+      description: "Create a task linked to this contact",
+      input_schema: {
+        type: "object",
+        properties: {
+          title: { type: "string" },
+          due_date: { type: "string", description: "YYYY-MM-DD" },
+          priority: { type: "string", enum: ["low", "medium", "high"] },
+        },
+        required: ["title"],
+      },
+    },
+    {
+      name: "update_contact",
+      description: "Update contact fields like title, phone, email, tags, notes",
+      input_schema: {
+        type: "object",
+        properties: {
+          fields: {
+            type: "object",
+            description: "Fields to update: title, phone, email, tags (string[]), notes",
+          },
+        },
+        required: ["fields"],
+      },
+    },
+  ];
+
+  const claude = getClaude();
+  const userMessage: Anthropic.MessageParam = { role: "user", content: userText };
+
+  const response = await claude.messages.create({
+    model: CLAUDE_MODEL,
+    max_tokens: 2048,
+    system: systemPrompt,
+    messages: [userMessage],
+    tools,
+  });
+
+  const toolUseBlocks = response.content.filter(
+    (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
+  );
+
+  if (toolUseBlocks.length === 0) {
+    return (
+      response.content
+        .filter((b): b is Anthropic.TextBlock => b.type === "text")
+        .map((b) => b.text)
+        .join("") || "Done."
+    );
+  }
+
+  const toolResultContent: Anthropic.ToolResultBlockParam[] = [];
+
+  for (const toolBlock of toolUseBlocks) {
+    let resultText = "";
+    try {
+      if (toolBlock.name === "add_note") {
+        const input = toolBlock.input as { note: string };
+        await db
+          .update(contactsTable)
+          .set({ notes: input.note })
+          .where(and(eq(contactsTable.id, contactId), eq(contactsTable.orgId, orgId)));
+        resultText = "Note saved.";
+      } else if (toolBlock.name === "create_task") {
+        const input = toolBlock.input as {
+          title: string;
+          due_date?: string;
+          priority?: "low" | "medium" | "high";
+        };
+        const lead = await findLeadForContact(orgId, contactId);
+        const [task] = await db
+          .insert(tasksTable)
+          .values({
+            orgId,
+            leadId: lead?.id ?? null,
+            title: input.title,
+            dueDate: input.due_date ?? null,
+            priority: input.priority ?? "medium",
+          })
+          .returning();
+        resultText = `Task created: "${task.title}"${task.dueDate ? ` due ${task.dueDate}` : ""}.`;
+      } else if (toolBlock.name === "update_contact") {
+        const input = toolBlock.input as { fields: Record<string, unknown> };
+        const updates: Record<string, unknown> = {};
+        if (input.fields.title !== undefined) updates.title = input.fields.title;
+        if (input.fields.phone !== undefined) updates.phone = input.fields.phone;
+        if (input.fields.email !== undefined) updates.email = input.fields.email;
+        if (input.fields.notes !== undefined) updates.notes = input.fields.notes;
+        if (input.fields.tags !== undefined) updates.tags = input.fields.tags;
+        await db
+          .update(contactsTable)
+          .set(updates)
+          .where(and(eq(contactsTable.id, contactId), eq(contactsTable.orgId, orgId)));
+        resultText = `Updated: ${Object.keys(input.fields).join(", ")}.`;
+      } else {
+        resultText = "Unknown tool.";
+      }
+    } catch (err) {
+      resultText = `Error: ${err instanceof Error ? err.message : "Unknown error"}`;
+      log.warn({ err, tool: toolBlock.name }, "Tool execution failed");
+    }
+    toolResultContent.push({ type: "tool_result", tool_use_id: toolBlock.id, content: resultText });
+  }
+
+  const finalResponse = await claude.messages.create({
+    model: CLAUDE_MODEL,
+    max_tokens: 1024,
+    system: systemPrompt,
+    messages: [
+      userMessage,
+      { role: "assistant", content: response.content },
+      { role: "user", content: toolResultContent },
+    ],
+    tools,
+  });
+
+  return (
+    finalResponse.content
+      .filter((b): b is Anthropic.TextBlock => b.type === "text")
+      .map((b) => b.text)
+      .join("") || "Done."
+  );
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 async function findLeadForContact(orgId: string, contactId: string) {
   const [l] = await db
     .select()
@@ -159,6 +317,50 @@ router.post("/chat", requireAuth, async (req, res): Promise<void> => {
     req.log.warn({ err }, "chat: failed to persist session/message — continuing without persistence");
   }
 
+  // Determine effective contactId (from request body or from the session record)
+  let effectiveContactId = incomingContactId;
+  if (!effectiveContactId && sessionId) {
+    try {
+      const [sess] = await db
+        .select({ contactId: chatSessionsTable.contactId })
+        .from(chatSessionsTable)
+        .where(eq(chatSessionsTable.id, sessionId));
+      effectiveContactId = sess?.contactId ?? null;
+    } catch { /* ok — fall through to general path */ }
+  }
+
+  const reply = {
+    success: true as boolean,
+    message: "Done.",
+    intent: "general",
+    sessionId,
+    contactId: effectiveContactId,
+    leadId: null as string | null,
+    taskId: null as string | null,
+    interactionId: null as string | null,
+    documentId: null as string | null,
+    duplicateDetected: null as boolean | null,
+    duplicateContact: null as Record<string, unknown> | null,
+    duplicateMatchedField: null as string | null,
+  };
+
+  if (effectiveContactId) {
+    // ── Contact-linked session → use Claude tool use ──────────────────────────
+    try {
+      reply.message = await processWithTools({
+        orgId: r.orgId,
+        contactId: effectiveContactId,
+        userText: body.data.text,
+        log: req.log,
+      });
+    } catch (err) {
+      req.log.error({ err }, "processWithTools failed");
+      reply.success = false;
+      reply.message = "I couldn't process that. Try again.";
+    }
+  } else {
+  // ── General session → JSON intent parsing ────────────────────────────────────
+
   let intent: Intent;
   try {
     intent = await claudeJson<Intent>(
@@ -178,20 +380,8 @@ router.post("/chat", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  const reply = {
-    success: true as boolean,
-    message: intent.reply ?? "Done.",
-    intent: intent.intent ?? "general",
-    sessionId,
-    contactId: null as string | null,
-    leadId: null as string | null,
-    taskId: null as string | null,
-    interactionId: null as string | null,
-    documentId: null as string | null,
-    duplicateDetected: null as boolean | null,
-    duplicateContact: null as Record<string, unknown> | null,
-    duplicateMatchedField: null as string | null,
-  };
+  reply.message = intent.reply ?? "Done.";
+  reply.intent = intent.intent ?? "general";
 
   try {
     if (intent.intent === "create_lead" && intent.contactName) {
@@ -497,6 +687,7 @@ router.post("/chat", requireAuth, async (req, res): Promise<void> => {
     reply.success = false;
     reply.message = "I understood you but couldn't save that. Please try again.";
   }
+  } // end else (general session)
 
   // Persist assistant reply
   if (sessionId) {

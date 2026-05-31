@@ -10,6 +10,35 @@ import { requireAuth, type AuthenticatedRequest } from "../lib/auth";
 
 const router: IRouter = Router();
 
+// POST /chat/sessions — create a chat session (optionally linked to a contact)
+router.post("/chat/sessions", requireAuth, async (req, res): Promise<void> => {
+  const r = req as AuthenticatedRequest;
+  const contactId: string | null = req.body?.contactId ?? null;
+
+  // If contactId provided, verify it belongs to this org
+  if (contactId) {
+    const [contact] = await db
+      .select({ id: contactsTable.id })
+      .from(contactsTable)
+      .where(and(eq(contactsTable.id, contactId), eq(contactsTable.orgId, r.orgId)));
+    if (!contact) {
+      res.status(404).json({ error: "Contact not found" });
+      return;
+    }
+  }
+
+  try {
+    const [session] = await db
+      .insert(chatSessionsTable)
+      .values({ orgId: r.orgId, userId: r.userId, contactId })
+      .returning();
+    res.json({ sessionId: session.id });
+  } catch (err) {
+    req.log.error({ err }, "Failed to create chat session");
+    res.status(500).json({ error: "Failed to create session" });
+  }
+});
+
 // GET /contacts/:id/chat-sessions — list sessions linked to a contact (newest first)
 // Returns sessionId, createdAt, and the first user message as a preview.
 router.get("/contacts/:id/chat-sessions", requireAuth, async (req, res): Promise<void> => {
