@@ -126,6 +126,7 @@ export default function Chat() {
   const [input, setInput] = useState("");
   const [recording, setRecording] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const [ttsPlaying, setTtsPlaying] = useState(false);
   const [ttsEnabled, setTtsEnabled] = useState<boolean>(() => {
     if (typeof window === "undefined") return true;
@@ -540,17 +541,37 @@ export default function Chat() {
       mr.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
         const blob = new Blob(chunksRef.current, { type: actualMime });
-        if (blob.size === 0) return;
-        const buf = await blob.arrayBuffer();
-        const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
-        transcribe.mutate(
-          { data: { audioBase64: b64, mimeType: actualMime } },
-          {
-            onSuccess: (resp) => {
-              if (resp.text) setInput(resp.text);
-            },
-          },
-        );
+        if (blob.size === 0) {
+          setMicError("Recording too short — please try again");
+          return;
+        }
+        const ext = actualMime.includes("mp4") || actualMime.includes("m4a")
+          ? "m4a"
+          : actualMime.includes("ogg") ? "ogg"
+          : actualMime.includes("mp3") ? "mp3"
+          : "webm";
+        const formData = new FormData();
+        formData.append("audio", blob, `recording.${ext}`);
+        setIsTranscribing(true);
+        try {
+          const token = await getToken();
+          const resp = await fetch(getApiUrl("/api/voice/transcribe"), {
+            method: "POST",
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            body: formData,
+          });
+          if (!resp.ok) {
+            const err = await resp.json().catch(() => ({})) as { error?: string };
+            setMicError((err as { error?: string }).error ?? "Transcription failed");
+            return;
+          }
+          const data = await resp.json() as { text?: string };
+          if (data.text) setInput(data.text);
+        } catch {
+          setMicError("Transcription failed — check your connection");
+        } finally {
+          setIsTranscribing(false);
+        }
       };
       recorderRef.current = mr;
       mr.start();
@@ -862,10 +883,10 @@ export default function Chat() {
             Loading conversation…
           </div>
         )}
-        {(send.isPending || transcribe.isPending) && (
+        {(send.isPending || isTranscribing) && (
           <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
             <Loader2 size={13} className="animate-spin" />
-            {transcribe.isPending ? "transcribing…" : "thinking…"}
+            {isTranscribing ? "transcribing…" : "thinking…"}
           </div>
         )}
         {messages.length <= 1 && (
@@ -899,7 +920,7 @@ export default function Chat() {
             sendText(input);
           }
         }}
-        className="fixed bottom-14 left-0 right-0 z-40 border-t border-border px-3 md:px-8 py-3 flex flex-col gap-2 bg-background md:static md:bottom-auto md:left-auto md:right-auto md:z-auto"
+        className="fixed chat-input-bar-mobile left-0 right-0 z-20 border-t border-border px-3 md:px-8 py-3 flex flex-col gap-2 bg-background md:sticky md:bottom-0 md:left-auto md:right-auto md:z-10"
       >
         {(pendingFile || uploadError) && (
           <div className="flex items-center gap-2 flex-wrap">
@@ -991,12 +1012,12 @@ export default function Chat() {
                 sendText(input);
               }
             }}
-            placeholder={recording ? "Listening… tap mic to stop" : transcribe.isPending ? "Transcribing…" : "Type or tap mic to record…"}
+            placeholder={recording ? "Listening… tap mic to stop" : isTranscribing ? "Transcribing…" : "Type or tap mic to record…"}
             rows={1}
             className="flex-1 bg-card border border-card-border rounded-2xl px-4 py-2.5 text-[14px] outline-none focus:border-primary resize-none max-h-32"
             data-testid="input-chat"
           />
-          {transcribe.isPending === false && input.trim() && (
+          {!isTranscribing && input.trim() && (
             <div className="flex items-center gap-1.5 px-1">
               <span className="text-[11px] text-muted-foreground">Edit above or</span>
               <button

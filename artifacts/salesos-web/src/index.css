@@ -13,6 +13,11 @@
 .safe-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0);
 }
+@media (max-width: 767px) {
+  .chat-input-bar-mobile {
+    bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+  }
+}
 
 @custom-variant dark (&:is(.dark *));
 
