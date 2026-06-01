@@ -29,7 +29,7 @@ router.post("/voice/transcribe", requireAuth, async (req, res): Promise<void> =>
           ? "ogg"
           : "webm";
     form.append("file", blob, `audio.${ext}`);
-    form.append("model", "saaras:v2");
+    form.append("model", "saaras:v2.5");
     if (body.data.languageCode && body.data.languageCode !== "unknown") {
       form.append("language_code", body.data.languageCode);
     }
