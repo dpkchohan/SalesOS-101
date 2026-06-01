@@ -6,9 +6,9 @@ import {
   getGetDashboardSummaryQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { AlertCircle, MoveRight, MoveLeft } from "lucide-react";
+import { AlertCircle, MoveRight, MoveLeft, Layers } from "lucide-react";
 import {
   DndContext,
   type DragEndEvent,
@@ -44,6 +44,34 @@ export default function Pipeline() {
   const [moving, setMoving] = useState<string | null>(null);
   const [activeLead, setActiveLead] = useState<LeadCardLead | null>(null);
 
+  // ── Mobile swipe state ──────────────────────────────────────────────────────
+  const [mobileStageIdx, setMobileStageIdx] = useState(0);
+  const touchStartX = useRef<number | null>(null);
+  const activeTabRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    activeTabRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+      inline: "center",
+    });
+  }, [mobileStageIdx]);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    touchStartX.current = null;
+    if (Math.abs(dx) < 50) return;
+    setMobileStageIdx((i) =>
+      dx < 0 ? Math.min(i + 1, STAGES.length - 1) : Math.max(i - 1, 0),
+    );
+  };
+
+  // ── Desktop DnD ─────────────────────────────────────────────────────────────
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
   );
@@ -88,37 +116,82 @@ export default function Pipeline() {
       />
       {isLoading && <div className="px-4 md:px-8 text-muted-foreground">Loading…</div>}
 
-      {/* ── Mobile: stacked columns with arrow buttons ── */}
-      <div className="md:hidden px-4 space-y-5 pb-6">
-        {data?.columns.map((col) => (
-          <div key={col.stage}>
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <span className={cn("w-2 h-2 rounded-full", STAGE_META[col.stage].bar)} />
-                <span className="text-[13px] font-bold uppercase tracking-wider">
-                  {STAGE_META[col.stage].label}
+      {/* ── Mobile: swipeable stage view ── */}
+      <div className="md:hidden">
+        {/* Horizontal scrollable tab bar */}
+        <div
+          className="overflow-x-auto border-b border-border"
+          style={{ scrollbarWidth: "none" }}
+        >
+          <div className="flex">
+            {data?.columns.map((col, idx) => (
+              <button
+                key={col.stage}
+                ref={idx === mobileStageIdx ? activeTabRef : undefined}
+                type="button"
+                onClick={() => setMobileStageIdx(idx)}
+                className={cn(
+                  "flex-shrink-0 flex items-center gap-1.5 px-4 py-2.5 text-[12px] font-bold border-b-2 transition-colors whitespace-nowrap",
+                  idx === mobileStageIdx
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground",
+                )}
+              >
+                {STAGE_META[col.stage].label.toUpperCase()}
+                <span
+                  className={cn(
+                    "text-[10px] rounded-full px-1.5 py-0.5 font-bold",
+                    idx === mobileStageIdx
+                      ? "bg-primary/15 text-primary"
+                      : "bg-muted text-muted-foreground",
+                  )}
+                >
+                  {col.count}
                 </span>
-                <span className="text-[11px] text-muted-foreground">{col.count}</span>
-              </div>
-              <span className="text-[11px] text-muted-foreground">
-                {formatCurrency(col.totalValue)}
-              </span>
-            </div>
-            <div className="space-y-2">
-              {col.leads.length === 0 && (
-                <div className="text-[12px] text-muted-foreground italic px-1">empty</div>
-              )}
-              {col.leads.map((l) => (
-                <LeadCard
-                  key={l.id}
-                  lead={l}
-                  busy={moving === l.id}
-                  onMove={(stage) => move(l.id, stage)}
-                />
-              ))}
-            </div>
+              </button>
+            ))}
           </div>
-        ))}
+        </div>
+
+        {/* Swipeable deal panel */}
+        <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} className="min-h-[60dvh]">
+          {data?.columns.map((col, idx) =>
+            idx !== mobileStageIdx ? null : (
+              <div
+                key={col.stage}
+                className="px-4 pt-3 pb-6 animate-in fade-in duration-150"
+              >
+                {/* Stage summary row */}
+                <div className="flex items-center justify-between mb-3 text-[12px] text-muted-foreground">
+                  <span className="flex items-center gap-1.5">
+                    <span className={cn("w-2 h-2 rounded-full", STAGE_META[col.stage].bar)} />
+                    {col.count} deal{col.count !== 1 ? "s" : ""}
+                  </span>
+                  <span>{formatCurrency(col.totalValue)}</span>
+                </div>
+
+                {/* Deal cards */}
+                {col.leads.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+                    <Layers size={36} className="mb-3 opacity-25" />
+                    <p className="text-[13px]">No deals in {STAGE_META[col.stage].label}</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {col.leads.map((l) => (
+                      <LeadCard
+                        key={l.id}
+                        lead={l}
+                        busy={moving === l.id}
+                        onMove={(stage) => move(l.id, stage)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            ),
+          )}
+        </div>
       </div>
 
       {/* ── Desktop: drag-and-drop kanban ── */}
@@ -261,9 +334,7 @@ function LeadCard({
   onMove: (stage: (typeof STAGES)[number]) => void;
 }) {
   const stageIdx = STAGES.indexOf(lead.stage);
-  // Forward: show for all stages except won (idx 4) and lost (idx 5)
   const next = stageIdx >= 0 && stageIdx < STAGES.length - 2 ? STAGES[stageIdx + 1] : null;
-  // Backward: show for all stages except new (idx 0)
   const prev = stageIdx > 0 ? STAGES[stageIdx - 1] : null;
 
   return (
@@ -309,7 +380,7 @@ function LeadCard({
               disabled={busy}
               onPointerDown={(e) => e.stopPropagation()}
               onClick={() => onMove(prev)}
-              className="flex-1 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1 text-[11px] font-semibold py-1.5 rounded-md bg-muted hover:bg-muted/70 text-muted-foreground disabled:cursor-not-allowed cursor-pointer"
+              className="flex-1 md:opacity-0 md:group-hover:opacity-100 md:transition-opacity flex items-center justify-center gap-1 text-[11px] font-semibold py-1.5 rounded-md bg-muted hover:bg-muted/70 text-muted-foreground disabled:cursor-not-allowed cursor-pointer"
               data-testid={`button-retreat-${lead.id}`}
               title={`Move back to ${STAGE_META[prev].label}`}
             >
@@ -324,7 +395,7 @@ function LeadCard({
               disabled={busy}
               onPointerDown={(e) => e.stopPropagation()}
               onClick={() => onMove(next)}
-              className="flex-1 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 text-[11px] font-semibold py-1.5 rounded-md bg-primary/10 hover:bg-primary/20 text-primary disabled:cursor-not-allowed cursor-pointer"
+              className="flex-1 md:opacity-0 md:group-hover:opacity-100 md:transition-opacity flex items-center justify-center gap-1.5 text-[11px] font-semibold py-1.5 rounded-md bg-primary/10 hover:bg-primary/20 text-primary disabled:cursor-not-allowed cursor-pointer"
               data-testid={`button-advance-${lead.id}`}
               title={`Advance to ${STAGE_META[next].label}`}
             >
