@@ -201,17 +201,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <NavButtons />
         </div>
 
-        {/* Mobile header — 8% horizontal padding + safe-area top for PWA */}
-        <header className="md:hidden flex items-center justify-between px-[8%] py-3 border-b border-border bg-background sticky top-0 z-30 safe-top">
-          <div className="flex items-center gap-1">
-            <NavButtons />
-            <div className="w-px h-4 bg-border mx-1" />
-            <Link to="/" className="flex items-center gap-2">
-              <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="" className="w-7 h-7 rounded-md" />
-              <span className="font-bold tracking-tight">SalesOS</span>
-            </Link>
-          </div>
-          <div className="flex items-center gap-2">
+        {/* Mobile header — logo · title | report · avatar (no in-app nav buttons; PWA users swipe/gesture) */}
+        <header className="md:hidden flex items-center justify-between px-4 py-3 border-b border-border bg-background sticky top-0 z-30 safe-top">
+          <Link to="/" className="flex items-center gap-2 min-w-0">
+            <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="" className="w-7 h-7 rounded-md flex-shrink-0" />
+            <span className="font-bold tracking-tight">SalesOS</span>
+          </Link>
+          <div className="flex items-center gap-2 flex-shrink-0">
             <button
               onClick={() => setShowFeedback(true)}
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-medium border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
@@ -219,7 +215,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             >
               <MessageSquare size={13} /> Report
             </button>
-            <Link to="/settings" className="w-8 h-8 rounded-full bg-primary text-primary-foreground grid place-items-center font-bold text-xs">
+            <Link to="/settings" className="w-8 h-8 rounded-full bg-primary text-primary-foreground grid place-items-center font-bold text-xs flex-shrink-0">
               {initials(user?.fullName ?? user?.primaryEmailAddress?.emailAddress)}
             </Link>
           </div>

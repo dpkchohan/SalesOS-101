@@ -1,0 +1,119 @@
+PWA Mobile UI Fixes (Android) – Do Not Affect iPhone PWA
+
+Please review the attached Android PWA screenshots and fix all responsive/mobile layout issues.
+
+1. Android PWA Header Clutter Issue
+
+The Android PWA header is broken and cluttered.
+
+Problems:
+
+Browser navigation controls, refresh icon, app logo, title and profile avatar are overlapping.
+Header spacing is incorrect.
+Elements are not aligned properly on Android PWA.
+
+Requirements:
+
+Fix Android PWA header layout.
+Ensure proper safe-area handling.
+Ensure logo, title and profile avatar remain aligned and visible.
+Remove any overlap with browser/PWA controls.
+Verify on Android Chrome PWA install mode.
+Do NOT affect iPhone PWA since it is already working correctly.
+2. Dashboard Page Overflow
+
+On Dashboard → Active Pipeline card:
+
+Problems:
+
+Pipeline stage labels (New, Interested, Qualified, Negotiating, Won, Lost) overlap each other.
+Bars are stacked vertically causing text collisions.
+Layout breaks on smaller mobile widths.
+
+Requirements:
+
+Make pipeline stages responsive.
+Use horizontal layout.
+Prevent label overlap.
+Ensure labels wrap correctly or scale appropriately.
+Maintain readability on screens between 320px–430px width.
+3. Contacts Page Overflow
+
+Problems:
+
+Filter buttons and controls overflow.
+Elements appear crowded on smaller Android screens.
+Search and action buttons need better spacing.
+
+Requirements:
+
+Review entire Contacts page responsiveness.
+Ensure buttons wrap properly.
+Prevent horizontal overflow.
+No clipped or overlapping elements.
+4. Pipeline Page Overflow
+
+Problems:
+
+Stage headings overflow.
+Deal cards create spacing issues.
+Pipeline labels and values are not responsive.
+
+Requirements:
+
+Make pipeline board fully mobile responsive.
+Prevent stage names from wrapping into other sections.
+Ensure deal cards fit within viewport.
+No horizontal scrolling.
+5. Import Contacts Page Responsive Issues
+
+Problems:
+
+Step indicators.
+Upload area.
+Informational cards below upload section.
+General spacing and sizing issues.
+
+Requirements:
+
+Review entire Import Contacts page on Android.
+Ensure all content fits within viewport.
+Remove unnecessary whitespace.
+Prevent text clipping and overflow.
+6. Global Mobile Audit
+
+Perform a complete Android PWA responsive audit.
+
+Check:
+
+Dashboard
+Contacts
+Pipeline
+Import Contacts
+Settings
+AI Chat
+Contact Details
+Deal Details
+
+Requirements:
+
+No horizontal scrolling anywhere.
+No overlapping text.
+No clipped buttons.
+No overflowing cards.
+No fixed-width containers causing layout issues.
+Use responsive Tailwind/CSS utilities.
+Test widths:
+320px
+360px
+390px
+412px
+430px
+Deliverables
+List every issue found.
+Fix every responsive issue.
+Provide before/after screenshots.
+Confirm iPhone PWA layout remains unaffected.
+Explain root cause for each issue and what was changed.
+
+Do not stop after fixing the screenshots provided. Perform a complete Android PWA responsive review of the application and fix all similar issues.

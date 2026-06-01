@@ -57,12 +57,16 @@ export default function Dashboard() {
                 Open board <ArrowUpRight size={14} />
               </Link>
           </div>
-          <div className="mt-6 grid grid-cols-6 gap-2 md:gap-3">
+          <div className="mt-6 grid grid-cols-6 gap-1 md:gap-3">
             {STAGES.map((stage, idx) => {
               const col = data?.pipeline.find((p) => p.stage === stage);
               const count = col?.count ?? 0;
               const pct = (count / pipelineMax) * 100;
               const meta = STAGE_META[stage];
+              const shortLabel: Record<string, string> = {
+                new: "New", interested: "Int", qualified: "Qual",
+                negotiating: "Neg", won: "Won", lost: "Lost",
+              };
               return (
                 <motion.div
                   key={stage}
@@ -71,7 +75,7 @@ export default function Dashboard() {
                   transition={{ delay: idx * 0.04 }}
                   className="flex flex-col items-center gap-1.5"
                 >
-                  <div className="w-full h-24 md:h-28 rounded-md bg-muted/50 flex items-end overflow-hidden">
+                  <div className="w-full h-20 md:h-28 rounded-md bg-muted/50 flex items-end overflow-hidden">
                     <motion.div
                       initial={{ height: 0 }}
                       animate={{ height: `${Math.max(6, pct)}%` }}
@@ -79,10 +83,11 @@ export default function Dashboard() {
                       className={cn("w-full rounded-t-md", meta.bar)}
                     />
                   </div>
-                  <div className="text-center">
-                    <div className="text-[18px] font-bold leading-none">{count}</div>
-                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1 truncate w-full">
-                      {meta.label}
+                  <div className="text-center w-full overflow-hidden">
+                    <div className="text-[16px] md:text-[18px] font-bold leading-none">{count}</div>
+                    <div className="text-[9px] md:text-[10px] uppercase tracking-wide text-muted-foreground mt-1 truncate">
+                      <span className="md:hidden">{shortLabel[stage]}</span>
+                      <span className="hidden md:inline">{meta.label}</span>
                     </div>
                   </div>
                 </motion.div>

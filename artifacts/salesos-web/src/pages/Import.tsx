@@ -243,7 +243,7 @@ export default function Import() {
                   if (f) handleFile(f);
                 }}
                 className={cn(
-                  "rounded-2xl border-2 border-dashed transition-colors p-10 md:p-14 grid place-items-center text-center",
+                  "rounded-2xl border-2 border-dashed transition-colors p-6 md:p-14 grid place-items-center text-center",
                   dragOver
                     ? "border-primary bg-primary/5"
                     : "border-card-border bg-card hover:border-primary/50",

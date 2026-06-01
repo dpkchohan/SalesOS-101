@@ -39,7 +39,7 @@ export function ExportMenu({
         className="flex items-center gap-1.5 bg-card border border-card-border text-foreground font-semibold text-[13px] px-3 py-2 rounded-lg hover:bg-muted transition-colors"
         data-testid={`${testIdPrefix}-button`}
       >
-        <Download size={14} /> Export
+        <Download size={14} /> <span className="hidden sm:inline">Export</span>
       </button>
       <AnimatePresence>
         {open && (
