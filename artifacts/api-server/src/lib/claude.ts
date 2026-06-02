@@ -35,7 +35,7 @@ export async function claudeJson<T>(
   const c = getClaude();
   const resp = await c.messages.create({
     model: CLAUDE_MODEL,
-    max_tokens: opts.maxTokens ?? 1500,
+    max_tokens: opts.maxTokens ?? 4096,
     system: systemPrompt,
     messages: [{ role: "user", content: userPrompt }],
   });
@@ -55,7 +55,7 @@ export async function claudeJsonWithImage<T>(
   const c = getClaude();
   const resp = await c.messages.create({
     model: CLAUDE_MODEL,
-    max_tokens: opts.maxTokens ?? 1500,
+    max_tokens: opts.maxTokens ?? 4096,
     system: systemPrompt,
     messages: [
       {

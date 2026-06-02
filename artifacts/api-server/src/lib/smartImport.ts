@@ -208,7 +208,7 @@ Analyze and return JSON of shape:
   "sampleContacts": [<up to 5 normalized contacts as described>]
 }`;
   try {
-    const result = await claudeJson<PreviewAnalysis>(SYSTEM_PROMPT, userPrompt);
+    const result = await claudeJson<PreviewAnalysis>(SYSTEM_PROMPT, userPrompt, { maxTokens: 4096 });
     return {
       detectedType: result.detectedType ?? "Unknown",
       estimatedContacts: Number(result.estimatedContacts) || parsed.rows.length,
@@ -256,7 +256,7 @@ Extract one contact object per row in the same order. Return JSON:
     const result = await claudeJson<{
       contacts: SmartContact[];
       warnings?: string[];
-    }>(SYSTEM_PROMPT, userPrompt);
+    }>(SYSTEM_PROMPT, userPrompt, { maxTokens: 8192 });
     const contacts = Array.isArray(result.contacts)
       ? result.contacts.map(normalizeContact)
       : [];
@@ -265,43 +265,101 @@ Extract one contact object per row in the same order. Return JSON:
       warnings: Array.isArray(result.warnings) ? result.warnings : [],
     };
   } catch (err) {
-    // Fallback: heuristic extraction so import can still proceed.
+    // Fallback: heuristic extraction so import can still proceed even when
+    // Claude is unavailable or returns malformed JSON.
     const contacts: SmartContact[] = [];
     for (const row of rows) {
       const lc: Record<string, string> = {};
       for (const [k, v] of Object.entries(row)) lc[k.toLowerCase().trim()] = v;
+
+      // Two-pass lookup: exact match first, then substring/partial match.
+      // This handles non-standard headers like "Mobile No", "Designation",
+      // "Organisation", "Contact Person", "Email ID", etc.
       const get = (...keys: string[]): string => {
         for (const k of keys) {
           const v = lc[k];
           if (v && v.trim()) return v.trim();
         }
+        for (const k of keys) {
+          for (const [hdr, v] of Object.entries(lc)) {
+            if (!v || !v.trim()) continue;
+            if (hdr.includes(k) || k.includes(hdr)) return v.trim();
+          }
+        }
         return "";
       };
-      const first = get("first name", "firstname", "given name");
-      const last = get("last name", "lastname", "surname", "family name");
+
+      const first = get(
+        "first name", "firstname", "first", "given name", "fname",
+      );
+      const last = get(
+        "last name", "lastname", "last", "surname", "family name", "lname",
+      );
+      // NOTE: "contact person" must come before "name" so the fuzzy pass
+      // matches "EU Contact Person" before "Customer Name" (company column).
       const name =
-        get("full name", "name", "contact name") ||
-        [first, last].filter(Boolean).join(" ").trim();
+        get(
+          "full name", "contact person", "contact name", "person name",
+          "person", "lead name", "name",
+          "client name",
+        ) || [first, last].filter(Boolean).join(" ").trim();
+
+      const email = get(
+        "email", "email address", "primary email", "e-mail",
+        "email id", "email-id", "emailid", "mail", "mail id",
+        "e mail", "work email", "business email",
+      );
+
+      // "contact number" must come before "contact" to avoid matching
+      // the person-name "contact person" column for phone.
+      const phone = get(
+        "phone", "phone number", "mobile", "primary phone",
+        "mobile no", "mobile number", "mob", "mob no", "mob number",
+        "cell", "cell phone", "contact number", "contact no",
+        "whatsapp", "whatsapp no", "tel", "telephone", "landline",
+      );
+
+      const title = get(
+        "title", "job title", "position", "designation",
+        "dept", "department", "role", "post", "job role",
+        "occupation", "function",
+      );
+
+      // "customer name" / "customer" intentionally placed here so fuzzy
+      // picks up a company column like "Customer Name" rather than mapping
+      // it to the person-name field above.
+      const company = get(
+        "company", "company name", "organization", "organisation",
+        "account", "account name", "firm", "org", "employer",
+        "business", "business name", "workplace",
+        "customer name", "customer", "client name", "client",
+      );
+
+      const stage = get(
+        "stage", "lead status", "status", "deal stage",
+        "pipeline stage", "opportunity stage", "sales stage",
+      );
+
+      const rawValue = get(
+        "value", "amount", "deal amount", "deal value", "arr",
+        "revenue", "contract value", "opportunity value",
+      ).replace(/[^\d.\-]/g, "");
+
+      const closeDate = get(
+        "close date", "expected close", "expected close date",
+        "closing date", "close by", "target date", "due date",
+      );
+
       contacts.push(
         normalizeContact({
           name,
-          email: get("email", "email address", "primary email", "e-mail"),
-          phone: get("phone", "phone number", "mobile", "primary phone"),
-          title: get("title", "job title", "position"),
-          company: get("company", "company name", "organization", "account"),
-          stage: get("stage", "lead status", "status", "deal stage"),
-          valueUsd: Number(
-            get("value", "amount", "deal amount", "deal value", "arr").replace(
-              /[^\d.\-]/g,
-              "",
-            ),
-          ) as unknown as number,
-          closeDate: get(
-            "close date",
-            "expected close",
-            "expected close date",
-            "closing date",
-          ),
+          email,
+          phone,
+          title,
+          company,
+          stage,
+          valueUsd: rawValue ? (Number(rawValue) as unknown as number) : null,
+          closeDate,
           notes: null,
         }),
       );
