@@ -22,6 +22,13 @@ import { sendProposalEmail } from "../lib/gmail";
 
 const router: IRouter = Router();
 
+interface TaskInput {
+  title: string;
+  dueDate?: string | null;
+  dueTime?: string | null;
+  priority?: "high" | "medium" | "low";
+}
+
 interface Intent {
   intent:
     | "create_task"
@@ -35,8 +42,9 @@ interface Intent {
     | "search"
     | "general";
   reply: string;
-  // create_task
-  task?: { title: string; dueDate?: string | null; dueTime?: string | null; priority?: "high" | "medium" | "low" };
+  // create_task — single task (legacy) or batch via tasks array
+  task?: TaskInput;
+  tasks?: TaskInput[];
   contactName?: string;
   // log_interaction
   interaction?: {
@@ -67,7 +75,7 @@ interface Intent {
 const SYSTEM = `You are SalesOS, an in-app assistant for a sales rep. Parse the user's message into a structured intent. Always reply with strict JSON, no prose outside JSON.
 
 Intents:
-- "create_task": user wants a to-do or scheduled meeting. Examples: "remind me to follow up with Acme tomorrow", "schedule a follow-up with John next Tuesday at 2pm" (set dueTime="14:00"). When a clock time is mentioned, fill task.dueTime as 24h "HH:MM"; otherwise omit.
+- "create_task": user wants one or more to-dos or scheduled meetings. IMPORTANT: when the user mentions multiple tasks, put ALL of them in the "tasks" array (up to 20). For a single task you may use either "task" or a one-element "tasks" array. Each task has: title (required), dueDate (YYYY-MM-DD or null), dueTime (HH:MM 24h or null — fill when a clock time is mentioned), priority (low|medium|high).
 - "log_interaction": user wants to log a call/email/meeting/note. Example: "logged a call with John, he wants pricing by Friday"
 - "create_contact": user wants to add a new contact. Example: "add new contact Sarah Lee at Globex, sarah@globex.com"
 - "create_lead": user wants to create a new lead/deal for a contact. Example: "create a lead for Acme, $5000 deal in negotiation" → contactName="Acme contact", lead.valueUsd=5000, lead.stage="negotiating". Also use this when user says "add deal", "open a deal", "new opportunity".
@@ -81,7 +89,8 @@ Intents:
 Respond JSON shape:
 {
   "intent": "...",
-  "reply": "<one short, friendly confirmation or answer>",
+  "reply": "<one short, friendly confirmation or answer — for multiple tasks list each one>",
+  "tasks": [{ "title": "...", "dueDate": "YYYY-MM-DD or null", "dueTime": "HH:MM 24h or null", "priority": "low|medium|high" }],
   "task": { "title": "...", "dueDate": "YYYY-MM-DD or null", "dueTime": "HH:MM 24h or null", "priority": "low|medium|high" },
   "contactName": "<contact to attach the task/interaction/stage update/lead to, if mentioned>",
   "interaction": { "type": "call|email|meeting|note", "gist": "...", "gains": [], "misses": [], "nextStep": "...", "sentiment": "positive|neutral|negative" },
@@ -91,7 +100,7 @@ Respond JSON shape:
   "proposalContext": "<short summary of what the proposal should cover, if intent is send_proposal>",
   "sendEmail": false
 }
-Only include the fields relevant to the chosen intent.`;
+Only include the fields relevant to the chosen intent. For create_task, always prefer "tasks" (array) over "task" (single) — even for one task.`;
 
 async function findContactByName(orgId: string, name: string) {
   const [c] = await db
@@ -119,7 +128,8 @@ async function processWithTools(params: {
   if (!contact) return "Contact not found.";
 
   const systemPrompt = `You are a sales assistant for SalesOS. You are currently helping with contact: ${contact.name} (ID: ${contact.id}).
-You have access to tools to actually modify the database. When the user asks you to add a note, create a task, or update contact details, USE THE TOOLS to actually do it, then confirm what you did.
+You have access to tools to actually modify the database. When the user asks you to add a note, create tasks, or update contact details, USE THE TOOLS to actually do it — never just say you did it without calling the tool.
+For task creation, ALWAYS use the create_tasks tool and pass ALL tasks in one call as an array (up to 20). Even for a single task, pass it as a one-element array.
 Always be concise and action-oriented.`;
 
   const tools: Anthropic.Tool[] = [
@@ -133,16 +143,27 @@ Always be concise and action-oriented.`;
       },
     },
     {
-      name: "create_task",
-      description: "Create a task linked to this contact",
+      name: "create_tasks",
+      description: "Create one or more tasks linked to this contact. Always use this for task creation — pass ALL tasks in one call as an array (up to 20 tasks).",
       input_schema: {
-        type: "object",
+        type: "object" as const,
         properties: {
-          title: { type: "string" },
-          due_date: { type: "string", description: "YYYY-MM-DD" },
-          priority: { type: "string", enum: ["low", "medium", "high"] },
+          tasks: {
+            type: "array" as const,
+            description: "Array of tasks to create (1–20 items)",
+            items: {
+              type: "object" as const,
+              properties: {
+                title: { type: "string" as const, description: "Task title" },
+                due_date: { type: "string" as const, description: "YYYY-MM-DD" },
+                due_time: { type: "string" as const, description: "HH:MM 24h format" },
+                priority: { type: "string" as const, enum: ["low", "medium", "high"] },
+              },
+              required: ["title"],
+            },
+          },
         },
-        required: ["title"],
+        required: ["tasks"],
       },
     },
     {
@@ -197,24 +218,39 @@ Always be concise and action-oriented.`;
           .set({ notes: input.note })
           .where(and(eq(contactsTable.id, contactId), eq(contactsTable.orgId, orgId)));
         resultText = "Note saved.";
-      } else if (toolBlock.name === "create_task") {
+      } else if (toolBlock.name === "create_tasks") {
         const input = toolBlock.input as {
-          title: string;
-          due_date?: string;
-          priority?: "low" | "medium" | "high";
+          tasks: Array<{
+            title: string;
+            due_date?: string;
+            due_time?: string;
+            priority?: "low" | "medium" | "high";
+          }>;
         };
+        const taskList = (input.tasks ?? []).slice(0, 20);
+        console.log(`[chat/tools] create_tasks called — ${taskList.length} task(s) for contactId=${contactId} orgId=${orgId}`);
         const lead = await findLeadForContact(orgId, contactId);
-        const [task] = await db
-          .insert(tasksTable)
-          .values({
-            orgId,
-            leadId: lead?.id ?? null,
-            title: input.title,
-            dueDate: input.due_date ?? null,
-            priority: input.priority ?? "medium",
-          })
-          .returning();
-        resultText = `Task created: "${task.title}"${task.dueDate ? ` due ${task.dueDate}` : ""}.`;
+        const summaries: string[] = [];
+        for (const t of taskList) {
+          if (!t.title?.trim()) continue;
+          const sanitisedTime =
+            t.due_time && /^([01]\d|2[0-3]):[0-5]\d$/.test(t.due_time) ? t.due_time : null;
+          console.log(`[chat/tools] inserting task: "${t.title}" due=${t.due_date ?? "null"} time=${sanitisedTime ?? "null"}`);
+          const [task] = await db
+            .insert(tasksTable)
+            .values({
+              orgId,
+              leadId: lead?.id ?? null,
+              title: t.title,
+              dueDate: t.due_date ?? null,
+              dueTime: sanitisedTime,
+              priority: t.priority ?? "medium",
+            })
+            .returning();
+          console.log(`[chat/tools] task saved: id=${task.id} title="${task.title}"`);
+          summaries.push(`"${task.title}"${task.dueDate ? ` (${task.dueDate})` : ""}`);
+        }
+        resultText = `Created ${summaries.length} task${summaries.length === 1 ? "" : "s"}: ${summaries.join(", ")}.`;
       } else if (toolBlock.name === "update_contact") {
         const input = toolBlock.input as { fields: Record<string, unknown> };
         const updates: Record<string, unknown> = {};
@@ -492,7 +528,17 @@ router.post("/chat", requireAuth, async (req, res): Promise<void> => {
         reply.contactId = c.id;
         reply.message = `Added ${c.name} (${customerNo}).`;
       }
-    } else if (intent.intent === "create_task" && intent.task?.title) {
+    } else if (
+      intent.intent === "create_task" &&
+      (intent.tasks?.length || intent.task?.title)
+    ) {
+      // Normalise to array — support both legacy single-task and new batch form
+      const taskInputs: TaskInput[] = (
+        intent.tasks?.length ? intent.tasks : intent.task ? [intent.task] : []
+      ).slice(0, 20);
+
+      console.log(`[chat] create_task fired — ${taskInputs.length} task(s) for orgId=${r.orgId}`);
+
       let leadId: string | null = null;
       if (intent.contactName) {
         const c = await findContactByName(r.orgId, intent.contactName);
@@ -502,38 +548,50 @@ router.post("/chat", requireAuth, async (req, res): Promise<void> => {
           reply.contactId = c.id;
         }
       }
-      const [t] = await db
-        .insert(tasksTable)
-        .values({
-          orgId: r.orgId,
-          leadId,
-          title: intent.task.title,
-          dueDate: intent.task.dueDate ?? null,
-          dueTime:
-            intent.task.dueTime && /^([01]\d|2[0-3]):[0-5]\d$/.test(intent.task.dueTime)
-              ? intent.task.dueTime
-              : null,
-          priority: intent.task.priority ?? "medium",
-        })
-        .returning();
-      if (t.dueDate) {
-        try {
-          const { createCalendarEvent } = await import("../lib/gcal");
-          const { id: eventId } = await createCalendarEvent(r.userId, {
-            title: t.title,
-            description: t.description,
-            date: t.dueDate,
-            time: t.dueTime,
-          });
-          await db
-            .update(tasksTable)
-            .set({ calendarEventId: eventId })
-            .where(eq(tasksTable.id, t.id));
-        } catch (err) {
-          req.log.warn({ err, taskId: t.id }, "Calendar event create skipped (chat)");
+
+      const createdIds: string[] = [];
+      for (const taskInput of taskInputs) {
+        if (!taskInput.title?.trim()) continue;
+        const sanitisedTime =
+          taskInput.dueTime && /^([01]\d|2[0-3]):[0-5]\d$/.test(taskInput.dueTime)
+            ? taskInput.dueTime
+            : null;
+        console.log(`[chat] inserting task: "${taskInput.title}" dueDate=${taskInput.dueDate ?? "null"} dueTime=${sanitisedTime ?? "null"}`);
+        const [t] = await db
+          .insert(tasksTable)
+          .values({
+            orgId: r.orgId,
+            leadId,
+            title: taskInput.title,
+            dueDate: taskInput.dueDate ?? null,
+            dueTime: sanitisedTime,
+            priority: taskInput.priority ?? "medium",
+          })
+          .returning();
+        console.log(`[chat] task saved to DB: id=${t.id} title="${t.title}"`);
+        createdIds.push(t.id);
+
+        if (t.dueDate) {
+          try {
+            const { createCalendarEvent } = await import("../lib/gcal");
+            const { id: eventId } = await createCalendarEvent(r.userId, {
+              title: t.title,
+              description: t.description,
+              date: t.dueDate,
+              time: t.dueTime,
+            });
+            await db
+              .update(tasksTable)
+              .set({ calendarEventId: eventId })
+              .where(eq(tasksTable.id, t.id));
+          } catch (err) {
+            req.log.warn({ err, taskId: t.id }, "Calendar event create skipped (chat)");
+          }
         }
       }
-      reply.taskId = t.id;
+
+      console.log(`[chat] batch complete — created ${createdIds.length} task(s): [${createdIds.join(", ")}]`);
+      reply.taskId = createdIds[0] ?? null;
       reply.leadId = leadId;
     } else if (intent.intent === "log_interaction" && intent.interaction?.gist) {
       let leadId: string | null = null;
