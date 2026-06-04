@@ -55,7 +55,7 @@ const FILTERS = [
 ] as const;
 
 export default function Tasks() {
-  const [filter, setFilter] = useState<"today" | "open" | "done">("today");
+  const [filter, setFilter] = useState<"today" | "open" | "done">("open");
   const [showNew, setShowNew] = useState(false);
   const params =
     filter === "today"

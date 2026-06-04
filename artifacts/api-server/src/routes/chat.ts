@@ -269,6 +269,52 @@ async function findLeadForContact(orgId: string, contactId: string) {
   return l ?? null;
 }
 
+// ── POST /chat/sessions — pre-create a chat session ──────────────────────────
+router.post("/chat/sessions", requireAuth, async (req, res): Promise<void> => {
+  const r = req as AuthenticatedRequest;
+  const contactId = typeof req.body?.contactId === "string" ? req.body.contactId : null;
+  try {
+    const [session] = await db
+      .insert(chatSessionsTable)
+      .values({ orgId: r.orgId, userId: r.userId, contactId })
+      .returning();
+    res.json({ sessionId: session.id });
+  } catch (err) {
+    req.log.error({ err }, "Failed to create chat session");
+    res.status(500).json({ error: "Failed to create session" });
+  }
+});
+
+// ── GET /chat-sessions/:id/messages — load transcript ────────────────────────
+router.get("/chat-sessions/:id/messages", requireAuth, async (req, res): Promise<void> => {
+  const r = req as AuthenticatedRequest;
+  const sessionId = req.params.id;
+  try {
+    const [session] = await db
+      .select({ id: chatSessionsTable.id })
+      .from(chatSessionsTable)
+      .where(and(eq(chatSessionsTable.id, sessionId), eq(chatSessionsTable.orgId, r.orgId)));
+    if (!session) {
+      res.status(404).json({ error: "Session not found" });
+      return;
+    }
+    const messages = await db
+      .select({
+        id: chatMessagesTable.id,
+        role: chatMessagesTable.role,
+        content: chatMessagesTable.content,
+        createdAt: chatMessagesTable.createdAt,
+      })
+      .from(chatMessagesTable)
+      .where(eq(chatMessagesTable.sessionId, sessionId))
+      .orderBy(chatMessagesTable.createdAt);
+    res.json({ messages });
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch session messages");
+    res.status(500).json({ error: "Failed to fetch messages" });
+  }
+});
+
 router.post("/chat", requireAuth, async (req, res): Promise<void> => {
   const r = req as AuthenticatedRequest;
   const body = SendChatBody.safeParse(req.body);
@@ -473,7 +519,7 @@ router.post("/chat", requireAuth, async (req, res): Promise<void> => {
       if (t.dueDate) {
         try {
           const { createCalendarEvent } = await import("../lib/gcal");
-          const { id: eventId } = await createCalendarEvent({
+          const { id: eventId } = await createCalendarEvent(r.userId, {
             title: t.title,
             description: t.description,
             date: t.dueDate,

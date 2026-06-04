@@ -1,2 +1,3 @@
 - [API client compiled types](api-client-compiled-types.md) — TypeScript resolves @workspace/api-client-react from dist/*.d.ts, not src/; edit both src and dist when adding schema fields.
 - [Clerk import path](clerk-import.md) — In salesos-web the Clerk package is @clerk/react (not @clerk/clerk-react); useAuth imported from "@clerk/react".
+- [Chat session tables missing migration](chat-session-migration.md) — chat_sessions and chat_messages had no migration; fixed in 0002_chat_sessions.sql. contacts.notes also added there.
