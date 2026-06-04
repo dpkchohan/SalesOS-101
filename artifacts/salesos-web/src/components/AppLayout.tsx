@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Link, useLocation } from "wouter";
 import { useClerk, useUser } from "@clerk/react";
 import {
@@ -16,12 +16,14 @@ import {
   ShieldCheck,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   RotateCw,
   MoreHorizontal,
 } from "lucide-react";
-import { initials } from "@/lib/format";
+import { initials, formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { FeedbackModal } from "./FeedbackModal";
+import { useGetDashboardSummary, GetDashboardSummaryQueryResult } from "@workspace/api-client-react";
 
 const NAV = [
   { to: "/", label: "Chat", icon: MessageCircle },
@@ -49,6 +51,135 @@ const MORE_NAV = [
 ];
 
 const ADMIN_EMAILS = ["deepak@pddt.in", "dpkchohan@gmail.com"];
+
+type DashData = GetDashboardSummaryQueryResult | undefined;
+
+interface RecentInteractionWithContact {
+  id: string;
+  leadId: string;
+  leadContactName?: string | null;
+}
+
+function SidebarContextPanels({ data }: { data: DashData }) {
+  const [openPipeline, setOpenPipeline] = useState(true);
+  const [openTasks, setOpenTasks] = useState(true);
+  const [openContacts, setOpenContacts] = useState(true);
+
+  const interactions = data?.recentInteractions as unknown as RecentInteractionWithContact[] | undefined;
+
+  const recentContacts = useMemo(() => {
+    if (!interactions) return [];
+    const seen = new Set<string>();
+    const result: { leadId: string; name: string }[] = [];
+    for (const i of interactions) {
+      if (i.leadContactName && !seen.has(i.leadId)) {
+        seen.add(i.leadId);
+        result.push({ leadId: i.leadId, name: i.leadContactName });
+        if (result.length >= 5) break;
+      }
+    }
+    return result;
+  }, [interactions]);
+
+  const totalDeals = data?.pipeline?.reduce((s, p) => s + p.count, 0) ?? 0;
+  const taskCount = data?.todaysTasks?.length ?? 0;
+
+  return (
+    <div className="mt-auto border-t border-sidebar-border/60 pt-2 pb-1 space-y-0.5 px-2">
+      {/* Pipeline */}
+      <div>
+        <button
+          onClick={() => setOpenPipeline((v) => !v)}
+          className="w-full flex items-center justify-between px-2 py-1.5 rounded-md text-[10px] uppercase tracking-wider font-semibold text-sidebar-foreground/45 hover:text-sidebar-foreground/70 transition-colors"
+        >
+          <span className="flex items-center gap-1.5"><Kanban size={10} />Pipeline</span>
+          <ChevronDown size={10} className={cn("transition-transform duration-150", !openPipeline && "-rotate-90")} />
+        </button>
+        {openPipeline && (
+          <Link
+            to="/pipeline"
+            className="block px-2 py-1.5 rounded-md hover:bg-sidebar-accent/50 transition-colors"
+          >
+            <div className="text-[15px] font-bold tracking-tight leading-none text-sidebar-foreground">
+              {formatCurrency(data?.totalPipelineValue ?? 0)}
+            </div>
+            <div className="text-[10px] text-sidebar-foreground/45 mt-0.5">{totalDeals} open deal{totalDeals !== 1 ? "s" : ""}</div>
+          </Link>
+        )}
+      </div>
+
+      {/* Tasks */}
+      <div>
+        <button
+          onClick={() => setOpenTasks((v) => !v)}
+          className="w-full flex items-center justify-between px-2 py-1.5 rounded-md text-[10px] uppercase tracking-wider font-semibold text-sidebar-foreground/45 hover:text-sidebar-foreground/70 transition-colors"
+        >
+          <span className="flex items-center gap-1.5"><CheckSquare size={10} />Today's tasks</span>
+          <span className="flex items-center gap-1">
+            {taskCount > 0 && <span className="text-[9px] font-bold bg-primary/20 text-primary rounded-full px-1.5 py-0.5 leading-none">{taskCount}</span>}
+            <ChevronDown size={10} className={cn("transition-transform duration-150", !openTasks && "-rotate-90")} />
+          </span>
+        </button>
+        {openTasks && (
+          <div className="space-y-px">
+            {taskCount === 0 ? (
+              <div className="px-2 py-1 text-[10.5px] text-sidebar-foreground/35">Nothing due today.</div>
+            ) : (
+              <>
+                {data?.todaysTasks?.slice(0, 3).map((t) => (
+                  <Link
+                    key={t.id}
+                    to="/tasks"
+                    className="flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-sidebar-accent/50 transition-colors"
+                  >
+                    <span className={cn("w-1 h-3.5 rounded-full flex-shrink-0", t.priority === "high" ? "bg-rose-500/80" : t.priority === "medium" ? "bg-amber-500/80" : "bg-blue-500/60")} />
+                    <span className="text-[11px] truncate text-sidebar-foreground/65 hover:text-sidebar-foreground">{t.title}</span>
+                  </Link>
+                ))}
+                {taskCount > 3 && (
+                  <Link to="/tasks" className="block px-2 py-0.5 text-[10px] text-primary/80 hover:text-primary hover:underline">
+                    +{taskCount - 3} more
+                  </Link>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Recent contacts */}
+      <div>
+        <button
+          onClick={() => setOpenContacts((v) => !v)}
+          className="w-full flex items-center justify-between px-2 py-1.5 rounded-md text-[10px] uppercase tracking-wider font-semibold text-sidebar-foreground/45 hover:text-sidebar-foreground/70 transition-colors"
+        >
+          <span className="flex items-center gap-1.5"><Users size={10} />Recently touched</span>
+          <ChevronDown size={10} className={cn("transition-transform duration-150", !openContacts && "-rotate-90")} />
+        </button>
+        {openContacts && (
+          <div className="space-y-px">
+            {recentContacts.length === 0 ? (
+              <div className="px-2 py-1 text-[10.5px] text-sidebar-foreground/35">No recent contacts.</div>
+            ) : (
+              recentContacts.map((c) => (
+                <Link
+                  key={c.leadId}
+                  to={`/leads/${c.leadId}`}
+                  className="flex items-center gap-2 px-2 py-1 rounded-md hover:bg-sidebar-accent/50 transition-colors"
+                >
+                  <div className="w-4 h-4 rounded-full bg-primary/20 text-primary grid place-items-center text-[8px] font-bold flex-shrink-0">
+                    {c.name[0]?.toUpperCase() ?? "?"}
+                  </div>
+                  <span className="text-[11px] truncate text-sidebar-foreground/65 hover:text-sidebar-foreground">{c.name}</span>
+                </Link>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function NavButtons() {
   return (
@@ -91,6 +222,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   );
   const [showFeedback, setShowFeedback] = useState(false);
   const [showMore, setShowMore] = useState(false);
+  const { data: dashData } = useGetDashboardSummary();
 
   useEffect(() => {
     setShowMore(false);
@@ -119,51 +251,59 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-[100dvh] bg-background text-foreground flex">
       <aside className="hidden md:flex flex-col w-60 bg-sidebar text-sidebar-foreground border-r border-sidebar-border sticky top-0 h-[100dvh]">
-        <div className="px-5 pt-5 pb-4 flex items-center gap-2.5">
+        <div className="px-5 pt-5 pb-4 flex items-center gap-2.5 flex-shrink-0">
           <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="SalesOS" className="w-9 h-9 rounded-lg" />
           <div>
             <div className="font-bold tracking-tight text-[17px]">SalesOS</div>
             <div className="text-[11px] uppercase tracking-wider opacity-60">command deck</div>
           </div>
         </div>
-        <nav className="px-2 py-2 flex-1 space-y-0.5">
-          {NAV.map(({ to, label, icon: Icon }) => (
-            <Link key={to} to={to}
-                className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-[14px] font-medium transition-colors",
-                  isActive(to)
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                    : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/60",
-                )}
-                data-testid={`link-${label.toLowerCase()}`}
-              >
-                <Icon size={18} strokeWidth={2.2} />
-                <span>{label}</span>
-              </Link>
-          ))}
-        </nav>
-        {isAdmin && (
-          <div className="px-2 pb-1">
-            <div className="text-[10px] uppercase tracking-wider text-sidebar-foreground/40 font-semibold px-3 py-1.5">Admin</div>
-            {[
-              { to: "/admin/feedback", label: "Feedback" },
-              { to: "/admin/errors", label: "Errors" },
-            ].map(({ to, label }) => (
+
+        {/* Scrollable middle: nav + context panels */}
+        <div className="flex-1 overflow-y-auto flex flex-col min-h-0">
+          <nav className="px-2 py-2 space-y-0.5">
+            {NAV.map(({ to, label, icon: Icon }) => (
               <Link key={to} to={to}
-                className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors",
-                  loc === to
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                    : "text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/60",
-                )}
-              >
-                <ShieldCheck size={16} strokeWidth={2.2} />
-                <span>{label}</span>
-              </Link>
+                  className={cn(
+                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-[14px] font-medium transition-colors",
+                    isActive(to)
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                      : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/60",
+                  )}
+                  data-testid={`link-${label.toLowerCase()}`}
+                >
+                  <Icon size={18} strokeWidth={2.2} />
+                  <span>{label}</span>
+                </Link>
             ))}
-          </div>
-        )}
-        <div className="p-3 border-t border-sidebar-border">
+          </nav>
+
+          {isAdmin && (
+            <div className="px-2 pb-1">
+              <div className="text-[10px] uppercase tracking-wider text-sidebar-foreground/40 font-semibold px-3 py-1.5">Admin</div>
+              {[
+                { to: "/admin/feedback", label: "Feedback" },
+                { to: "/admin/errors", label: "Errors" },
+              ].map(({ to, label }) => (
+                <Link key={to} to={to}
+                  className={cn(
+                    "flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors",
+                    loc === to
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                      : "text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/60",
+                  )}
+                >
+                  <ShieldCheck size={16} strokeWidth={2.2} />
+                  <span>{label}</span>
+                </Link>
+              ))}
+            </div>
+          )}
+
+          <SidebarContextPanels data={dashData} />
+        </div>
+
+        <div className="p-3 border-t border-sidebar-border flex-shrink-0">
           <button
             onClick={() => setShowFeedback(true)}
             className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[12px] font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent/60 transition-colors border border-sidebar-border mb-2"
