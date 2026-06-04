@@ -24,26 +24,26 @@ import { cn } from "@/lib/utils";
 import { FeedbackModal } from "./FeedbackModal";
 
 const NAV = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/", label: "Chat", icon: MessageCircle },
   { to: "/contacts", label: "Contacts", icon: Users },
   { to: "/leads", label: "Leads", icon: TrendingUp },
   { to: "/pipeline", label: "Pipeline", icon: Kanban },
-  { to: "/chat", label: "Chat", icon: MessageCircle },
   { to: "/tasks", label: "Tasks", icon: CheckSquare },
+  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/documents", label: "Docs", icon: FileText },
   { to: "/import", label: "Import", icon: Upload },
 ];
 
 const PRIMARY_NAV = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/", label: "Chat", icon: MessageCircle },
   { to: "/contacts", label: "Contacts", icon: Users },
-  { to: "/chat", label: "Chat", icon: MessageCircle },
   { to: "/pipeline", label: "Pipeline", icon: Kanban },
+  { to: "/tasks", label: "Tasks", icon: CheckSquare },
 ];
 
 const MORE_NAV = [
   { to: "/leads", label: "Leads", icon: TrendingUp },
-  { to: "/tasks", label: "Tasks", icon: CheckSquare },
+  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/documents", label: "Docs", icon: FileText },
   { to: "/import", label: "Import", icon: Upload },
 ];

@@ -43,7 +43,7 @@ import {
 const router: IRouter = Router();
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
-const BATCH_SIZE = 25;
+const BATCH_SIZE = 10;
 const MAX_CONCURRENT_BATCHES = 2;
 
 const upload = multer({

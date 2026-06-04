@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, ilike, desc } from "drizzle-orm";
+import { and, eq, ilike, desc, asc } from "drizzle-orm";
 import {
   db,
   contactsTable,
@@ -127,9 +127,39 @@ async function processWithTools(params: {
 
   if (!contact) return "Contact not found.";
 
-  const systemPrompt = `You are a sales assistant for SalesOS. You are currently helping with contact: ${contact.name} (ID: ${contact.id}).
+  // Fetch last 3 sessions for this contact as conversation history context
+  let historyContext = "";
+  try {
+    const recentSessions = await db
+      .select({ id: chatSessionsTable.id, createdAt: chatSessionsTable.createdAt })
+      .from(chatSessionsTable)
+      .where(and(eq(chatSessionsTable.contactId, contactId), eq(chatSessionsTable.orgId, orgId)))
+      .orderBy(desc(chatSessionsTable.createdAt))
+      .limit(3);
+
+    if (recentSessions.length > 0) {
+      const transcripts = await Promise.all(
+        recentSessions.map(async (sess) => {
+          const msgs = await db
+            .select({ role: chatMessagesTable.role, content: chatMessagesTable.content })
+            .from(chatMessagesTable)
+            .where(eq(chatMessagesTable.sessionId, sess.id))
+            .orderBy(asc(chatMessagesTable.createdAt))
+            .limit(20);
+          const date = sess.createdAt.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+          const lines = msgs.map((m) => `${m.role === "user" ? "Rep" : "AI"}: ${m.content}`).join("\n");
+          return `[Session — ${date}]\n${lines}`;
+        }),
+      );
+      const joined = transcripts.filter(Boolean).join("\n\n");
+      if (joined) historyContext = `\n\nPast conversations with this contact:\n${joined}\n`;
+    }
+  } catch { /* non-fatal — proceed without history */ }
+
+  const systemPrompt = `You are a sales assistant for SalesOS. You are currently helping with contact: ${contact.name} (ID: ${contact.id}).${historyContext}
 You have access to tools to actually modify the database. When the user asks you to add a note, create tasks, or update contact details, USE THE TOOLS to actually do it — never just say you did it without calling the tool.
 For task creation, ALWAYS use the create_tasks tool and pass ALL tasks in one call as an array (up to 20). Even for a single task, pass it as a one-element array.
+When referencing this contact in your reply, include a markdown link: [${contact.name}](/contacts/${contact.id}). When you create tasks, include "[→ View in Tasks](/tasks)" at the end of your reply.
 Always be concise and action-oriented.`;
 
   const tools: Anthropic.Tool[] = [
@@ -485,6 +515,7 @@ router.post("/chat", requireAuth, async (req, res): Promise<void> => {
           })
           .returning();
         reply.leadId = l.id;
+        reply.message = (intent.reply || "Lead created.") + " [→ View pipeline](/pipeline)";
       }
     } else if (intent.intent === "create_contact" && intent.contact?.name) {
       const dup = await findDuplicate({
@@ -526,7 +557,7 @@ router.post("/chat", requireAuth, async (req, res): Promise<void> => {
           })
           .returning();
         reply.contactId = c.id;
-        reply.message = `Added ${c.name} (${customerNo}).`;
+        reply.message = `Added ${c.name} (${customerNo}). [→ View contact](/contacts/${c.id})`;
       }
     } else if (
       intent.intent === "create_task" &&
@@ -593,6 +624,7 @@ router.post("/chat", requireAuth, async (req, res): Promise<void> => {
       console.log(`[chat] batch complete — created ${createdIds.length} task(s): [${createdIds.join(", ")}]`);
       reply.taskId = createdIds[0] ?? null;
       reply.leadId = leadId;
+      reply.message = (intent.reply || `Created ${createdIds.length} task(s).`) + " [→ View in Tasks](/tasks)";
     } else if (intent.intent === "log_interaction" && intent.interaction?.gist) {
       let leadId: string | null = null;
       if (intent.contactName) {
@@ -792,6 +824,22 @@ router.post("/chat", requireAuth, async (req, res): Promise<void> => {
     reply.message = "I understood you but couldn't save that. Please try again.";
   }
   } // end else (general session)
+
+  // Link session to the resolved contactId (if not already linked)
+  if (sessionId && reply.contactId) {
+    try {
+      const [sess] = await db
+        .select({ contactId: chatSessionsTable.contactId })
+        .from(chatSessionsTable)
+        .where(eq(chatSessionsTable.id, sessionId));
+      if (sess && !sess.contactId) {
+        await db
+          .update(chatSessionsTable)
+          .set({ contactId: reply.contactId })
+          .where(eq(chatSessionsTable.id, sessionId));
+      }
+    } catch { /* non-fatal */ }
+  }
 
   // Persist assistant reply
   if (sessionId) {

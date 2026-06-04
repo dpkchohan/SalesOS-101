@@ -1,0 +1,34 @@
+PROMPT FOR REPLIT AGENT:
+
+Proceed with Tasks #53, #54, #55 from the plan. Use react-markdown for link rendering (future-proof for rich formatting). No timeline estimates needed.
+
+Task #53 — Contact Conversation History
+
+	1.	Add contact_conversations table: id, contact_id (FK), org_id, session_id (nullable), transcript (TEXT), summary (TEXT), created_at, updated_at. Index on (contact_id, org_id, created_at DESC).
+	2.	POST /api/contacts/:id/conversations — accepts {transcript, summary?}, auto-generates summary via Claude if not provided.
+	3.	GET /api/contacts/:id/conversations?limit=10&offset=0 — returns conversations newest-first.
+	4.	In processWithTools (contact-linked chat), fetch last 3 conversations and prepend to Claude system prompt.
+	5.	In general chat, after resolving intent on a contact, auto-save the conversation to that contact’s history.
+	6.	Add “Conversation History” tab to contact detail page — list conversations with date + summary, click to expand transcript.
+
+Task #54 — AI-First Chat Layout
+
+	1.	Restructure app shell so chat occupies the main content area (center/full-width on desktop, full-screen on mobile).
+	2.	Sidebar (desktop) or bottom nav (mobile) becomes quick-access context (recent contacts, open tasks, pipeline value) — read-only, secondary.
+	3.	Make /chat (or /) the default landing page after login.
+	4.	Add suggested prompt chips on empty chat screen (“Show my tasks”, “Create a contact”, “What’s my pipeline?”).
+	5.	Ensure transitions between chat and list pages are seamless with scroll position preserved.
+
+Task #55 — Clickable Resource Links in Chat
+
+	1.	Install react-markdown — future-proof for richer formatting later.
+	2.	Update Claude system prompt to include: “When you create or reference a resource, include a markdown link: label, label, etc. Use actual resource IDs.”
+	3.	Ensure chat response payloads carry taskId, contactId, leadId, etc. back to Claude’s final turn.
+	4.	In Chat.tsx, render all chat messages through react-markdown so text becomes clickable <Link> components.
+	5.	Test: “Create a task to follow up with Acme on Friday” → verify response contains a clickable link.
+
+Then fix the critical blocker:
+
+AI Smart Import JSON parsing is broken. Claude’s extraction response is malformed at position 4018. Fix the extraction pipeline in importAI.ts: log the raw Claude response, fix the JSON escaping so it’s valid, add error handling for parse failures. Test with IT_Managers_NCR_base_56_customers.xlsx again.
+
+Start planning now. Commit and push as you go.

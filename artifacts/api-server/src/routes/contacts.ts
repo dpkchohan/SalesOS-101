@@ -6,6 +6,8 @@ import {
   companiesTable,
   leadsTable,
   interactionsTable,
+  chatSessionsTable,
+  chatMessagesTable,
 } from "@workspace/db";
 import {
   ListContactsQueryParams,
@@ -757,5 +759,46 @@ router.post("/contacts/backfill", requireAuth, async (req, res): Promise<void> =
 });
 
 void formatCustomerNo;
+
+router.get("/contacts/:id/chat-sessions", requireAuth, async (req, res): Promise<void> => {
+  const r = req as AuthenticatedRequest;
+  const contactId = String(req.params.id);
+
+  const [contact] = await db
+    .select({ id: contactsTable.id })
+    .from(contactsTable)
+    .where(and(eq(contactsTable.id, contactId), eq(contactsTable.orgId, r.orgId)))
+    .limit(1);
+
+  if (!contact) {
+    res.status(404).json({ error: "Contact not found" });
+    return;
+  }
+
+  const sessions = await db
+    .select({ id: chatSessionsTable.id, createdAt: chatSessionsTable.createdAt })
+    .from(chatSessionsTable)
+    .where(and(eq(chatSessionsTable.orgId, r.orgId), eq(chatSessionsTable.contactId, contactId)))
+    .orderBy(desc(chatSessionsTable.createdAt))
+    .limit(20);
+
+  const result = await Promise.all(
+    sessions.map(async (s) => {
+      const [firstMsg] = await db
+        .select({ content: chatMessagesTable.content })
+        .from(chatMessagesTable)
+        .where(and(eq(chatMessagesTable.sessionId, s.id), eq(chatMessagesTable.role, "user")))
+        .orderBy(asc(chatMessagesTable.createdAt))
+        .limit(1);
+      return {
+        id: s.id,
+        createdAt: s.createdAt.toISOString(),
+        preview: firstMsg?.content?.slice(0, 120) ?? null,
+      };
+    }),
+  );
+
+  res.json(result);
+});
 
 export default router;

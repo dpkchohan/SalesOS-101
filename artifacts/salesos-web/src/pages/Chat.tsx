@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import ReactMarkdown from "react-markdown";
 import { Link } from "wouter";
 import { useAuth } from "@clerk/react";
 import { getApiUrl } from "@/lib/api";
@@ -773,7 +774,35 @@ export default function Chat() {
                       <Sparkles size={10} /> {m.intent.replace(/_/g, " ")}
                     </div>
                   )}
-                  {m.text}
+                  {m.role === "user" ? (
+                    m.text
+                  ) : (
+                    <ReactMarkdown
+                      components={{
+                        a: ({ href, children }) =>
+                          href?.startsWith("/") ? (
+                            <Link
+                              to={href}
+                              className="text-primary underline hover:opacity-80 font-semibold"
+                            >
+                              {children}
+                            </Link>
+                          ) : (
+                            <a
+                              href={href}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary underline hover:opacity-80"
+                            >
+                              {children}
+                            </a>
+                          ),
+                        p: ({ children }) => <span>{children}</span>,
+                      }}
+                    >
+                      {m.text}
+                    </ReactMarkdown>
+                  )}
                   {m.role === "assistant" && m.duplicate && (
                     <div
                       className="mt-2 flex items-start gap-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-[12px]"

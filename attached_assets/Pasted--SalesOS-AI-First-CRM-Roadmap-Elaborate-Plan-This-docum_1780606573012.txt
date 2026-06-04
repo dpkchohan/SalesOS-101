@@ -1,0 +1,336 @@
+# SalesOS AI-First CRM Roadmap — Elaborate Plan
+
+This document outlines the full roadmap for converting SalesOS from a traditional CRM UI into an **AI-first conversational interface** where chat is the primary surface, with real-time voice, persistent memory, and intelligent file handling.
+
+-----
+
+## Overview
+
+**Current state:** SalesOS has traditional CRM pages (Contacts, Leads, Tasks, etc.) with AI integration on the side.
+
+**Target state:** Chat is the primary interface. Every action (creating contacts, tasks, documents, analyzing attachments) flows through conversation, with full context persistence and voice support.
+
+-----
+
+## Phase 1 — Conversation Memory (Foundation)
+
+### What & Why
+
+Users should be able to chat about a specific contact and have that conversation saved forever, linked to that contact, and available for Claude to read on future queries. Like Amazon’s Rufus — when you return to a product, your old chat with Rufus is there.
+
+### Database
+
+- New table: `contact_conversations`
+  - `id` (UUID, PK)
+  - `contact_id` (FK → contacts.id)
+  - `org_id` (FK → organizations.id, for multi-tenancy)
+  - `transcript` (TEXT, raw conversation JSON or markdown)
+  - `summary` (TEXT, Claude-generated 1-line summary for quick UI display)
+  - `created_at`, `updated_at` (timestamps)
+- Index on `(contact_id, org_id, created_at DESC)` for fast retrieval
+
+### API Endpoints
+
+- `POST /api/contacts/:id/conversations` — save new conversation
+  - Body: `{ transcript: "User: ...\nAssistant: ...", summary?: "..." }`
+  - Returns: created conversation object
+- `GET /api/contacts/:id/conversations` — fetch all conversations for a contact
+  - Query params: `?limit=10&offset=0` for pagination
+  - Returns: array of conversations (oldest first, or newest first — TBD)
+- `DELETE /api/contacts/:id/conversations/:conversationId` — delete a conversation (if needed)
+
+### Claude Integration
+
+Whenever Claude answers a question about a specific contact:
+
+1. Fetch last 3 conversations for that contact from DB
+1. Prepend them to the Claude system prompt: `"Here are recent conversations about this contact:\n{transcripts}"`
+1. Claude answers with full context of past discussions
+
+### Frontend
+
+- Contact detail page → new tab **“Conversation History”**
+  - List of past conversations with timestamps and one-line summaries
+  - Click to expand and read full transcript
+  - Shows user who initiated + any actions taken (task created, doc generated, etc.)
+- Chat interface → when chatting about a contact, show a badge: “💾 Saving to [Contact Name]”
+
+### Acceptance Criteria
+
+- ✅ Conversation saved to `contact_conversations` table
+- ✅ Conversation appears in contact detail “Conversation History” tab
+- ✅ Claude prompt includes past 3 conversations when answering about a contact
+- ✅ No data loss on refresh (everything persisted in DB)
+
+-----
+
+## Phase 2 — AI-First Chat Interface (Primary UI)
+
+### What & Why
+
+Instead of navigating between “Contacts” / “Tasks” / “Deals” pages, the chat window should be the main interface. Users chat to do everything: “Create a contact named Sashank”, “Show me my tasks”, “What’s the status of the Flipkart deal?”
+
+### Frontend Architecture
+
+- Move chat to the **center of the screen** (currently it’s a sidebar feature)
+- Sidebar shows: Contacts (searchable list), Tasks (quick view), Deals (pipeline view) — but these are **outputs** of chat, not primary navigation
+- Chat is conversational, not button-driven
+
+### Chat Capabilities (Via Claude)
+
+User says → Claude does:
+
+- “Create a contact named Sashank Mehta, email [sashank@example.com](mailto:sashank@example.com)” → Creates contact, returns: “✅ Contact created. [View Sashank]” (hyperlink)
+- “Show my open tasks” → Fetches tasks, renders them in chat as a list/table
+- “What’s my deal pipeline?” → Fetches deals, shows pipeline visualization or summary
+- “Upload my leads spreadsheet” → (See Phase 5)
+
+### Implementation Notes
+
+- Chat input at bottom, messages above
+- System prompt tells Claude it’s a CRM and can create/update/query the database
+- Each message includes action metadata: `{ action: "create_contact", resource_id: "xyz", ... }`
+- Use that metadata to trigger hyperlinks (Phase 3)
+
+### Acceptance Criteria
+
+- ✅ Chat is the primary visual focus of the app
+- ✅ Users can perform CRUD operations on contacts/tasks/deals via chat
+- ✅ Chat responses include relevant information (not just confirmations)
+- ✅ No need to leave chat to accomplish tasks
+
+-----
+
+## Phase 3 — Real-Time Voice + Live Transcription
+
+### What & Why
+
+User clicks a mic button → SalesOS transcribes in real-time (word by word) → user speaks naturally → transcript appears line-by-line in the chat → when done speaking, Claude responds.
+
+Like Claude’s native voice mode where you see the transcript appearing as you speak.
+
+### Tech Stack
+
+- **STT (Speech-to-Text):** OpenAI’s Whisper (real-time via streaming API) OR Web Speech API (browser-native, free but lower quality)
+- **Recommendation:** Start with **Web Speech API** (no backend calls, instant), fall back to Whisper if accuracy needed
+- **TTS (Text-to-Speech):** ElevenLabs (for Claude’s voice response) — optional for beta, can add later
+
+### Frontend Implementation
+
+1. User clicks **mic icon** in chat input
+1. Browser requests microphone permission (standard browser dialog)
+1. Live transcription starts:
+- Browser captures audio → Web Speech API transcribes
+- Partial results appear in chat in real-time (grayed out, “listening…”)
+- As user speaks, transcript updates line-by-line
+1. User stops speaking (or clicks “done”)
+1. Final transcript is locked in
+1. Claude processes and responds
+
+### UX Details
+
+- Mic button shows **animated pulse/wave** while recording (visual feedback “listening”)
+- Live transcript appears in a **distinct style** (e.g., gray italic) to show it’s still being captured
+- Final transcript is locked in normal black text
+- Audio waveform visualization (optional, nice-to-have)
+
+### Database
+
+- No new tables — transcription is just another message in the chat
+
+### Acceptance Criteria
+
+- ✅ Mic button works (permission handling)
+- ✅ Real-time transcript appears word-by-word as user speaks
+- ✅ Visual feedback shows “listening” state
+- ✅ Final transcript is locked in and sent to Claude
+- ✅ Works in all major browsers (Chrome, Safari, Firefox)
+- ✅ Fallback to text input if mic unavailable
+
+-----
+
+## Phase 4 — Hyperlinks & Action Linking in Chat
+
+### What & Why
+
+When Claude’s response creates or references a resource, it should be clickable:
+
+- “✅ Task created: [Review proposal from Acme Corp]” → click → goes to that task
+- “Here’s your pipeline: [Deal 1] [Deal 2] [Deal 3]” → each deal is clickable
+- “Attached your meeting notes: [Q2 Strategy - PDF]” → click → downloads/opens file
+
+### Implementation
+
+1. **Claude Prompt Enhancement:**
+- System prompt tells Claude: “When you create a resource, include `[resource_name](id:resource_id)` in your response for clickable links”
+- Example: “✅ Contact created: [Sashank Mehta](id:contact-abc123)”
+1. **Chat Message Parsing:**
+- Frontend regex finds patterns like `[text](id:uuid)` in Claude responses
+- Convert to clickable `<a>` tags that navigate to `/contacts/:id` or `/tasks/:id`
+- Style as inline blue links
+1. **Click Handler:**
+- Clicking a link navigates to the resource detail page
+- Or opens a side panel with the resource (doesn’t navigate away from chat)
+
+### Database
+
+- No new tables — this is purely presentational/UX
+
+### Acceptance Criteria
+
+- ✅ Resources created via chat show as clickable hyperlinks
+- ✅ Clicking a link navigates to/opens the resource
+- ✅ Works for: Contacts, Tasks, Deals, Docs, Companies
+- ✅ Links remain clickable across chat sessions
+
+-----
+
+## Phase 5 — Auto-Save Chat to Contact History
+
+### What & Why
+
+When a user mentions a specific contact in chat, that conversation should automatically be saved to that contact’s conversation history (Phase 1).
+
+Example:
+
+- User: “Update Sashank’s status to ‘warm lead’”
+- Claude: “✅ Updated Sashank Mehta to warm lead”
+- **Action:** This conversation is automatically saved to Sashank’s `contact_conversations` table
+- Next time user clicks on Sashank’s contact detail → “Conversation History” tab shows this chat
+
+### Implementation
+
+1. **Claude Prompt:**
+- System prompt tells Claude to explicitly mention which contact/task/deal it’s working with
+- Example: Claude response includes: `[CONTEXT: contact_id: abc123, contact_name: Sashank Mehta]`
+1. **Chat Processing:**
+- After Claude responds, parse the response for `[CONTEXT: ...]` markers
+- Extract `contact_id` and other resource IDs
+- Call `POST /api/contacts/:id/conversations` to save this conversation to that contact
+1. **Logic:**
+- Only save if a single, clear contact is mentioned
+- If multiple contacts mentioned, skip (ambiguous)
+- Transcript saved = full user message + full Claude response
+
+### Database
+
+- Uses existing `contact_conversations` table from Phase 1
+- No new tables
+
+### Acceptance Criteria
+
+- ✅ Chat about a specific contact is saved to that contact’s history
+- ✅ Saved conversations appear in contact detail “Conversation History” tab
+- ✅ Next time you open that contact, you can read the full chat history
+- ✅ Claude reads this history for context (Phase 1)
+
+-----
+
+## Phase 6 — File Attachment Intelligence
+
+### What & Why
+
+Currently: Users upload files in chat, but Claude doesn’t process them. They just sit there.
+
+Target: When a user uploads a file (CSV, PDF, image, Excel, proposal doc, etc.), Claude should:
+
+- Read the file content
+- Summarize what it found
+- Ask clarifying questions or suggest actions
+- Create contacts/tasks/deals from the file if appropriate
+
+### Implementation
+
+1. **Upload Handler:**
+- User attaches a file in chat
+- File goes to `/api/storage/upload` (existing S3 storage)
+- Get a signed download URL + file metadata
+1. **Claude Context:**
+- Send the file to Claude via the API (base64 for images, text for CSV/docs)
+- Claude reads and summarizes
+- System prompt tells Claude: “If a CSV of contacts is uploaded, extract and suggest importing them”
+1. **Actions from Files:**
+- CSV with contacts → Claude suggests: “I found 25 contacts. [Import them]” (hyperlink)
+- PDF proposal → Claude summarizes key points, suggests creating a task for follow-up
+- Image of business card → Claude extracts contact info, suggests creating a contact
+- Spreadsheet with leads → Claude detects and offers to create deals
+
+### Database
+
+- Reuse existing `storage_usage` table for quota tracking
+- No new tables
+
+### Acceptance Criteria
+
+- ✅ File upload works in chat
+- ✅ Claude reads and summarizes file content
+- ✅ Claude suggests relevant actions based on file type
+- ✅ Links to create contacts/tasks/deals from file data work
+- ✅ Files are stored securely in S3
+
+-----
+
+## Implementation Phases (Timeline)
+
+|Phase    |Features                       |Timeline     |Blockers         |
+|---------|-------------------------------|-------------|-----------------|
+|1        |Conversation Memory            |1 week       |None (foundation)|
+|2        |AI-First Chat UI               |1.5 weeks    |Phase 1 done     |
+|3        |Voice + Real-time Transcription|1 week       |Phase 2 done     |
+|4        |Hyperlinks in Chat             |3 days       |Phase 2 done     |
+|5        |Auto-Save to Contact History   |3 days       |Phase 1 + 2 done |
+|6        |File Attachment Intelligence   |1 week       |Phase 2 done     |
+|**Total**|**All 6 Phases**               |**4-5 weeks**|Sequential       |
+
+-----
+
+## Beta Scope Decision
+
+**Critical for beta (must have):**
+
+- Phase 1: Conversation Memory
+- Phase 2: AI-First Chat UI
+- Phase 4: Hyperlinks
+- Phase 5: Auto-Save to Contact History
+
+**Nice-to-have for beta (ship after launch if needed):**
+
+- Phase 3: Voice (complex, can launch with text-only first)
+- Phase 6: File Intelligence (nice feature, not blocking)
+
+**Recommended beta scope:** Phases 1, 2, 4, 5 (3-4 weeks)
+
+-----
+
+## Dependencies & Risks
+
+**Tech Dependencies:**
+
+- Web Speech API (browser-native, no dep for Phase 3)
+- Claude API (already integrated)
+- Supabase (already integrated)
+
+**Data Dependencies:**
+
+- Existing contact/task/deal schemas must be queryable from Claude
+- Must add `contact_conversations` table (new)
+
+**Risk: Claude Hallucination**
+
+- Claude might misunderstand which contact to save chat to
+- **Mitigation:** Use strict `[CONTEXT: contact_id: xyz]` markers; require exact match
+
+**Risk: Chat UX Complexity**
+
+- Users might not realize they can chat commands (too used to clicking buttons)
+- **Mitigation:** Onboarding modal: “Try saying ‘Create a contact’ or ‘Show my tasks’”
+
+-----
+
+## Success Metrics
+
+1. ✅ Users complete CRM actions entirely via chat (no sidebar navigation needed)
+1. ✅ Conversation history is always available on contact detail pages
+1. ✅ Claude answers questions with context from past chats
+1. ✅ Voice feature increases engagement (if implemented)
+1. ✅ File uploads result in actual data import (Phase 6)

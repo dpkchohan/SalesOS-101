@@ -200,7 +200,8 @@ function SignedInApp() {
   return (
     <AppLayout>
       <Switch>
-        <Route path="/" component={Dashboard} />
+        <Route path="/" component={Chat} />
+        <Route path="/dashboard" component={Dashboard} />
         <Route path="/pipeline" component={Pipeline} />
         <Route path="/leads" component={Leads} />
         <Route path="/leads/:id" component={LeadDetail} />

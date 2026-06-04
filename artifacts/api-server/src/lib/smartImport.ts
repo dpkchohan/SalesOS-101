@@ -256,7 +256,7 @@ Extract one contact object per row in the same order. Return JSON:
     const result = await claudeJson<{
       contacts: SmartContact[];
       warnings?: string[];
-    }>(SYSTEM_PROMPT, userPrompt, { maxTokens: 8192 });
+    }>(SYSTEM_PROMPT, userPrompt, { maxTokens: 16384 });
     const contacts = Array.isArray(result.contacts)
       ? result.contacts.map(normalizeContact)
       : [];
