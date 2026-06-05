@@ -8,7 +8,9 @@ import {
   interactionsTable,
   chatSessionsTable,
   chatMessagesTable,
+  contactConversationsTable,
 } from "@workspace/db";
+import { getClaude, CLAUDE_MODEL } from "../lib/claude";
 import {
   ListContactsQueryParams,
   ListContactsResponse,
@@ -759,6 +761,119 @@ router.post("/contacts/backfill", requireAuth, async (req, res): Promise<void> =
 });
 
 void formatCustomerNo;
+
+// ── POST /contacts/:id/conversations — save a conversation to contact history ─
+router.post("/contacts/:id/conversations", requireAuth, async (req, res): Promise<void> => {
+  const r = req as AuthenticatedRequest;
+  const contactId = String(req.params.id);
+  const transcript = typeof req.body?.transcript === "string" ? req.body.transcript : null;
+  const sessionId = typeof req.body?.sessionId === "string" ? req.body.sessionId : null;
+  let summary: string | null = typeof req.body?.summary === "string" ? req.body.summary : null;
+
+  if (!transcript) {
+    res.status(400).json({ error: "transcript is required" });
+    return;
+  }
+
+  const [contact] = await db
+    .select({ id: contactsTable.id, name: contactsTable.name })
+    .from(contactsTable)
+    .where(and(eq(contactsTable.id, contactId), eq(contactsTable.orgId, r.orgId)))
+    .limit(1);
+
+  if (!contact) {
+    res.status(404).json({ error: "Contact not found" });
+    return;
+  }
+
+  if (!summary) {
+    try {
+      const claude = getClaude();
+      const resp = await claude.messages.create({
+        model: CLAUDE_MODEL,
+        max_tokens: 100,
+        system: "You are a sales CRM assistant. Given a conversation transcript, write a single concise sentence (max 15 words) summarizing what was discussed or accomplished. Reply with just the sentence, no quotes or punctuation at the end.",
+        messages: [{ role: "user", content: `Contact: ${contact.name}\n\nTranscript:\n${transcript.slice(0, 2000)}` }],
+      });
+      summary = resp.content
+        .filter((b) => b.type === "text")
+        .map((b) => (b as { type: "text"; text: string }).text)
+        .join("")
+        .trim()
+        .slice(0, 200) || null;
+    } catch {
+      summary = null;
+    }
+  }
+
+  try {
+    const [row] = await db
+      .insert(contactConversationsTable)
+      .values({
+        contactId,
+        orgId: r.orgId,
+        sessionId: sessionId || null,
+        transcript,
+        summary,
+      })
+      .returning();
+    res.status(201).json({ id: row.id, summary: row.summary, createdAt: row.createdAt });
+  } catch (err) {
+    req.log.error({ err }, "Failed to save contact conversation");
+    res.status(500).json({ error: "Failed to save conversation" });
+  }
+});
+
+// ── GET /contacts/:id/conversations — list saved conversations ─────────────
+router.get("/contacts/:id/conversations", requireAuth, async (req, res): Promise<void> => {
+  const r = req as AuthenticatedRequest;
+  const contactId = String(req.params.id);
+  const limit = Math.min(Number(req.query.limit ?? 10), 50);
+  const offset = Number(req.query.offset ?? 0);
+
+  const [contact] = await db
+    .select({ id: contactsTable.id })
+    .from(contactsTable)
+    .where(and(eq(contactsTable.id, contactId), eq(contactsTable.orgId, r.orgId)))
+    .limit(1);
+
+  if (!contact) {
+    res.status(404).json({ error: "Contact not found" });
+    return;
+  }
+
+  try {
+    const rows = await db
+      .select({
+        id: contactConversationsTable.id,
+        summary: contactConversationsTable.summary,
+        transcript: contactConversationsTable.transcript,
+        createdAt: contactConversationsTable.createdAt,
+        sessionId: contactConversationsTable.sessionId,
+      })
+      .from(contactConversationsTable)
+      .where(
+        and(
+          eq(contactConversationsTable.contactId, contactId),
+          eq(contactConversationsTable.orgId, r.orgId),
+        ),
+      )
+      .orderBy(desc(contactConversationsTable.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    res.json(rows.map((r) => ({
+      id: r.id,
+      summary: r.summary,
+      transcript: r.transcript,
+      createdAt: r.createdAt.toISOString(),
+      sessionId: r.sessionId,
+    })));
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch contact conversations");
+    res.status(500).json({ error: "Failed to fetch conversations" });
+  }
+});
 
 router.get("/contacts/:id/chat-sessions", requireAuth, async (req, res): Promise<void> => {
   const r = req as AuthenticatedRequest;

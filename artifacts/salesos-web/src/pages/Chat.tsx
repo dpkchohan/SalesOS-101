@@ -631,7 +631,18 @@ export default function Chat() {
     >
       <PageHeader
         title="Chat"
-        subtitle={urlContactName ? `Chatting about ${urlContactName}` : "Type or speak — Claude handles intent"}
+        subtitle={
+          urlContactName ? (
+            <span className="flex items-center gap-2 flex-wrap">
+              <span>Chatting about {urlContactName}</span>
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                💾 Saving to {urlContactName}
+              </span>
+            </span>
+          ) : (
+            "Type or speak — Claude handles intent"
+          )
+        }
         right={
           <div ref={voiceMenuRef} className="flex items-center gap-1.5 relative">
             <button

@@ -444,7 +444,7 @@ export function PageHeader({
   right,
 }: {
   title: React.ReactNode;
-  subtitle?: string;
+  subtitle?: React.ReactNode;
   right?: React.ReactNode;
 }) {
   return (

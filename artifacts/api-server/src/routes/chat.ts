@@ -11,6 +11,7 @@ import {
   companyCredentialsTable,
   chatSessionsTable,
   chatMessagesTable,
+  contactConversationsTable,
 } from "@workspace/db";
 import { SendChatBody, SendChatResponse } from "@workspace/api-zod";
 import { requireAuth, type AuthenticatedRequest } from "../lib/auth";
@@ -127,32 +128,39 @@ async function processWithTools(params: {
 
   if (!contact) return "Contact not found.";
 
-  // Fetch last 3 sessions for this contact as conversation history context
+  // Fetch last 3 saved contact conversations for context injection
   let historyContext = "";
   try {
-    const recentSessions = await db
-      .select({ id: chatSessionsTable.id, createdAt: chatSessionsTable.createdAt })
-      .from(chatSessionsTable)
-      .where(and(eq(chatSessionsTable.contactId, contactId), eq(chatSessionsTable.orgId, orgId)))
-      .orderBy(desc(chatSessionsTable.createdAt))
+    const savedConvos = await db
+      .select({
+        transcript: contactConversationsTable.transcript,
+        summary: contactConversationsTable.summary,
+        createdAt: contactConversationsTable.createdAt,
+      })
+      .from(contactConversationsTable)
+      .where(
+        and(
+          eq(contactConversationsTable.contactId, contactId),
+          eq(contactConversationsTable.orgId, orgId),
+        ),
+      )
+      .orderBy(desc(contactConversationsTable.createdAt))
       .limit(3);
 
-    if (recentSessions.length > 0) {
-      const transcripts = await Promise.all(
-        recentSessions.map(async (sess) => {
-          const msgs = await db
-            .select({ role: chatMessagesTable.role, content: chatMessagesTable.content })
-            .from(chatMessagesTable)
-            .where(eq(chatMessagesTable.sessionId, sess.id))
-            .orderBy(asc(chatMessagesTable.createdAt))
-            .limit(20);
-          const date = sess.createdAt.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
-          const lines = msgs.map((m) => `${m.role === "user" ? "Rep" : "AI"}: ${m.content}`).join("\n");
-          return `[Session — ${date}]\n${lines}`;
-        }),
-      );
-      const joined = transcripts.filter(Boolean).join("\n\n");
-      if (joined) historyContext = `\n\nPast conversations with this contact:\n${joined}\n`;
+    if (savedConvos.length > 0) {
+      const parts = savedConvos.map((c) => {
+        const date = c.createdAt.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+        let body = "";
+        try {
+          const msgs = JSON.parse(c.transcript) as Array<{ role: string; content: string }>;
+          body = msgs.map((m) => `${m.role === "user" ? "Rep" : "AI"}: ${m.content}`).join("\n");
+        } catch {
+          body = c.transcript.slice(0, 500);
+        }
+        return `[${date}${c.summary ? ` — ${c.summary}` : ""}]\n${body}`;
+      });
+      const joined = parts.filter(Boolean).join("\n\n");
+      if (joined) historyContext = `\n\nHere are recent conversations about this contact:\n${joined}\n`;
     }
   } catch { /* non-fatal — proceed without history */ }
 
@@ -325,6 +333,31 @@ Always be concise and action-oriented.`;
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Fire-and-forget: generates a Claude summary and patches the contact_conversations row
+async function generateSummaryAsync(rowId: string, contactId: string, transcript: string): Promise<void> {
+  try {
+    const claude = getClaude();
+    const resp = await claude.messages.create({
+      model: CLAUDE_MODEL,
+      max_tokens: 100,
+      system: "You are a sales CRM assistant. Given a conversation transcript, write a single concise sentence (max 15 words) summarizing what was discussed or accomplished. Reply with just the sentence, no quotes.",
+      messages: [{ role: "user", content: `Contact ID: ${contactId}\n\nTranscript:\n${transcript.slice(0, 2000)}` }],
+    });
+    const summary = resp.content
+      .filter((b): b is Anthropic.TextBlock => b.type === "text")
+      .map((b) => b.text)
+      .join("")
+      .trim()
+      .slice(0, 200) || null;
+    if (summary) {
+      await db
+        .update(contactConversationsTable)
+        .set({ summary, updatedAt: new Date() })
+        .where(eq(contactConversationsTable.id, rowId));
+    }
+  } catch { /* non-fatal */ }
+}
+
 async function findLeadForContact(orgId: string, contactId: string) {
   const [l] = await db
     .select()
@@ -469,6 +502,30 @@ router.post("/chat", requireAuth, async (req, res): Promise<void> => {
       req.log.error({ err }, "processWithTools failed");
       reply.success = false;
       reply.message = "I couldn't process that. Try again.";
+    }
+    // Save each contact-linked exchange to contact_conversations (fire-and-forget)
+    if (reply.success) {
+      const transcript = JSON.stringify([
+        { role: "user", content: body.data.text },
+        { role: "assistant", content: reply.message },
+      ]);
+      setImmediate(async () => {
+        try {
+          const [row] = await db
+            .insert(contactConversationsTable)
+            .values({
+              contactId: effectiveContactId,
+              orgId: r.orgId,
+              sessionId: sessionId || null,
+              transcript,
+              summary: null,
+            })
+            .returning({ id: contactConversationsTable.id });
+          if (row) void generateSummaryAsync(row.id, effectiveContactId, transcript);
+        } catch (err) {
+          req.log.warn({ err }, "chat: failed to save contact-linked conversation");
+        }
+      });
     }
   } else {
   // ── General session → JSON intent parsing ────────────────────────────────────
@@ -852,6 +909,32 @@ router.post("/chat", requireAuth, async (req, res): Promise<void> => {
     } catch (err) {
       req.log.warn({ err }, "chat: failed to save assistant message");
     }
+  }
+
+  // Auto-save to contact_conversations when a general chat action touches a contact
+  const ACTION_INTENTS = new Set(["create_task", "log_interaction", "update_lead_stage", "create_lead", "send_proposal"]);
+  if (!effectiveContactId && reply.contactId && ACTION_INTENTS.has(reply.intent)) {
+    const transcript = JSON.stringify([
+      { role: "user", content: body.data.text },
+      { role: "assistant", content: reply.message },
+    ]);
+    setImmediate(async () => {
+      try {
+        const [row] = await db
+          .insert(contactConversationsTable)
+          .values({
+            contactId: reply.contactId!,
+            orgId: r.orgId,
+            sessionId: sessionId || null,
+            transcript,
+            summary: null,
+          })
+          .returning({ id: contactConversationsTable.id });
+        if (row) void generateSummaryAsync(row.id, reply.contactId!, transcript);
+      } catch (err) {
+        req.log.warn({ err }, "chat: failed to auto-save contact conversation");
+      }
+    });
   }
 
   res.json(SendChatResponse.parse(reply));

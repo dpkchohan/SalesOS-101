@@ -11,8 +11,8 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useAuth } from "@clerk/react";
-import { motion } from "framer-motion";
-import { ArrowLeft, Mail, Phone, Briefcase, Pencil, Trash2, MessageSquare, StickyNote } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { ArrowLeft, Mail, Phone, Briefcase, Pencil, Trash2, MessageSquare, StickyNote, ChevronDown, ChevronUp } from "lucide-react";
 import { PageHeader } from "@/components/AppLayout";
 import { Field } from "./Contacts";
 import { CompanyCombobox, TagsInput } from "@/components/ContactFormFields";
@@ -317,36 +317,11 @@ export default function ContactDetail() {
           transition={{ delay: 0.05 }}
           className="md:col-span-2 space-y-4"
         >
-          <div className="rounded-2xl bg-card border border-card-border p-5">
-          <h2 className="text-[15px] font-bold tracking-tight mb-4">Recent interactions</h2>
-          <div className="space-y-3">
-            {data.interactions.length === 0 && (
-              <div className="text-[13px] text-muted-foreground italic py-6 text-center">
-                No interactions logged for this contact yet.
-              </div>
-            )}
-            {data.interactions.map((i, idx) => (
-              <motion.div
-                key={i.id}
-                initial={{ opacity: 0, x: -6 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: idx * 0.04 }}
-                className="border-l-2 border-primary/40 pl-3"
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
-                    {i.type}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground">{relativeTime(i.createdAt)}</span>
-                </div>
-                <div className="text-[13.5px] leading-snug">{i.gist}</div>
-              </motion.div>
-            ))}
-          </div>
-          </div>
-
-          {/* Chat History */}
-          <ChatHistoryPanel contactId={id} contactName={data.name} />
+          <RightColumnTabs
+            contactId={id}
+            contactName={data.name}
+            interactions={data.interactions}
+          />
         </motion.div>
       </div>
 
@@ -554,6 +529,198 @@ function RelatedSection({
             )}
           </Link>
         ))}
+      </div>
+    </div>
+  );
+}
+
+type Interaction = {
+  id: string;
+  type: string;
+  gist: string;
+  createdAt: string;
+};
+
+function RightColumnTabs({
+  contactId,
+  contactName,
+  interactions,
+}: {
+  contactId: string;
+  contactName: string;
+  interactions: Interaction[];
+}) {
+  const [activeTab, setActiveTab] = useState<"interactions" | "history">("interactions");
+
+  const tabs = [
+    { id: "interactions" as const, label: "Interactions" },
+    { id: "history" as const, label: "Conversation History" },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-1 border-b border-card-border">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={cn(
+              "px-4 py-2.5 text-[13px] font-semibold transition-colors border-b-2 -mb-px",
+              activeTab === tab.id
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "interactions" && (
+        <div className="rounded-2xl bg-card border border-card-border p-5">
+          <div className="space-y-3">
+            {interactions.length === 0 && (
+              <div className="text-[13px] text-muted-foreground italic py-6 text-center">
+                No interactions logged for this contact yet.
+              </div>
+            )}
+            {interactions.map((i, idx) => (
+              <motion.div
+                key={i.id}
+                initial={{ opacity: 0, x: -6 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: idx * 0.04 }}
+                className="border-l-2 border-primary/40 pl-3"
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
+                    {i.type}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">{relativeTime(i.createdAt)}</span>
+                </div>
+                <div className="text-[13.5px] leading-snug">{i.gist}</div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {activeTab === "history" && (
+        <div className="space-y-4">
+          <ConversationHistoryPanel contactId={contactId} contactName={contactName} />
+          <ChatHistoryPanel contactId={contactId} contactName={contactName} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+type ContactConversation = {
+  id: string;
+  summary: string | null;
+  transcript: string;
+  createdAt: string;
+  sessionId: string | null;
+};
+
+function ConversationHistoryPanel({ contactId, contactName }: { contactId: string; contactName: string }) {
+  const { getToken } = useAuth();
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const { data, isLoading } = useQuery<ContactConversation[]>({
+    queryKey: ["contact-conversations", contactId],
+    queryFn: async () => {
+      const token = await getToken();
+      const res = await fetch(getApiUrl(`/api/contacts/${contactId}/conversations?limit=10`), {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: !!contactId,
+  });
+
+  const conversations = data ?? [];
+
+  return (
+    <div className="rounded-2xl bg-card border border-card-border p-5">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-[13px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+          <MessageSquare size={13} /> Conversation History
+        </h2>
+        <Link
+          to={`/chat?contactId=${contactId}&contactName=${encodeURIComponent(contactName)}`}
+          className="text-[11px] font-semibold text-primary hover:underline"
+        >
+          + New chat
+        </Link>
+      </div>
+      {isLoading && <div className="text-[12px] text-muted-foreground">Loading…</div>}
+      {!isLoading && conversations.length === 0 && (
+        <div className="text-[12px] text-muted-foreground italic">
+          No saved conversations yet. Chat with AI about this contact and actions taken will be logged here.
+        </div>
+      )}
+      <div className="space-y-2">
+        {conversations.map((c) => {
+          const isExpanded = expandedId === c.id;
+          let messages: Array<{ role: string; content: string }> = [];
+          try {
+            messages = JSON.parse(c.transcript);
+          } catch { /* skip */ }
+          return (
+            <div key={c.id} className="rounded-lg border border-card-border overflow-hidden">
+              <button
+                onClick={() => setExpandedId(isExpanded ? null : c.id)}
+                className="w-full flex items-start justify-between gap-2 px-3 py-2.5 text-left hover:bg-muted/40 transition-colors"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] text-muted-foreground mb-0.5">{relativeTime(c.createdAt)}</div>
+                  <div className="text-[12.5px] leading-snug truncate">
+                    {c.summary ?? "Conversation logged"}
+                  </div>
+                </div>
+                <div className="flex-shrink-0 text-muted-foreground mt-0.5">
+                  {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                </div>
+              </button>
+              <AnimatePresence>
+                {isExpanded && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.15 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="px-3 pb-3 pt-1 border-t border-card-border space-y-2">
+                      {messages.length === 0 && (
+                        <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap font-mono">
+                          {c.transcript}
+                        </pre>
+                      )}
+                      {messages.map((m, i) => (
+                        <div key={i} className={cn("text-[12px] leading-relaxed", m.role === "user" ? "" : "text-muted-foreground")}>
+                          <span className="font-bold text-[10.5px] uppercase tracking-wide mr-1.5">
+                            {m.role === "user" ? "Rep" : "AI"}
+                          </span>
+                          {m.content}
+                        </div>
+                      ))}
+                      {c.sessionId && (
+                        <Link
+                          to={`/chat?sessionId=${c.sessionId}&contactId=${contactId}&contactName=${encodeURIComponent(contactName)}`}
+                          className="inline-block text-[11px] text-primary hover:underline mt-1"
+                        >
+                          Open full session →
+                        </Link>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
