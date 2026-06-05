@@ -126,5 +126,21 @@ if ! pnpm --filter @workspace/db run migrate; then
   exit 1
 fi
 
-echo "Migrations complete. Starting server..."
+echo "Migrations complete."
+
+# ---------------------------------------------------------------------------
+# Build the frontend if the static output is missing.
+# In normal deploys dist/public is committed to git so this is instant.
+# This fallback handles first-deploys or branches where it was wiped.
+# ---------------------------------------------------------------------------
+WEB_ROOT="artifacts/salesos-web/dist/public"
+if [ ! -f "$WEB_ROOT/index.html" ]; then
+  echo "Frontend build not found at $WEB_ROOT — building now..."
+  pnpm --filter @workspace/salesos-web build
+  echo "Frontend build complete."
+else
+  echo "Frontend build found at $WEB_ROOT — skipping build step."
+fi
+
+echo "Starting server..."
 exec node --enable-source-maps artifacts/api-server/dist/index.mjs

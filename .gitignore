@@ -1,7 +1,10 @@
 # See https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
 
-# compiled output
-dist
+# compiled output — explicit rules so salesos-web/dist/public IS committed
+# (Coolify needs the pre-built frontend; it doesn't run vite build on deploy)
+artifacts/api-server/dist/
+artifacts/mockup-sandbox/dist/
+lib/*/dist/
 tmp
 out-tsc
 *.tsbuildinfo
