@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import { Link } from "wouter";
 import { useAuth } from "@clerk/react";
@@ -106,25 +106,44 @@ export default function Chat() {
   const urlContactId = searchParams.get("contactId") ?? null;
   const urlContactName = searchParams.get("contactName") ?? null;
   const urlSessionId = searchParams.get("sessionId") ?? null;
+  // General chat = no contact/session URL params — eligible for sessionStorage persistence
+  const isGeneralChat = !urlContactId && !urlSessionId;
 
   const { getToken } = useAuth();
 
   const [sessionId, setSessionId] = useState<string | null>(urlSessionId);
   const [sessionLoading, setSessionLoading] = useState(!!urlSessionId);
-  const [messages, setMessages] = useState<Msg[]>(
-    urlSessionId
-      ? []
-      : [
-          {
-            id: "intro",
-            role: "assistant" as const,
-            text: urlContactName
-              ? `Hi. I'm ready to help you with ${urlContactName}. Log a call, add a task, move a deal — just tell me.`
-              : "Hi. Talk to me like you would your assistant — log a call, add a task, move a deal. I'll handle the rest.",
-          },
-        ],
-  );
-  const [input, setInput] = useState("");
+  const [messages, setMessages] = useState<Msg[]>(() => {
+    if (urlSessionId) return [];
+    if (isGeneralChat) {
+      try {
+        const stored = sessionStorage.getItem("salesos.chat.messages");
+        if (stored) {
+          const parsed = JSON.parse(stored) as Msg[];
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return [
+      {
+        id: "intro",
+        role: "assistant" as const,
+        text: urlContactName
+          ? `Hi. I'm ready to help you with ${urlContactName}. Log a call, add a task, move a deal — just tell me.`
+          : "Hi. Talk to me like you would your assistant — log a call, add a task, move a deal. I'll handle the rest.",
+      },
+    ];
+  });
+  const [input, setInput] = useState(() => {
+    if (!isGeneralChat) return "";
+    try { return sessionStorage.getItem("salesos.chat.input") ?? ""; } catch { return ""; }
+  });
+  // Track whether a saved scroll position exists for restoration on mount
+  const [hasSavedScroll] = useState<boolean>(() => {
+    if (!isGeneralChat) return false;
+    try { return sessionStorage.getItem("salesos.chat.scrollTop") !== null; } catch { return false; }
+  });
+  const scrollHandledRef = useRef(false);
   const [recording, setRecording] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
   const [ttsPlaying, setTtsPlaying] = useState(false);
@@ -243,16 +262,68 @@ export default function Chat() {
   const ACCEPTED = ".jpg,.jpeg,.png,.webp,.gif,.pdf,.docx,.pptx,.xlsx,.xls,.csv,.txt,image/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,text/plain";
   const MAX_BYTES = 10 * 1024 * 1024;
 
+  // Restore scroll position BEFORE browser paint (synchronous, runs after DOM update)
+  useLayoutEffect(() => {
+    if (!isGeneralChat) return;
+    try {
+      const s = sessionStorage.getItem("salesos.chat.scrollTop");
+      if (s && scrollRef.current) {
+        const top = parseInt(s, 10);
+        if (!isNaN(top)) scrollRef.current.scrollTop = top;
+      }
+    } catch {}
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
+    // On first run after mount: skip auto-scroll-to-bottom if we restored from sessionStorage
+    if (!scrollHandledRef.current) {
+      scrollHandledRef.current = true;
+      if (!hasSavedScroll) {
+        scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+      }
+      return;
+    }
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages]);
+  }, [messages]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     return () => {
       if (lastObjectUrlRef.current) URL.revokeObjectURL(lastObjectUrlRef.current);
       audioRef.current?.pause();
+      // Save scroll position so it can be restored when navigating back to chat
+      if (isGeneralChat && scrollRef.current) {
+        try {
+          sessionStorage.setItem("salesos.chat.scrollTop", String(scrollRef.current.scrollTop));
+        } catch {}
+      }
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Persist messages across page navigation (general chat only; skip contact/session URLs)
+  useEffect(() => {
+    if (!isGeneralChat) return;
+    try {
+      if (messages.length <= 1 && messages[0]?.id === "intro") {
+        sessionStorage.removeItem("salesos.chat.messages");
+      } else {
+        // Strip audioUrl — blob URLs are ephemeral and won't work after restore
+        const toSave = messages.map(({ audioUrl: _au, ...m }) => m);
+        sessionStorage.setItem("salesos.chat.messages", JSON.stringify(toSave));
+      }
+    } catch {}
+  }, [messages, isGeneralChat]);
+
+  // Persist input draft across page navigation (general chat only)
+  useEffect(() => {
+    if (!isGeneralChat) return;
+    try {
+      if (input) {
+        sessionStorage.setItem("salesos.chat.input", input);
+      } else {
+        sessionStorage.removeItem("salesos.chat.input");
+      }
+    } catch {}
+  }, [input, isGeneralChat]);
 
   const playTts = (text: string, opts?: { force?: boolean }) => {
     if (!text.trim()) return;
