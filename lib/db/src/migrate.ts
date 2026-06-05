@@ -51,7 +51,16 @@ function buildConnectionString(): string {
 
 const connectionString = buildConnectionString();
 
-const isLocalDb = /localhost|127\.0\.0\.1|0\.0\.0\.0/.test(connectionString);
+// Also treat short hostnames (no dot — e.g. Replit's "helium") as local.
+const isLocalDb =
+  /localhost|127\.0\.0\.1|0\.0\.0\.0/.test(connectionString) ||
+  (() => {
+    try {
+      return !new URL(connectionString).hostname.includes(".");
+    } catch {
+      return false;
+    }
+  })();
 
 // Supabase pooler uses a self-signed certificate chain.  We must pass
 // rejectUnauthorized:false AND override checkServerIdentity to prevent
