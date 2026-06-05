@@ -118,18 +118,26 @@ if (process.env.NODE_ENV === "production") {
   const webRoot = path.resolve(__dirname, "../../salesos-web/dist/public");
   const webRootExists = existsSync(webRoot);
   logger.info({ webRoot, exists: webRootExists }, "SPA static root");
-  app.use(express.static(webRoot));
-  // SPA fallback — only register when the web build is present (i.e. not on
-  // API-only deployments such as Railway when the frontend is on Vercel).
   if (webRootExists) {
-    // Express 5 / path-to-regexp v8 rejects the bare "*" path string, so use
-    // a middleware (no path) that only handles GET requests for non-API routes.
-    app.use((req, res, next) => {
-      if (req.method !== "GET") return next();
-      if (req.path.startsWith("/api/")) return next();
-      res.sendFile(path.join(webRoot, "index.html"));
-    });
+    app.use(express.static(webRoot));
   }
+  // SPA fallback — always registered so that client-side routes like /dashboard
+  // return index.html rather than falling through to a 503 from the proxy.
+  // When the web build is absent (API-only deploy) index.html won't exist and
+  // sendFile will 404, which is a clearer signal than a connection-level 503.
+  app.use((req, res, next) => {
+    if (req.method !== "GET") return next();
+    if (req.path.startsWith("/api/")) return next();
+    const indexPath = path.join(webRoot, "index.html");
+    res.sendFile(indexPath, (err) => {
+      if (err) {
+        res.status(404).json({
+          error: "Frontend not built",
+          hint: "Run: pnpm --filter @workspace/salesos-web build",
+        });
+      }
+    });
+  });
 }
 
 export default app;
