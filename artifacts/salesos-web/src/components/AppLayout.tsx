@@ -249,7 +249,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const moreIsActive = MORE_NAV.some(({ to }) => isActive(to));
 
   return (
-    <div className="min-h-[100dvh] bg-background text-foreground flex">
+    <div className="min-h-[100dvh] md:h-[100dvh] md:overflow-hidden bg-background text-foreground flex">
       <aside className="hidden md:flex flex-col w-60 bg-sidebar text-sidebar-foreground border-r border-sidebar-border sticky top-0 h-[100dvh]">
         <div className="px-5 pt-5 pb-4 flex items-center gap-2.5 flex-shrink-0">
           <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="SalesOS" className="w-9 h-9 rounded-lg" />
@@ -335,7 +335,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <div className="flex-1 min-w-0 flex flex-col">
+      <div className="flex-1 min-w-0 flex flex-col md:min-h-0 md:overflow-hidden">
         {/* Desktop-only nav strip */}
         <div className="hidden md:flex items-center px-3 py-1 border-b border-border bg-background sticky top-0 z-30">
           <NavButtons />
@@ -361,7 +361,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        <main className="flex-1 pb-24 md:pb-8">{children}</main>
+        <main className="flex-1 min-h-0 pb-24 md:pb-0 md:overflow-y-auto">{children}</main>
 
         {/* Mobile bottom nav — 4 primary items + More */}
         <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-sidebar text-sidebar-foreground border-t border-sidebar-border safe-bottom">

@@ -678,7 +678,7 @@ export default function Chat() {
   return (
     <div
       className={cn(
-        "flex flex-col h-[calc(100dvh-57px)] md:h-[calc(100dvh-37px)] relative",
+        "flex flex-col h-[calc(100dvh-57px)] md:h-full relative",
         dragOver && "ring-2 ring-primary ring-inset",
       )}
       onDragEnter={(e) => {
