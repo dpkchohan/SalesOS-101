@@ -572,7 +572,7 @@ router.post("/chat", requireAuth, async (req, res): Promise<void> => {
           })
           .returning();
         reply.leadId = l.id;
-        reply.message = (intent.reply || "Lead created.") + " [→ View pipeline](/pipeline)";
+        reply.message = (intent.reply || "Lead created.") + ` [→ View lead](/leads/${l.id})`;
       }
     } else if (intent.intent === "create_contact" && intent.contact?.name) {
       const dup = await findDuplicate({
@@ -717,6 +717,7 @@ router.post("/chat", requireAuth, async (req, res): Promise<void> => {
           .returning();
         reply.interactionId = i.id;
         reply.leadId = leadId;
+        reply.message = intent.reply + (reply.contactId ? ` [→ View contact](/contacts/${reply.contactId})` : "");
       }
     } else if (intent.intent === "send_proposal") {
       if (!intent.contactName) {
@@ -775,7 +776,7 @@ router.post("/chat", requireAuth, async (req, res): Promise<void> => {
             if (intent.sendEmail) {
               const recipient = (c.email ?? "").trim();
               if (!recipient) {
-                reply.message = `Drafted "${title}", but ${c.name} has no email on file — open the document to send manually.`;
+                reply.message = `Drafted "${title}", but ${c.name} has no email on file. [→ View document](/documents/${doc.id})`;
               } else {
                 try {
                   await sendProposalEmail({
@@ -807,14 +808,14 @@ router.post("/chat", requireAuth, async (req, res): Promise<void> => {
                     })
                     .returning();
                   reply.interactionId = logged.id;
-                  reply.message = `Drafted and emailed "${title}" to ${recipient}.`;
+                  reply.message = `Drafted and emailed "${title}" to ${recipient}. [→ View document](/documents/${doc.id})`;
                 } catch (err) {
                   req.log.error({ err }, "Chat send_proposal: gmail send failed");
-                  reply.message = `Drafted "${title}", but Gmail send failed. Open the document and try Send via Gmail.`;
+                  reply.message = `Drafted "${title}", but Gmail send failed. [→ View document](/documents/${doc.id})`;
                 }
               }
             } else {
-              reply.message = `Drafted "${title}". Open Documents to review or send.`;
+              reply.message = `Drafted "${title}". [→ View document](/documents/${doc.id})`;
             }
           }
         }
@@ -830,6 +831,7 @@ router.post("/chat", requireAuth, async (req, res): Promise<void> => {
             .where(eq(leadsTable.id, l.id));
           reply.leadId = l.id;
           reply.contactId = c.id;
+          reply.message = (intent.reply || `Moved ${intent.contactName} to ${intent.stage}.`) + ` [→ View lead](/leads/${l.id})`;
         } else {
           reply.message = `Couldn't find a lead for ${intent.contactName}.`;
         }
