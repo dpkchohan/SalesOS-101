@@ -56,6 +56,7 @@ check_file() {
     /[Ee][Nn][Dd][[:space:]]+\$\$/ { in_do = 0; next }
     /[Aa][Ll][Tt][Ee][Rr][[:space:]]+[Tt][Aa][Bb][Ll][Ee]/ &&
     /[Aa][Dd][Dd][[:space:]]+[Cc][Oo][Ll][Uu][Mm][Nn]/ &&
+    !/[Ii][Ff][[:space:]]+[Nn][Oo][Tt][[:space:]]+[Ee][Xx][Ii][Ss][Tt][Ss]/ &&
     !in_do {
       print NR ": " $0
     }

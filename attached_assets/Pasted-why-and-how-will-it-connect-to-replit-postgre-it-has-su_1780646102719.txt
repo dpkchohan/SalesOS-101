@@ -1,0 +1,84 @@
+why and how will it connect to replit postgre, it has supabase api only, Fix the non-idempotent statements listed above, then redeploy.
+See docs/migration-recovery.md for the authoring guide.
+================================================================
+WARNING: BACKUP_BEFORE_MIGRATE is not set — skipping pre-deploy backup.
+Running in NODE_ENV=production without a backup is risky.
+Set BACKUP_BEFORE_MIGRATE=true to enable automatic backups.
+Linting migrations for idempotency...
+Linting migrations for idempotency...
+FAIL  lib/db/migrations/0002_chat_sessions.sql
+ALTER TABLE … ADD COLUMN must be wrapped in a duplicate_column handler.
+Replace:
+ALTER TABLE "t" ADD COLUMN "c" text;
+With:
+DO $$ BEGIN
+ALTER TABLE "t" ADD COLUMN "c" text;
+EXCEPTION
+WHEN duplicate_column THEN null;
+END $$;
+Offending line(s):
+Line 17: ALTER TABLE "contacts" ADD COLUMN IF NOT EXISTS "notes" text;
+================================================================
+MIGRATION LINT FAILED
+One or more migration files contain non-idempotent SQL.
+Fix the statements listed above before committing.
+See docs/migration-recovery.md for the authoring guide.
+================================================================
+================================================================
+DEPLOY ABORTED — migration lint failed.
+Fix the non-idempotent statements listed above, then redeploy.
+See docs/migration-recovery.md for the authoring guide.
+================================================================
+WARNING: BACKUP_BEFORE_MIGRATE is not set — skipping pre-deploy backup.
+Running in NODE_ENV=production without a backup is risky.
+Set BACKUP_BEFORE_MIGRATE=true to enable automatic backups.
+FAIL  lib/db/migrations/0002_chat_sessions.sql
+ALTER TABLE … ADD COLUMN must be wrapped in a duplicate_column handler.
+Replace:
+ALTER TABLE "t" ADD COLUMN "c" text;
+With:
+DO $$ BEGIN
+ALTER TABLE "t" ADD COLUMN "c" text;
+EXCEPTION
+WHEN duplicate_column THEN null;
+END $$;
+Offending line(s):
+Line 17: ALTER TABLE "contacts" ADD COLUMN IF NOT EXISTS "notes" text;
+================================================================
+MIGRATION LINT FAILED
+One or more migration files contain non-idempotent SQL.
+Fix the statements listed above before committing.
+See docs/migration-recovery.md for the authoring guide.
+================================================================
+================================================================
+DEPLOY ABORTED — migration lint failed.
+Linting migrations for idempotency...
+Fix the non-idempotent statements listed above, then redeploy.
+See docs/migration-recovery.md for the authoring guide.
+================================================================
+WARNING: BACKUP_BEFORE_MIGRATE is not set — skipping pre-deploy backup.
+Running in NODE_ENV=production without a backup is risky.
+Set BACKUP_BEFORE_MIGRATE=true to enable automatic backups.
+FAIL  lib/db/migrations/0002_chat_sessions.sql
+ALTER TABLE … ADD COLUMN must be wrapped in a duplicate_column handler.
+Replace:
+ALTER TABLE "t" ADD COLUMN "c" text;
+With:
+DO $$ BEGIN
+ALTER TABLE "t" ADD COLUMN "c" text;
+EXCEPTION
+WHEN duplicate_column THEN null;
+END $$;
+Offending line(s):
+Line 17: ALTER TABLE "contacts" ADD COLUMN IF NOT EXISTS "notes" text;
+================================================================
+MIGRATION LINT FAILED
+One or more migration files contain non-idempotent SQL.
+Fix the statements listed above before committing.
+See docs/migration-recovery.md for the authoring guide.
+================================================================
+================================================================
+DEPLOY ABORTED — migration lint failed.
+Fix the non-idempotent statements listed above, then redeploy.
+See docs/migration-recovery.md for the authoring guide.
+================================================================
