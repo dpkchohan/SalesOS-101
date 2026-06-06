@@ -37,6 +37,8 @@ import Settings from "./pages/Settings";
 import NotFound from "./pages/not-found";
 import AdminFeedback from "./pages/admin/Feedback";
 import AdminErrors from "./pages/admin/Errors";
+import { useVersionCheck } from "./hooks/useVersionCheck";
+import { UpdateBanner } from "./components/UpdateBanner";
 
 // Use the publishable key directly from the environment variable.
 // Do NOT use publishableKeyFromHost() here — that Replit-internal utility
@@ -300,9 +302,15 @@ function ClerkProviderWithRoutes() {
   );
 }
 
+function VersionChecker() {
+  const updateAvailable = useVersionCheck();
+  return <UpdateBanner show={updateAvailable} />;
+}
+
 export default function App() {
   return (
     <WouterRouter base={basePath}>
+      <VersionChecker />
       <ClerkProviderWithRoutes />
     </WouterRouter>
   );

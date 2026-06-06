@@ -1,7 +1,8 @@
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
+import { writeFileSync } from "fs";
 
 // PORT is only needed by the dev/preview servers, not by `vite build`.
 // In production we serve the built files statically (see artifact.toml),
@@ -18,11 +19,33 @@ if (rawPort && (Number.isNaN(port) || port <= 0)) {
 // missing so production builds don't fail when the env var isn't injected.
 const basePath = process.env.BASE_PATH || "/";
 
+// Unique hash stamped into the bundle and written to dist/public/version.json.
+// The client polls version.json and reloads when the hash changes.
+const buildHash = Date.now().toString(36);
+
+function versionJsonPlugin(): Plugin {
+  return {
+    name: "version-json",
+    apply: "build",
+    closeBundle() {
+      const outDir = path.resolve(import.meta.dirname, "dist/public");
+      writeFileSync(
+        path.join(outDir, "version.json"),
+        JSON.stringify({ hash: buildHash }),
+      );
+    },
+  };
+}
+
 export default defineConfig({
   base: basePath,
+  define: {
+    "import.meta.env.VITE_BUILD_HASH": JSON.stringify(buildHash),
+  },
   plugins: [
     react(),
     tailwindcss({ optimize: false }),
+    versionJsonPlugin(),
   ],
   resolve: {
     alias: {

@@ -119,7 +119,23 @@ if (process.env.NODE_ENV === "production") {
   const webRootExists = existsSync(webRoot);
   logger.info({ webRoot, exists: webRootExists }, "SPA static root");
   if (webRootExists) {
-    app.use(express.static(webRoot));
+    // Serve hashed assets with long-lived cache; never cache index.html or
+    // version.json so the browser always fetches current file references.
+    app.use(
+      express.static(webRoot, {
+        setHeaders(res, filePath) {
+          if (
+            filePath.endsWith("index.html") ||
+            filePath.endsWith("version.json")
+          ) {
+            res.setHeader(
+              "Cache-Control",
+              "no-store, no-cache, must-revalidate",
+            );
+          }
+        },
+      }),
+    );
   }
   // SPA fallback — always registered so that client-side routes like /dashboard
   // return index.html rather than falling through to a 503 from the proxy.
@@ -129,6 +145,7 @@ if (process.env.NODE_ENV === "production") {
     if (req.method !== "GET") return next();
     if (req.path.startsWith("/api/")) return next();
     const indexPath = path.join(webRoot, "index.html");
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     res.sendFile(indexPath, (err) => {
       if (err) {
         res.status(404).json({
