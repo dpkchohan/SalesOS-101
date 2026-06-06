@@ -22,33 +22,6 @@ const FeedbackBody = zod.object({
   pageUrl: zod.string().url().or(zod.string().min(1)),
 });
 
-async function uploadToSupabase(
-  buffer: Buffer,
-  mimeType: string,
-  filename: string,
-): Promise<string | null> {
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!supabaseUrl || !serviceKey) return null;
-
-  const bucket = "feedback-screenshots";
-  const path = `${Date.now()}-${filename}`;
-  const url = `${supabaseUrl}/storage/v1/object/${bucket}/${path}`;
-
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${serviceKey}`,
-      "Content-Type": mimeType,
-      "x-upsert": "true",
-    },
-    body: buffer,
-  });
-
-  if (!res.ok) return null;
-  return `${supabaseUrl}/storage/v1/object/public/${bucket}/${path}`;
-}
-
 router.post(
   "/feedback",
   requireAuth,
@@ -64,17 +37,11 @@ router.post(
 
     const { type, criticality, description, pageUrl } = parsed.data;
 
+    // Store screenshot as a base64 data URI directly in the DB.
+    // This requires no external storage services and never silently drops images.
     let screenshotUrl: string | null = null;
     if (req.file) {
-      try {
-        screenshotUrl = await uploadToSupabase(
-          req.file.buffer,
-          req.file.mimetype,
-          req.file.originalname,
-        );
-      } catch (err) {
-        req.log.warn({ err }, "Screenshot upload failed — saving feedback without screenshot");
-      }
+      screenshotUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
     }
 
     try {

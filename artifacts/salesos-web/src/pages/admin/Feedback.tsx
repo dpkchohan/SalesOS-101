@@ -348,24 +348,63 @@ function FeedbackTable() {
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-card border border-card-border rounded-2xl p-6 max-w-lg w-full shadow-2xl"
+              className="bg-card border border-card-border rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col"
             >
-              <div className="flex items-start justify-between gap-3 mb-4">
+              <div className="flex items-start justify-between gap-3 px-6 pt-6 pb-4 flex-shrink-0">
                 <div>
-                  <div className="font-bold text-[15px]">Feedback description</div>
+                  <div className="font-bold text-[15px]">
+                    {descModal.type === "bug" ? "🐛 Bug report" : descModal.type === "feature" ? "✨ Feature request" : "💬 Feedback"}
+                  </div>
                   <div className="text-[12px] text-muted-foreground mt-0.5">
                     {descModal.userEmail} · {descModal.orgName}
                   </div>
                 </div>
-                <button onClick={() => setDescModal(null)} className="p-1.5 rounded-lg hover:bg-muted">
-                  <X size={16} />
-                </button>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span className={cn("px-2 py-0.5 rounded-full font-bold text-[11px]", CRITICALITY_COLORS[descModal.criticality] ?? "bg-muted text-muted-foreground")}>
+                    Sev {descModal.criticality}
+                  </span>
+                  <button onClick={() => setDescModal(null)} className="p-1.5 rounded-lg hover:bg-muted">
+                    <X size={16} />
+                  </button>
+                </div>
               </div>
-              <p className="text-[13px] leading-relaxed whitespace-pre-wrap text-foreground/90">
-                {descModal.description}
-              </p>
-              <div className="mt-4 text-[11px] text-muted-foreground">
-                Page: <span className="font-mono">{descModal.pageUrl}</span>
+
+              <div className="overflow-y-auto flex-1 px-6 pb-6 space-y-4">
+                <div className="rounded-lg bg-muted/40 p-4">
+                  <p className="text-[13px] leading-relaxed whitespace-pre-wrap text-foreground/90">
+                    {descModal.description}
+                  </p>
+                </div>
+
+                {descModal.screenshotUrl ? (
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-2">
+                      <ImageIcon size={11} /> Screenshot
+                      <a
+                        href={descModal.screenshotUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="ml-auto text-primary hover:underline normal-case font-normal tracking-normal"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        Open full size ↗
+                      </a>
+                    </div>
+                    <img
+                      src={descModal.screenshotUrl}
+                      alt="Screenshot"
+                      className="w-full rounded-lg border border-card-border cursor-zoom-in"
+                      onClick={(e) => { e.stopPropagation(); setImgModal(descModal.screenshotUrl); }}
+                    />
+                  </div>
+                ) : (
+                  <div className="text-[12px] text-muted-foreground/50 italic">No screenshot attached</div>
+                )}
+
+                <div className="text-[11px] text-muted-foreground border-t border-card-border pt-3">
+                  <span className="font-medium">Page:</span>{" "}
+                  <span className="font-mono break-all">{descModal.pageUrl}</span>
+                </div>
               </div>
             </motion.div>
           </motion.div>
