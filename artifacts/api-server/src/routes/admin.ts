@@ -9,6 +9,13 @@ import {
   organizationsTable,
 } from "@workspace/db";
 import { adminAuth } from "../middleware/adminAuth";
+import {
+  isCloudinaryConfigured,
+  generateSignedUrl,
+  deleteFeedbackScreenshot,
+  deleteOldScreenshots,
+  decodePublicId,
+} from "../lib/cloudinaryClient";
 
 const router: IRouter = Router();
 
@@ -17,6 +24,23 @@ const PAGE_LIMIT = 50;
 function parsePage(q: unknown): { page: number; limit: number; offset: number } {
   const page = Math.max(1, parseInt(String(q ?? 1), 10) || 1);
   return { page, limit: PAGE_LIMIT, offset: (page - 1) * PAGE_LIMIT };
+}
+
+/**
+ * Resolve a screenshotUrl value from the DB into something the frontend can use:
+ * - "cld:<public_id>" → generate a 2-hour signed Cloudinary URL
+ * - "data:..." (legacy base64) → return as-is
+ * - null → null
+ */
+function resolveScreenshotUrl(raw: string | null): string | null {
+  if (!raw) return null;
+  const publicId = decodePublicId(raw);
+  if (publicId) {
+    if (!isCloudinaryConfigured()) return null; // can't sign without credentials
+    return generateSignedUrl(publicId, 2 * 3600); // 2-hour expiry
+  }
+  // Legacy base64 data URI — pass through
+  return raw;
 }
 
 // ── GET /admin/feedback ───────────────────────────────────────────────────────
@@ -60,7 +84,14 @@ router.get("/admin/feedback", adminAuth, async (req, res): Promise<void> => {
         .from(feedbackTable)
         .where(where),
     ]);
-    res.json({ rows, total, page, limit });
+
+    // Resolve Cloudinary public_ids → time-limited signed URLs before sending
+    const resolved = rows.map((r) => ({
+      ...r,
+      screenshotUrl: resolveScreenshotUrl(r.screenshotUrl),
+    }));
+
+    res.json({ rows: resolved, total, page, limit });
   } catch (err) {
     req.log.error({ err }, "admin: failed to list feedback");
     res.status(500).json({ error: "Failed to list feedback" });
@@ -98,11 +129,47 @@ router.patch("/admin/feedback/:id", adminAuth, async (req, res): Promise<void> =
 // ── DELETE /admin/feedback/:id ────────────────────────────────────────────────
 router.delete("/admin/feedback/:id", adminAuth, async (req, res): Promise<void> => {
   try {
+    // Fetch the row first so we can clean up Cloudinary
+    const [row] = await db
+      .select({ screenshotUrl: feedbackTable.screenshotUrl })
+      .from(feedbackTable)
+      .where(eq(feedbackTable.id, req.params.id));
+
     await db.delete(feedbackTable).where(eq(feedbackTable.id, req.params.id));
+
+    // Delete from Cloudinary after DB delete succeeds
+    if (row?.screenshotUrl) {
+      const publicId = decodePublicId(row.screenshotUrl);
+      if (publicId && isCloudinaryConfigured()) {
+        deleteFeedbackScreenshot(publicId).catch((err) => {
+          req.log.warn({ err, publicId }, "Cloudinary delete failed (non-fatal)");
+        });
+      }
+    }
+
     res.json({ success: true });
   } catch (err) {
     req.log.error({ err }, "admin: failed to delete feedback");
     res.status(500).json({ error: "Failed to delete feedback" });
+  }
+});
+
+// ── POST /admin/feedback/cleanup ─────────────────────────────────────────────
+// Deletes Cloudinary screenshots older than `days` (default 90) from Cloudinary.
+// DB rows are NOT deleted — only the stored images are purged.
+router.post("/admin/feedback/cleanup", adminAuth, async (req, res): Promise<void> => {
+  const days = Math.max(1, parseInt(String(req.query.days ?? 90), 10) || 90);
+  if (!isCloudinaryConfigured()) {
+    res.status(503).json({ error: "Cloudinary not configured" });
+    return;
+  }
+  try {
+    const deleted = await deleteOldScreenshots(days);
+    req.log.info({ days, deleted }, "Cloudinary screenshot cleanup complete");
+    res.json({ deleted, days });
+  } catch (err) {
+    req.log.error({ err }, "admin: Cloudinary cleanup failed");
+    res.status(500).json({ error: "Cleanup failed" });
   }
 });
 

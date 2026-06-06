@@ -3,6 +3,11 @@ import multer from "multer";
 import * as zod from "zod";
 import { db, feedbackTable } from "@workspace/db";
 import { requireAuth, type AuthenticatedRequest } from "../lib/auth";
+import {
+  isCloudinaryConfigured,
+  uploadFeedbackScreenshot,
+  encodePublicId,
+} from "../lib/cloudinaryClient";
 
 const router: IRouter = Router();
 
@@ -37,11 +42,30 @@ router.post(
 
     const { type, criticality, description, pageUrl } = parsed.data;
 
-    // Store screenshot as a base64 data URI directly in the DB.
-    // This requires no external storage services and never silently drops images.
     let screenshotUrl: string | null = null;
+
     if (req.file) {
-      screenshotUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
+      if (isCloudinaryConfigured()) {
+        try {
+          // Upload as private/authenticated — never publicly accessible.
+          // Store the public_id prefixed with "cld:" so admin routes can
+          // distinguish Cloudinary refs from legacy base64 data URIs.
+          const publicId = await uploadFeedbackScreenshot(
+            req.file.buffer,
+            req.file.mimetype,
+          );
+          screenshotUrl = encodePublicId(publicId);
+          req.log.info({ publicId }, "Feedback screenshot uploaded to Cloudinary");
+        } catch (err) {
+          // Fall back to base64 so the screenshot is never silently lost.
+          req.log.warn({ err }, "Cloudinary upload failed — falling back to base64");
+          screenshotUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
+        }
+      } else {
+        // Cloudinary not configured — store inline as base64 data URI.
+        req.log.warn("CLOUDINARY_* env vars not set — storing screenshot as base64 fallback");
+        screenshotUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
+      }
     }
 
     try {
