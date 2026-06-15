@@ -1,0 +1,135 @@
+Good. The implementation audit is much stronger and I accept that the core Sprint 1 infrastructure is now in place.
+
+However, before we close Sprint 1, I want end-to-end product validation rather than code validation.
+
+Please perform and document the following real workflow tests through the actual UI:
+
+### Test 1 – Excel → Contacts
+
+Upload:
+contacts.xlsx
+
+Prompt:
+"Add contacts"
+
+Expected:
+
+* Contacts created
+* Visible in Contacts page
+* Confirmation message shown
+
+Provide:
+
+* Screenshot of upload
+* Screenshot of created contacts
+* Record count
+
+---
+
+### Test 2 – Business Card Image → Contact
+
+Upload:
+Business card JPG/PNG
+
+Prompt:
+"Add contact"
+
+Expected:
+
+* OCR extraction
+* Contact created
+* Name/email/phone mapped correctly
+
+Provide:
+
+* Original image
+* Extracted fields
+* Resulting contact record
+
+This is especially important because currently only the Claude Vision wiring has been proven.
+
+---
+
+### Test 3 – PDF → Lead
+
+Upload:
+PDF containing company inquiry or proposal
+
+Prompt:
+"Create lead"
+
+Expected:
+
+* Lead created
+* Stage assigned
+* Appears in Leads
+
+Provide screenshots.
+
+---
+
+### Test 4 – Natural Language Task Creation
+
+Prompt:
+"Remind me tomorrow at 10am to call ABC"
+
+Expected:
+
+* Task created
+* Due date populated
+* Due time populated
+* Appears in Tasks
+
+Provide screenshots.
+
+---
+
+### Test 5 – Opportunity Creation
+
+Prompt:
+"Create an opportunity worth $50,000 for ABC"
+
+Expected:
+
+* Opportunity/Lead record created
+* Value stored correctly
+
+Provide screenshots and resulting database record.
+
+---
+
+### Test 6 – Mixed Upload + Instruction
+
+Upload:
+Excel
+
+Prompt:
+"Create leads from this file"
+
+Expected:
+
+* Leads created automatically
+* No manual button clicks
+
+Provide proof.
+
+---
+
+### Remaining Product Questions
+
+1. Is Opportunity a distinct entity or simply an alias for Lead?
+2. What is the planned Lead vs Pipeline architecture?
+3. Where is the actual stage-transition automation logic?
+
+Current audit proves stages exist.
+
+It does not yet prove:
+
+* Inquiry → New
+* Pricing request → Qualified
+* Quote sent → Negotiation
+* Deal won → Won
+
+Please explain whether this automation exists today or is Sprint 2 work.
+
+Once these workflow tests are validated, I am comfortable closing Sprint 1 and moving into Email Integration + Pipeline Automation.

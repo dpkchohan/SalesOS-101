@@ -418,7 +418,7 @@ router.post(
           INSERT INTO contacts (org_id, company_id, customer_no, name, email, email_normalized, phone, phone_normalized, title)
           VALUES (${r.orgId}, ${companyId}, ${newCustomerNo}, ${merged.name}, ${merged.email}, ${merged.email},
                   ${merged.phone}, ${phoneNorm}, ${merged.title})
-          ON CONFLICT (org_id, lower(email)) WHERE email IS NOT NULL
+          ON CONFLICT (org_id, lower(email)) WHERE email IS NOT NULL AND is_duplicate = false
           DO UPDATE SET
             name = COALESCE(NULLIF(EXCLUDED.name, ''), contacts.name),
             phone = COALESCE(EXCLUDED.phone, contacts.phone),
