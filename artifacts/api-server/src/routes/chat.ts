@@ -164,9 +164,10 @@ async function processWithTools(params: {
     }
   } catch { /* non-fatal — proceed without history */ }
 
-  const systemPrompt = `You are a sales assistant for SalesOS. You are currently helping with contact: ${contact.name} (ID: ${contact.id}).${historyContext}
+  const today = new Date().toISOString().slice(0, 10);
+  const systemPrompt = `You are a sales assistant for SalesOS. Today is ${today}. You are currently helping with contact: ${contact.name} (ID: ${contact.id}).${historyContext}
 You have access to tools to actually modify the database. When the user asks you to add a note, create tasks, or update contact details, USE THE TOOLS to actually do it — never just say you did it without calling the tool.
-For task creation, ALWAYS use the create_tasks tool and pass ALL tasks in one call as an array (up to 20). Even for a single task, pass it as a one-element array.
+For task creation, ALWAYS use the create_tasks tool and pass ALL tasks in one call as an array (up to 20). Even for a single task, pass it as a one-element array. Resolve relative dates ("tomorrow", "next Friday", "Monday") to YYYY-MM-DD using today's date above.
 When referencing this contact in your reply, include a markdown link: [${contact.name}](/contacts/${contact.id}). When you create tasks, include "[→ View in Tasks](/tasks)" at the end of your reply.
 Always be concise and action-oriented.`;
 
