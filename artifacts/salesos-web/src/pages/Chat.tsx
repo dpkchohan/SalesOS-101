@@ -66,9 +66,9 @@ interface Msg {
 
 const SUGGESTIONS = [
   "Add new contact Sarah Lee, sarah@globex.com, VP Eng at Globex",
-  "Remind me to follow up with Acme tomorrow",
+  "Remind me to follow up with Acme tomorrow at 10AM",
   "Logged a call with Acme — they want pricing by Friday",
-  "Move Initech to qualified",
+  "Move Initech to qualified — they're ready to buy",
 ];
 
 const TTS_LANGUAGES: { code: string; label: string }[] = [
@@ -130,7 +130,7 @@ export default function Chat() {
         role: "assistant" as const,
         text: urlContactName
           ? `Hi. I'm ready to help you with ${urlContactName}. Log a call, add a task, move a deal — just tell me.`
-          : "Hi. Talk to me like you would your assistant — log a call, add a task, move a deal. I'll handle the rest.",
+          : "Hi! I'm your AI assistant. Attach a business card or spreadsheet and tell me what to do with it, or just type — log a call, create a task, move a deal, import contacts. I handle the rest.",
       },
     ];
   });
@@ -500,9 +500,146 @@ export default function Chat() {
     }
   };
 
+  const sendWithFile = async (text: string, file: File) => {
+    setPendingFile(null);
+    setUploadError(null);
+    setInput("");
+
+    const userMsgId = crypto.randomUUID();
+    setMessages((m) => [
+      ...m,
+      { id: userMsgId, role: "user", text: `📎 ${file.name} — ${text}` },
+    ]);
+
+    let att: ChatAttachment;
+    try {
+      att = await upload.mutateAsync({ data: { file } });
+    } catch (err) {
+      setMessages((m) => [
+        ...m,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          text: err instanceof Error ? `Upload failed: ${err.message}` : "Upload failed.",
+        },
+      ]);
+      return;
+    }
+
+    const cardMsgId = crypto.randomUUID();
+    setMessages((m) => [
+      ...m,
+      { id: cardMsgId, role: "assistant", text: "", attachment: att },
+    ]);
+
+    extract.mutate({ id: att.id });
+
+    const maxWait = 30_000;
+    const start = Date.now();
+    let finalAtt = att;
+    while (Date.now() - start < maxWait) {
+      await new Promise<void>((res) => setTimeout(res, 1500));
+      try {
+        finalAtt = await fetchChatAttachment(att.id);
+        setMessages((curr) =>
+          curr.map((m) =>
+            m.attachment?.id === att.id ? { ...m, attachment: finalAtt } : m,
+          ),
+        );
+        if (
+          finalAtt.extractionStatus === "done" ||
+          finalAtt.extractionStatus === "failed"
+        )
+          break;
+      } catch {
+        /* keep polling */
+      }
+    }
+
+    if (finalAtt.extractionStatus !== "done" || !finalAtt.extractedData) {
+      setMessages((m) => [
+        ...m,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          text:
+            finalAtt.error ??
+            "Couldn't read the file. Try again or use the Import page for custom column mapping.",
+        },
+      ]);
+      return;
+    }
+
+    const data = finalAtt.extractedData;
+    if (!data.contacts.length) {
+      setMessages((m) => [
+        ...m,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          text: "No contacts found in this file. Try the Import page for files with non-standard columns.",
+        },
+      ]);
+      return;
+    }
+
+    const lower = text.toLowerCase();
+    const action: "contact" | "lead" =
+      /\b(lead|pipeline|deal|opportunity)\b/.test(lower) ? "lead" : "contact";
+
+    try {
+      const result = await apply.mutateAsync({
+        id: att.id,
+        data: { action },
+      });
+      const added = result.results.filter((r) => !r.merged).length;
+      const merged = result.results.filter((r) => r.merged).length;
+      const total = result.results.length;
+      const label = action === "lead" ? "lead" : "contact";
+      const parts: string[] = [];
+      if (added) parts.push(`Added ${added}`);
+      if (merged) parts.push(`merged ${merged}`);
+      const note = `${parts.join(", ")} ${label}${total === 1 ? "" : "s"}`;
+      setMessages((curr) =>
+        curr.map((m) => (m.id === cardMsgId ? { ...m, appliedNote: note } : m)),
+      );
+      setMessages((m) => [
+        ...m,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          text: `Done — ${note} from ${file.name}. ${
+            action === "lead"
+              ? "Check Pipeline for details."
+              : "Find them in Contacts."
+          }`,
+        },
+      ]);
+      qc.invalidateQueries({ queryKey: getListContactsQueryKey() });
+      qc.invalidateQueries({ queryKey: getGetPipelineQueryKey() });
+      qc.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() });
+    } catch (err) {
+      setMessages((m) => [
+        ...m,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          text:
+            err instanceof Error
+              ? `Could not add: ${err.message}`
+              : "Could not add contacts. Please try again.",
+        },
+      ]);
+    }
+  };
+
   const sendText = (text: string) => {
     if (!text.trim()) {
       if (pendingFile) void sendAttachment();
+      return;
+    }
+    if (pendingFile) {
+      void sendWithFile(text, pendingFile);
       return;
     }
     setInput("");
@@ -701,7 +838,7 @@ export default function Chat() {
       }}
     >
       <PageHeader
-        title="Chat"
+        title="AI Assistant"
         subtitle={
           urlContactName ? (
             <span className="flex items-center gap-2 flex-wrap">
@@ -711,7 +848,7 @@ export default function Chat() {
               </span>
             </span>
           ) : (
-            "Type or speak — Claude handles intent"
+            "Attach files · type · speak — I'll handle the rest"
           )
         }
         right={

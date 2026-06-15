@@ -1,0 +1,503 @@
+# SALES OS – PHASE 1 CRITICAL UX & AI AUTOMATION FIXES
+
+## Context
+
+We reviewed the current Sales OS implementation and identified a major gap between the intended AI-first experience and the current behavior.
+
+The core vision is:
+
+**The AI Assistant should be the primary operating system for Sales OS.**
+
+Users should be able to upload files, type instructions, or speak commands, and the system should automatically understand intent and perform actions without forcing users into manual forms or separate modules.
+
+Current implementation still behaves like a traditional CRM with AI layered on top.
+
+We need to reverse that approach.
+
+---
+
+# CRITICAL ISSUE #1 – ATTACHMENTS ARE NOT BEING PROCESSED
+
+## Current Behavior
+
+User uploads:
+
+delhi ncr 50k b2b.xlsx
+
+Then types:
+
+"Add contacts"
+
+AI responds:
+
+"Please provide the details for each contact."
+
+This is incorrect because the uploaded Excel already contains the contact data.
+
+## Required Behavior
+
+When a file is attached, the AI must:
+
+1. Read the file automatically.
+2. Extract all structured data.
+3. Determine intent from user instruction.
+4. Execute the requested action.
+
+Example:
+
+User uploads Excel.
+
+Prompt:
+
+"Add contacts"
+
+Expected:
+
+* Parse Excel
+* Extract contacts
+* Create contacts
+* Return import summary
+
+Example response:
+
+* 327 contacts imported
+* 12 skipped due to missing email
+* 5 duplicates detected
+
+No unnecessary clarification should be requested.
+
+---
+
+# CRITICAL ISSUE #2 – UNIVERSAL FILE INGESTION
+
+The AI should support:
+
+* XLSX
+* CSV
+* PDF
+* DOCX
+* PNG
+* JPG
+* JPEG
+* Visiting cards
+* Screenshots
+
+## Expected Examples
+
+### Example A
+
+Upload Excel
+
+"Add as contacts"
+
+Result:
+
+Contacts created.
+
+### Example B
+
+Upload image of visiting card
+
+"Add contact"
+
+Result:
+
+OCR → Extract data → Create contact.
+
+### Example C
+
+Upload PDF
+
+"Create lead"
+
+Result:
+
+Lead created from extracted information.
+
+### Example D
+
+Upload proposal
+
+"Add to opportunity"
+
+Result:
+
+Opportunity updated.
+
+The AI should not require users to manually re-enter information already present in uploaded files.
+
+---
+
+# CRITICAL ISSUE #3 – RENAME CHAT
+
+Current label:
+
+"Chat"
+
+This is incorrect.
+
+This page is not a chat interface.
+
+It is the primary operating interface of Sales OS.
+
+Suggested alternatives:
+
+* AI Assistant
+* Workspace
+* Command Center
+* SalesOS Assistant
+* Inbox
+
+Choose the most suitable product naming.
+
+---
+
+# CRITICAL ISSUE #4 – AI MUST BE THE PRIMARY INPUT LAYER
+
+Users should be able to perform all actions from a single interface.
+
+Examples:
+
+"Add these contacts"
+
+"Create lead for ABC"
+
+"Move XYZ to negotiation"
+
+"Send proposal tomorrow"
+
+"Remind me Friday"
+
+Everything should happen through AI.
+
+Users should not be forced into multiple modules for standard operations.
+
+---
+
+# CRITICAL ISSUE #5 – AUTOMATIC LEAD CLASSIFICATION
+
+Current lead flow requires manual handling.
+
+We need AI-driven stage assignment.
+
+## New
+
+Conditions:
+
+* Inquiry received
+* Initial discussion started
+
+Automatically:
+
+NEW
+
+---
+
+## Interested
+
+Conditions:
+
+* Prospect requests information
+
+Automatically:
+
+INTERESTED
+
+---
+
+## Qualified
+
+Conditions:
+
+* Pricing requested
+* Proposal requested
+* RFP received
+
+Automatically:
+
+QUALIFIED
+
+---
+
+## Negotiation
+
+Conditions:
+
+* Quote sent
+* Email thread becomes active
+
+Automatically:
+
+NEGOTIATION
+
+---
+
+## Won
+
+Deal closed.
+
+Automatically:
+
+WON
+
+---
+
+## Lost
+
+Deal lost.
+
+Automatically:
+
+LOST
+
+Mandatory field:
+
+Lost Reason
+
+Examples:
+
+* Budget
+* Competitor
+* No Response
+* Timing
+* Internal Decision
+
+---
+
+# CRITICAL ISSUE #6 – EMAIL INTEGRATION
+
+Priority is Email.
+
+WhatsApp can be deferred.
+
+## Required
+
+Connect mailbox.
+
+AI should analyze email activity.
+
+Examples:
+
+Customer requests pricing:
+
+Move to Qualified.
+
+Proposal sent:
+
+Move to Negotiation.
+
+Ongoing email thread:
+
+Keep opportunity active.
+
+Deal signed:
+
+Move to Won.
+
+This should happen automatically whenever confidence is high.
+
+---
+
+# CRITICAL ISSUE #7 – LEADS & PIPELINE RESTRUCTURE
+
+Current implementation duplicates stages across Leads and Pipeline.
+
+This creates confusion.
+
+Recommended structure:
+
+## Leads
+
+* New
+* Interested
+
+## Pipeline
+
+* Qualified
+* Negotiation
+* Won
+* Lost
+
+Flow:
+
+Lead → Converted to Pipeline
+
+This creates a cleaner CRM structure.
+
+Implement whichever architecture is simplest while maintaining this separation.
+
+---
+
+# CRITICAL ISSUE #8 – TASK CREATION THROUGH AI
+
+Current implementation appears incomplete.
+
+Users should be able to type:
+
+"Remind me tomorrow 10 AM"
+
+Task created.
+
+---
+
+"Follow up with ABC on Friday"
+
+Task created.
+
+---
+
+"Send proposal next Monday"
+
+Task created.
+
+No manual task form should be required.
+
+---
+
+# CRITICAL ISSUE #9 – SINGLE UNIVERSAL WORKSPACE
+
+The assistant page should support:
+
+* Typing
+* Voice
+* File upload
+
+In one interface.
+
+Current separation between:
+
+* Chat
+* Import
+
+is unnecessary.
+
+Merge them.
+
+Desired UX:
+
+[ + ] Upload File
+
+Type or speak instructions...
+
+Exactly like modern AI systems.
+
+---
+
+# CRITICAL ISSUE #10 – UNIVERSAL DATA MAPPING ENGINE
+
+Once entity schemas exist:
+
+Contacts
+Leads
+Opportunities
+Tasks
+
+The AI should automatically map incoming data from any source.
+
+Example:
+
+User uploads:
+
+* Excel
+* PDF
+* Image
+
+AI should map fields into the target schema.
+
+Missing fields should be:
+
+* flagged
+* highlighted
+
+but should not block imports.
+
+---
+
+# PHASE 2 (AFTER PHASE 1 IS STABLE)
+
+## AI Document Editing
+
+User uploads:
+
+proposal.docx
+
+Then types:
+
+"Insert GST clause after section 3."
+
+Expected:
+
+Document updated.
+
+---
+
+User types:
+
+"Replace pricing table with revised pricing."
+
+Expected:
+
+Document updated.
+
+---
+
+User types:
+
+"Insert these two paragraphs between sections 2 and 3."
+
+Expected:
+
+Document updated without rebuilding the document.
+
+This is a Phase 2 capability and should only be started after all Phase 1 requirements are complete.
+
+---
+
+# IMPLEMENTATION PRIORITY
+
+## Sprint 1 (Must Complete First)
+
+1. Attachment processing engine
+2. Excel import automation
+3. PDF/DOCX/Image ingestion
+4. AI-driven contact creation
+5. AI-driven lead creation
+6. AI-driven task creation
+7. Merge Chat + Import
+8. Rename Chat
+9. Universal intent routing
+
+## Sprint 2
+
+1. Email integration
+2. Auto lead stage movement
+3. Lead/Pipeline restructuring
+
+## Sprint 3
+
+1. AI document editing
+2. Advanced workflow automation
+
+---
+
+# SUCCESS CRITERIA
+
+The product should reach a point where a user can:
+
+* Upload an Excel
+* Upload a PDF
+* Upload a visiting card image
+* Upload a proposal
+* Type one sentence
+
+and the system automatically:
+
+* Creates contacts
+* Creates leads
+* Updates opportunities
+* Creates tasks
+* Stores documents
+
+without requiring manual form filling.
+
+If users still need to navigate into modules and manually enter data after uploading files, then the AI-first Sales OS vision has not been achieved.

@@ -26,7 +26,7 @@ import { FeedbackModal } from "./FeedbackModal";
 import { useGetDashboardSummary, GetDashboardSummaryQueryResult } from "@workspace/api-client-react";
 
 const NAV = [
-  { to: "/", label: "Chat", icon: MessageCircle },
+  { to: "/", label: "AI Assistant", icon: MessageCircle },
   { to: "/contacts", label: "Contacts", icon: Users },
   { to: "/leads", label: "Leads", icon: TrendingUp },
   { to: "/pipeline", label: "Pipeline", icon: Kanban },
@@ -37,7 +37,7 @@ const NAV = [
 ];
 
 const PRIMARY_NAV = [
-  { to: "/", label: "Chat", icon: MessageCircle },
+  { to: "/", label: "AI", icon: MessageCircle },
   { to: "/contacts", label: "Contacts", icon: Users },
   { to: "/pipeline", label: "Pipeline", icon: Kanban },
   { to: "/tasks", label: "Tasks", icon: CheckSquare },
