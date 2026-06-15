@@ -5,8 +5,10 @@ import { requireAuth, type AuthenticatedRequest } from "../lib/auth";
 import {
   getOAuth2Client,
   GOOGLE_SCOPES,
+  GMAIL_READ_SCOPE,
   encodeOAuthState,
   decodeOAuthState,
+  hasGmailReadScope,
 } from "../lib/googleTokens";
 
 const router: IRouter = Router();
@@ -69,10 +71,11 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
         googleEmail = info.email ?? "";
       }
     } catch {
-      // non-fatal — email is nice-to-have; timeout aborts cleanly
+      // non-fatal
     }
 
     const expiry = tokens.expiry_date ? new Date(tokens.expiry_date) : null;
+    const scopesStr = GOOGLE_SCOPES.join(" ");
 
     await db
       .insert(googleConnectionsTable)
@@ -83,7 +86,7 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token ?? null,
         tokenExpiry: expiry,
-        scopes: GOOGLE_SCOPES.join(" "),
+        scopes: scopesStr,
       })
       .onConflictDoUpdate({
         target: googleConnectionsTable.userId,
@@ -92,7 +95,7 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
           accessToken: tokens.access_token,
           refreshToken: tokens.refresh_token ?? null,
           tokenExpiry: expiry,
-          scopes: GOOGLE_SCOPES.join(" "),
+          scopes: scopesStr,
           updatedAt: new Date(),
         },
       });
@@ -112,6 +115,8 @@ router.get("/auth/google/status", requireAuth, async (req, res): Promise<void> =
       .select({
         googleEmail: googleConnectionsTable.googleEmail,
         scopes: googleConnectionsTable.scopes,
+        emailSyncEnabled: googleConnectionsTable.emailSyncEnabled,
+        lastSyncedAt: googleConnectionsTable.lastSyncedAt,
         updatedAt: googleConnectionsTable.updatedAt,
       })
       .from(googleConnectionsTable)
@@ -119,14 +124,62 @@ router.get("/auth/google/status", requireAuth, async (req, res): Promise<void> =
       .limit(1);
 
     if (!conn) {
-      res.json({ connected: false, email: null });
+      res.json({ connected: false, email: null, emailSyncEnabled: false });
       return;
     }
 
-    res.json({ connected: true, email: conn.googleEmail, updatedAt: conn.updatedAt });
+    res.json({
+      connected: true,
+      email: conn.googleEmail,
+      emailSyncEnabled: conn.emailSyncEnabled,
+      hasEmailReadScope: hasGmailReadScope(conn),
+      lastSyncedAt: conn.lastSyncedAt,
+      updatedAt: conn.updatedAt,
+    });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch Google connection status");
     res.status(500).json({ error: "Failed to check status" });
+  }
+});
+
+router.patch("/auth/google/email-sync", requireAuth, async (req, res): Promise<void> => {
+  const r = req as AuthenticatedRequest;
+  const { enabled } = req.body as { enabled?: boolean };
+  if (typeof enabled !== "boolean") {
+    res.status(400).json({ error: "enabled must be a boolean" });
+    return;
+  }
+
+  try {
+    const [conn] = await db
+      .select({ id: googleConnectionsTable.id, scopes: googleConnectionsTable.scopes })
+      .from(googleConnectionsTable)
+      .where(eq(googleConnectionsTable.userId, r.userId))
+      .limit(1);
+
+    if (!conn) {
+      res.status(404).json({ error: "No Google account connected" });
+      return;
+    }
+
+    if (enabled && !hasGmailReadScope(conn)) {
+      res.status(403).json({
+        error: "Gmail read permission not granted",
+        needsReconnect: true,
+        reconnectUrl: "/api/auth/google/connect",
+      });
+      return;
+    }
+
+    await db
+      .update(googleConnectionsTable)
+      .set({ emailSyncEnabled: enabled, updatedAt: new Date() })
+      .where(eq(googleConnectionsTable.userId, r.userId));
+
+    res.json({ emailSyncEnabled: enabled });
+  } catch (err) {
+    req.log.error({ err }, "Failed to update email sync setting");
+    res.status(500).json({ error: "Failed to update email sync" });
   }
 });
 
@@ -144,7 +197,7 @@ router.delete("/auth/google/disconnect", requireAuth, async (req, res): Promise<
         const client = getOAuth2Client();
         await client.revokeToken(conn.accessToken);
       } catch {
-        // best-effort revoke — still delete the local record
+        // best-effort revoke
       }
     }
 

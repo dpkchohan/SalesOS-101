@@ -13,9 +13,12 @@ export function getOAuth2Client(): OAuth2Client {
 
 export const GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/gmail.send",
+  "https://www.googleapis.com/auth/gmail.readonly",
   "https://www.googleapis.com/auth/calendar",
   "https://www.googleapis.com/auth/userinfo.email",
 ];
+
+export const GMAIL_READ_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 
 export class NoGoogleConnectionError extends Error {
   constructor(userId: string) {
@@ -64,6 +67,11 @@ export async function getValidAccessToken(userId: string): Promise<string> {
   }
 
   return conn.accessToken;
+}
+
+export function hasGmailReadScope(conn: { scopes: string | null }): boolean {
+  if (!conn.scopes) return false;
+  return conn.scopes.includes(GMAIL_READ_SCOPE);
 }
 
 const STATE_SEPARATOR = ".";

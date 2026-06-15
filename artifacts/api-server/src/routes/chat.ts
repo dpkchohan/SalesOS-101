@@ -20,6 +20,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { claudeJson, getClaude, CLAUDE_MODEL } from "../lib/claude";
 import { generateProposalHtml } from "../lib/proposalGen";
 import { sendProposalEmail } from "../lib/gmail";
+import { checkAndAdvanceStage } from "../lib/stageProgression";
 
 const router: IRouter = Router();
 
@@ -719,6 +720,12 @@ router.post("/chat", requireAuth, async (req, res): Promise<void> => {
         reply.interactionId = i.id;
         reply.leadId = leadId;
         reply.message = intent.reply + (reply.contactId ? ` [→ View contact](/contacts/${reply.contactId})` : "");
+        checkAndAdvanceStage({
+          orgId: r.orgId,
+          leadId,
+          text: intent.interaction.gist,
+          triggerType: "interaction",
+        }).catch((err: unknown) => req.log.warn({ err }, "chat: stageProgression non-fatal"));
       }
     } else if (intent.intent === "send_proposal") {
       if (!intent.contactName) {
@@ -810,6 +817,14 @@ router.post("/chat", requireAuth, async (req, res): Promise<void> => {
                     .returning();
                   reply.interactionId = logged.id;
                   reply.message = `Drafted and emailed "${title}" to ${recipient}. [→ View document](/documents/${doc.id})`;
+                  checkAndAdvanceStage({
+                    orgId: r.orgId,
+                    leadId: l.id,
+                    text: `proposal sent ${intent.proposalContext ?? ""}`.trim(),
+                    triggerType: "proposal",
+                  }).catch((err: unknown) =>
+                    req.log.warn({ err }, "chat: proposalProgression non-fatal"),
+                  );
                 } catch (err) {
                   req.log.error({ err }, "Chat send_proposal: gmail send failed");
                   reply.message = `Drafted "${title}", but Gmail send failed. [→ View document](/documents/${doc.id})`;

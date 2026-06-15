@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, index } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, uuid, boolean, index } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 import { organizationsTable } from "./organizations";
 
@@ -18,6 +18,9 @@ export const googleConnectionsTable = pgTable(
     refreshToken: text("refresh_token"),
     tokenExpiry: timestamp("token_expiry", { withTimezone: true }),
     scopes: text("scopes"),
+    emailSyncEnabled: boolean("email_sync_enabled").notNull().default(false),
+    historyId: text("history_id"),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

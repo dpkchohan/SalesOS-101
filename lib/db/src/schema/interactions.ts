@@ -7,7 +7,9 @@ import {
   integer,
   jsonb,
   index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { organizationsTable } from "./organizations";
 import { leadsTable } from "./leads";
 import { usersTable } from "./users";
@@ -37,11 +39,18 @@ export const interactionsTable = pgTable(
     nextStep: text("next_step"),
     durationMinutes: integer("duration_minutes"),
     sentiment: text("sentiment"),
+    emailMessageId: text("email_message_id"),
+    emailThreadId: text("email_thread_id"),
+    emailSubject: text("email_subject"),
+    emailDirection: text("email_direction"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("interactions_org_idx").on(t.orgId),
     index("interactions_lead_idx").on(t.leadId),
+    uniqueIndex("interactions_email_message_id_uniq")
+      .on(t.emailMessageId)
+      .where(sql`email_message_id IS NOT NULL`),
   ],
 );
 

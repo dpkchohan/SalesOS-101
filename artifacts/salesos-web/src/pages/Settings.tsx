@@ -8,7 +8,7 @@ import {
   getGetCompanyCredentialsQueryKey,
   getListContactsQueryKey,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useClerk, useUser } from "@clerk/react";
 import {
   LogOut,
@@ -106,6 +106,7 @@ function AccountTab() {
         </div>
       </div>
       <CalendarStatusCard />
+      <EmailSyncCard />
       <BackfillCard />
       <button
         onClick={() => signOut()}
@@ -251,6 +252,169 @@ function CalendarStatusCard() {
           data-testid="button-refresh-calendar"
         >
           {isFetching ? "Checking…" : "Recheck status"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+interface GoogleAuthStatus {
+  connected: boolean;
+  email: string | null;
+  emailSyncEnabled: boolean;
+  hasEmailReadScope: boolean;
+  lastSyncedAt: string | null;
+}
+
+function EmailSyncCard() {
+  const [toggling, setToggling] = useState(false);
+  const [notice, setNotice] = useState<{ msg: string; ok: boolean } | null>(null);
+
+  const { data, isLoading, refetch, isFetching } = useQuery<GoogleAuthStatus>({
+    queryKey: ["googleAuthStatus"],
+    queryFn: async () => {
+      const res = await fetch(getApiUrl("/api/auth/google/status"), { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json() as Promise<GoogleAuthStatus>;
+    },
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
+
+  if (!isLoading && !data?.connected) return null;
+
+  const onToggle = async (enabled: boolean) => {
+    setToggling(true);
+    setNotice(null);
+    try {
+      const res = await fetch(getApiUrl("/api/auth/google/email-sync"), {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+      const json = (await res.json()) as {
+        needsReconnect?: boolean;
+        error?: string;
+        emailSyncEnabled?: boolean;
+      };
+      if (res.ok) {
+        setNotice({
+          msg: enabled
+            ? "Email sync enabled. Emails from known contacts will sync every 5 minutes."
+            : "Email sync disabled.",
+          ok: true,
+        });
+        void refetch();
+      } else if (json.needsReconnect) {
+        setNotice({
+          msg: "Gmail read permission needed. Reconnect your Google account to enable email sync.",
+          ok: false,
+        });
+      } else {
+        setNotice({ msg: json.error ?? "Failed to update email sync.", ok: false });
+      }
+    } catch {
+      setNotice({ msg: "Failed to update — please try again.", ok: false });
+    } finally {
+      setToggling(false);
+    }
+  };
+
+  const syncEnabled = data?.emailSyncEnabled ?? false;
+  const hasScope = data?.hasEmailReadScope ?? false;
+
+  return (
+    <div className="rounded-2xl bg-card border border-card-border p-5" data-testid="card-email-sync">
+      <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground font-bold mb-3">
+        <Mail size={14} /> Email Sync
+      </div>
+      {notice && (
+        <div
+          className={cn(
+            "text-[12px] mb-3 px-3 py-2 rounded-lg",
+            notice.ok
+              ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+              : "bg-rose-500/10 text-rose-700 dark:text-rose-400",
+          )}
+        >
+          {notice.msg}
+        </div>
+      )}
+      <div className="flex items-start gap-3">
+        <div
+          className={cn(
+            "w-10 h-10 rounded-xl grid place-items-center flex-shrink-0",
+            syncEnabled
+              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+              : "bg-muted text-muted-foreground",
+          )}
+        >
+          <Mail size={18} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="font-semibold text-[14px]">Gmail Inbox Sync</div>
+          <div className="text-[12px] text-muted-foreground mt-0.5">
+            {isLoading
+              ? "Checking…"
+              : syncEnabled
+                ? `Syncing emails from known contacts${data?.lastSyncedAt ? ` · Last synced ${new Date(data.lastSyncedAt).toLocaleDateString()}` : ""}.`
+                : hasScope
+                  ? "Enable to automatically sync emails from known contacts and trigger stage progression."
+                  : "Requires Gmail read permission. Reconnect your Google account to enable email sync."}
+          </div>
+        </div>
+        <span
+          className={cn(
+            "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider flex-shrink-0",
+            syncEnabled
+              ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+              : "bg-muted text-muted-foreground",
+          )}
+          data-testid="badge-email-sync-status"
+        >
+          {isLoading ? "…" : syncEnabled ? "On" : "Off"}
+        </span>
+      </div>
+      <div className="flex gap-2 mt-3 flex-wrap">
+        {!hasScope ? (
+          <button
+            type="button"
+            onClick={() => { window.location.href = getApiUrl("/api/auth/google/connect"); }}
+            className="px-3 py-1.5 text-[12px] font-semibold rounded-md bg-primary text-primary-foreground hover:bg-primary/90"
+            data-testid="button-reconnect-google"
+          >
+            Reconnect Google
+          </button>
+        ) : syncEnabled ? (
+          <button
+            type="button"
+            onClick={() => void onToggle(false)}
+            disabled={toggling}
+            className="px-3 py-1.5 text-[12px] font-semibold rounded-md bg-rose-500/10 text-rose-700 dark:text-rose-400 hover:bg-rose-500/20 disabled:opacity-60"
+            data-testid="button-disable-email-sync"
+          >
+            {toggling ? "Disabling…" : "Disable sync"}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => void onToggle(true)}
+            disabled={toggling}
+            className="px-3 py-1.5 text-[12px] font-semibold rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+            data-testid="button-enable-email-sync"
+          >
+            {toggling ? "Enabling…" : "Enable email sync"}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => void refetch()}
+          disabled={isFetching}
+          className="px-3 py-1.5 text-[12px] font-semibold rounded-md bg-muted text-muted-foreground hover:bg-muted/70 disabled:opacity-60"
+          data-testid="button-recheck-email-sync"
+        >
+          {isFetching ? "Checking…" : "Recheck"}
         </button>
       </div>
     </div>

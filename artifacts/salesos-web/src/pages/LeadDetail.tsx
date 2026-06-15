@@ -30,9 +30,11 @@ import { Field } from "./Contacts";
 import { formatCurrency, initials, relativeTime, STAGES, STAGE_META, isoToday } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-const interactionIcon = {
+const interactionIcon: Record<string, React.ElementType> = {
   call: Phone,
   email: Mail,
+  email_inbound: Mail,
+  email_outbound: Mail,
   meeting: CalendarDays,
   note: StickyNote,
 };

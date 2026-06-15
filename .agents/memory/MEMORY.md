@@ -2,3 +2,4 @@
 - [Clerk import path](clerk-import.md) — In salesos-web the Clerk package is @clerk/react (not @clerk/clerk-react); useAuth imported from "@clerk/react".
 - [Chat session tables missing migration](chat-session-migration.md) — chat_sessions and chat_messages had no migration; fixed in 0002_chat_sessions.sql. contacts.notes also added there.
 - [Attachments ON CONFLICT fix](attachments-on-conflict.md) — contacts partial unique index includes AND is_duplicate = false; ON CONFLICT clauses must match exactly or Postgres throws 500.
+- [Dev Postgres host + migration auth](dev-postgres-migration.md) — local dev DB is on host "helium" not localhost; use psql heliumdb directly; bash DATABASE_URL has wrong creds.

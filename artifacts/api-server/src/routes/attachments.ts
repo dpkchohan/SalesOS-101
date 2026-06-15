@@ -32,6 +32,7 @@ import {
   type ExtractedData,
   type ExtractedLead,
 } from "../lib/attachmentExtract";
+import { checkAndAdvanceStage } from "../lib/stageProgression";
 
 const router: IRouter = Router();
 
@@ -476,6 +477,14 @@ router.post(
           })
           .returning({ id: leadsTable.id });
         leadId = lead.id;
+        if (merged.notes) {
+          checkAndAdvanceStage({
+            orgId: r.orgId,
+            leadId: lead.id,
+            text: merged.notes,
+            triggerType: "document",
+          }).catch(() => { /* non-fatal */ });
+        }
       }
 
       results.push({
