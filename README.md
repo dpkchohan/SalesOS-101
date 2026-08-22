@@ -1,10 +1,10 @@
- # SalesOS
+# SalesOS
 
 **Your AI Sales Coach. Just Talk. Close 20% More Deals.** 
 
 The simplest CRM for the world's most complex job  —a conversational, AI-powered sales assistant built for Indian sales teams. Voice-first, Hinglish-native, zero training required...
  
----   
+---
   
 ## What is SalesOS?  
   
@@ -17,8 +17,6 @@ Most CRMs fail because reps don't use them. SalesOS is built around a single pri
 1. **Your AI Sales Coach** — Claude suggests next steps, spots patterns, predicts closes..
 2. **Just Talk** — Voice or text. "I called John" → logged. No data entry.
 3. **Close 20% More Deals** — Faster cycles, better objection handling, smarter prioritization..
-
----
 
 ## Core Features
 
@@ -54,8 +52,6 @@ Most CRMs fail because reps don't use them. SalesOS is built around a single pri
 - Installable PWA (iOS + Android)
 - Offline support for cached pages
 
----
-
 ## Tech Stack
 
 | Layer | Technology |
@@ -70,8 +66,6 @@ Most CRMs fail because reps don't use them. SalesOS is built around a single pri
 | Text-to-speech | Sarvam AI (bulbul:v2, Hinglish) |
 | Object storage | Configurable bucket |
 
----
-
 ## Project Structure
 
 ```
@@ -85,7 +79,7 @@ SalesOS-101/
 │   │       ├── routes/      # contacts, companies, leads,
 │   │       │                # interactions, tasks, ai-signals,
 │   │       │                # documents, emails, voice, import/export
-│   │       └── seed.ts      # demo data seeder (idempotent)
+│   │       └── seed.ts       # demo data seeder (idempotent)
 │   └── salesos-web/         # React frontend
 │       └── src/
 │           ├── pages/       # Dashboard, Pipeline, Contacts,
@@ -93,8 +87,6 @@ SalesOS-101/
 │           └── components/
 └── README.md
 ```
-
----
 
 ## Environment Variables
 
@@ -123,8 +115,6 @@ DEFAULT_OBJECT_STORAGE_BUCKET_ID=
 PUBLIC_OBJECT_SEARCH_PATHS=
 PRIVATE_OBJECT_DIR=
 ```
-
----
 
 ## Getting Started
 
@@ -156,21 +146,15 @@ npm run dev
 
 Backend runs on the configured API port; frontend on Vite's dev server.
 
----
-
 ## Deployment
 
-Production target (in migration):
+SalesOS is deployed on our own self-hosted **Coolify server**. Coolify manages the application deployment and runtime on our infrastructure.
 
-- **Frontend** → Vercel
-- **Backend** → Railway
-- **DNS / CDN** → Cloudflare
+- **Deployment platform** → Self-hosted Coolify
 - **Database** → Supabase (Postgres)
 - **Auth** → Clerk (production instance on `clerk.salesos.pddt.in`)
 
 Live domain: `salesos.pddt.in`
-
----
 
 ## Roadmap
 
@@ -184,9 +168,7 @@ Live domain: `salesos.pddt.in`
 | 6 | Marketing / deal-intelligence insights | Planned |
 | 7 | Forecasting | Planned |
 
-**Guiding principle across all phases:** reps always see the same 4–5 things; everything just gets smarter underneath.
-
----
+**Guiding principle across the board:** reps always see the same 4–5 things; everything just gets smarter underneath.
 
 ## Design Philosophy
 
@@ -199,8 +181,6 @@ Live domain: `salesos.pddt.in`
 
 When in doubt, make it simpler.
 
----
-
 ## Support
 
 Email: **sales@pddt.in**
@@ -212,4 +192,3 @@ Email: **sales@pddt.in**
 Proprietary — © Phenomeny LLP. All rights reserved.
 
 Built by [Phenomeny LLP](https://phenomeny.in) · [pddt.in](https://pddt.in)
-# Force clean Railway build
