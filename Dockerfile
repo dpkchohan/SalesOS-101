@@ -9,19 +9,24 @@ WORKDIR /app
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
 
 # Copy every package.json in the workspace so pnpm can resolve the graph
-COPY lib/db/package.json             lib/db/
-COPY lib/api-zod/package.json        lib/api-zod/
-COPY lib/api-spec/package.json       lib/api-spec/
+COPY lib/db/package.json              lib/db/
+COPY lib/api-zod/package.json         lib/api-zod/
+COPY lib/api-spec/package.json        lib/api-spec/
 COPY lib/api-client-react/package.json lib/api-client-react/
 COPY artifacts/api-server/package.json artifacts/api-server/
+COPY artifacts/salesos-web/package.json artifacts/salesos-web/
 
-RUN pnpm install --no-frozen-lockfile
+# Coolify may inject NODE_ENV=production at build time. Explicitly request
+# devDependencies because TypeScript/Vite/esbuild are needed to build.
+RUN pnpm install --no-frozen-lockfile --prod=false
 
 # ── Source layer ───────────────────────────────────────────────────────────
-COPY lib/         lib/
-COPY artifacts/api-server/ artifacts/api-server/
+COPY lib/                   lib/
+COPY artifacts/api-server/  artifacts/api-server/
+COPY artifacts/salesos-web/ artifacts/salesos-web/
 
 # ── Build ──────────────────────────────────────────────────────────────────
+RUN pnpm --filter @workspace/salesos-web run build
 RUN pnpm --filter @workspace/api-server run build
 
 # ── Runtime ───────────────────────────────────────────────────────────────
