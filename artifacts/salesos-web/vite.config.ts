@@ -2,7 +2,7 @@ import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
-import { writeFileSync } from "fs";
+import { mkdirSync, writeFileSync } from "fs";
 
 // PORT is only needed by the dev/preview servers, not by `vite build`.
 // In production we serve the built files statically (see artifact.toml),
@@ -29,6 +29,7 @@ function versionJsonPlugin(): Plugin {
     apply: "build",
     closeBundle() {
       const outDir = path.resolve(import.meta.dirname, "dist/public");
+      mkdirSync(outDir, { recursive: true });
       writeFileSync(
         path.join(outDir, "version.json"),
         JSON.stringify({ hash: buildHash }),

@@ -6,7 +6,7 @@ RUN corepack enable && corepack prepare pnpm@10.26.1 --activate
 WORKDIR /app
 
 # ── Dependency layer (cached unless manifests change) ──────────────────────
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* tsconfig.base.json ./
 
 # Copy every package.json in the workspace so pnpm can resolve the graph
 COPY lib/db/package.json              lib/db/
@@ -21,6 +21,7 @@ COPY artifacts/salesos-web/package.json artifacts/salesos-web/
 RUN pnpm install --no-frozen-lockfile --prod=false
 
 # ── Source layer ───────────────────────────────────────────────────────────
+COPY tsconfig.base.json ./
 COPY lib/                   lib/
 COPY artifacts/api-server/  artifacts/api-server/
 COPY artifacts/salesos-web/ artifacts/salesos-web/
