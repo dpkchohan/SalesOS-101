@@ -6,10 +6,6 @@ node_modules
 **/dist
 **/.cache
 
-# Frontend — not needed for the API server image
-artifacts/salesos-web
-artifacts/mockup-sandbox
-
 # Dev/tooling files
 .git
 .gitignore
