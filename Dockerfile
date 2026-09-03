@@ -15,6 +15,7 @@ COPY lib/api-spec/package.json        lib/api-spec/
 COPY lib/api-client-react/package.json lib/api-client-react/
 COPY artifacts/api-server/package.json artifacts/api-server/
 COPY artifacts/salesos-web/package.json artifacts/salesos-web/
+COPY scripts/package.json              scripts/
 
 # Coolify may inject NODE_ENV=production at build time. Explicitly request
 # devDependencies because TypeScript/Vite/esbuild are needed to build.
