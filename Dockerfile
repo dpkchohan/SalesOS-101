@@ -21,13 +21,13 @@ COPY scripts/package.json              scripts/
 # devDependencies because TypeScript/Vite/esbuild are needed to build.
 RUN pnpm install --no-frozen-lockfile --prod=false
 
-# ── Source layer ───────────────────────────────────────────────────────────
+# ── Source layer ──────────────────────────────────────────────────────────
 COPY tsconfig.base.json ./
 COPY lib/                   lib/
 COPY artifacts/api-server/  artifacts/api-server/
 COPY artifacts/salesos-web/ artifacts/salesos-web/
 
-# ── Build ──────────────────────────────────────────────────────────────────
+# ── Build ─────────────────────────────────────────────────────────────────
 RUN pnpm --filter @workspace/salesos-web run build
 RUN pnpm --filter @workspace/api-server run build
 

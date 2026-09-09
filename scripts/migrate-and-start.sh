@@ -41,7 +41,7 @@ DB_URL="${SUPABASE_SESSION_URL:-$DATABASE_URL}"
 
 if [ -z "$DB_URL" ]; then
   _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u)"
-  send_alert "[migrate-and-start] MISSING DATABASE URL at ${_ts}: No database connection string found (SUPABASE_SESSION_URL and DATABASE_URL are both unset). The server was NOT started. See docs/migration-recovery.md for recovery steps."
+  send_alert "[migrate-and-start] MISSING DATABASE URL at ${_ts}: No database connection string found (SUPABASE_SESSION_URL and DATABASE_URL are both unset). The server was NOT started. See docs/migration-recovery.md."
   echo "ERROR: No database connection string found." >&2
   echo "       Set SUPABASE_SESSION_URL or DATABASE_URL." >&2
   exit 1
@@ -97,7 +97,7 @@ echo "Checking database connectivity..."
 if command -v psql > /dev/null 2>&1; then
   if ! psql "$DB_URL" -c "SELECT 1" > /dev/null 2>&1; then
     _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u)"
-    send_alert "[migrate-and-start] DATABASE UNREACHABLE at ${_ts}: The connectivity pre-check (psql) could not connect to the database. The server was NOT started. Check your connection string and network access, then see docs/migration-recovery.md for recovery steps."
+    send_alert "[migrate-and-start] DATABASE UNREACHABLE at ${_ts}: The connectivity pre-check (psql) could not connect to the database. The server was NOT started. Check your connection string and network access."
     echo "ERROR: Cannot connect to the database. Check your connection string and network access." >&2
     exit 1
   fi
@@ -114,7 +114,7 @@ fi
 echo "Running database migrations..."
 if ! pnpm --filter @workspace/db run migrate; then
   _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u)"
-  send_alert "[migrate-and-start] MIGRATION FAILED at ${_ts}: The database migration step exited with an error and the server was NOT started. The database may be in a partially-applied state. Follow the recovery steps in docs/migration-recovery.md before attempting another deploy."
+  send_alert "[migrate-and-start] MIGRATION FAILED at ${_ts}: The database migration step exited with an error and the server was NOT started. The database may be in a partially-applied state. Follow docs/migration-recovery.md."
   echo "" >&2
   echo "================================================================" >&2
   echo "  MIGRATION FAILED — server will NOT start." >&2

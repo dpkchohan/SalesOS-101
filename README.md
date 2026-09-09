@@ -1,4 +1,4 @@
- # SalesOS
+# SalesOS
 
 **Your AI Sales Coach. Just Talk. Close 20% More Deals.** 
 
@@ -8,15 +8,15 @@ The simplest CRM for the world's most complex job  —a conversational, AI-power
   
 ## What is SalesOS?  
   
-SalesOS is a CRM that works like WhatsApp, not like enterprise software. A sales rep opens the app, sees their deals, talks to Claude (voice or text), and closes deals. No forms, no menus, no learning curve..
+SalesOS is a CRM that works like WhatsApp, not like enterprise software. A sales rep opens the app, sees their deals, talks to Claude (voice or text), and closes deals. No forms, no menus, no learning curve.
 
 Most CRMs fail because reps don't use them. SalesOS is built around a single principle: **a rep should only ever see 4–5 things, and AI handles the rest in the background.**
 
 ### The 3 USPs
 
-1. **Your AI Sales Coach** — Claude suggests next steps, spots patterns, predicts closes..
+1. **Your AI Sales Coach** — Claude suggests next steps, spots patterns, predicts closes.
 2. **Just Talk** — Voice or text. "I called John" → logged. No data entry.
-3. **Close 20% More Deals** — Faster cycles, better objection handling, smarter prioritization..
+3. **Close 20% More Deals** — Faster cycles, better objection handling, smarter prioritization.
 
 ---
 
@@ -160,11 +160,9 @@ Backend runs on the configured API port; frontend on Vite's dev server.
 
 ## Deployment
 
-Production target (in migration):
-
-- **Frontend** → Vercel
-- **Backend** → Railway
-- **DNS / CDN** → Cloudflare
+**Current deployment target (self-hosted Coolify):**
+- **Frontend** → Coolify container
+- **Backend** → Coolify container  
 - **Database** → Supabase (Postgres)
 - **Auth** → Clerk (production instance on `clerk.salesos.pddt.in`)
 
@@ -204,7 +202,7 @@ When in doubt, make it simpler.
 ## Support
 
 Email: **sales@pddt.in**
-.
+
 ---
 
 ## License
@@ -212,4 +210,3 @@ Email: **sales@pddt.in**
 Proprietary — © Phenomeny LLP. All rights reserved.
 
 Built by [Phenomeny LLP](https://phenomeny.in) · [pddt.in](https://pddt.in)
-# Force clean Railway build
